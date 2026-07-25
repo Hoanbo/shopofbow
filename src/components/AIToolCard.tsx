@@ -12,10 +12,10 @@ export default function AIToolCard({ item }: Props) {
   return (
     <Link
       to={`/ai-tools/${item.slug}`}
-      className="card-base group flex flex-col items-center gap-2 p-4 text-center hover:-translate-y-1 hover:shadow-card"
+      className="card-base card-hover group flex flex-col items-center gap-2 p-4 text-center"
     >
       <div
-        className="grid h-16 w-16 place-items-center rounded-2xl shadow-soft transition group-hover:scale-105"
+        className="grid h-16 w-16 place-items-center rounded-2xl shadow-soft transition duration-300 group-hover:scale-110"
         style={{ backgroundColor: `${item.accent}14` }}
       >
         <img src={item.image} alt={item.name} loading="lazy" className="h-10 w-10 rounded-xl object-contain" />
@@ -26,6 +26,9 @@ export default function AIToolCard({ item }: Props) {
         <span className="font-semibold text-ink-soft">{item.rating}</span>
       </div>
       <span className="text-sm font-extrabold text-brand-600">{formatVND(item.price)}</span>
+      <span className="mt-1 w-full rounded-pill bg-brand-50 py-1.5 text-xs font-semibold text-brand-600 transition duration-300 group-hover:bg-brand-gradient group-hover:text-white">
+        Xem chi tiết
+      </span>
     </Link>
   );
 }

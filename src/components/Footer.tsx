@@ -24,7 +24,7 @@ const cols = [
 export default function Footer() {
   const channels = buildChannels(useContact());
   return (
-    <footer className="mt-14 border-t border-brand-100 bg-white">
+    <footer className="mt-16 border-t border-line bg-white">
       <div className="container-bow grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-4">
         <div className="sm:col-span-2 lg:col-span-1">
           <div className="flex items-center gap-2.5">
@@ -80,7 +80,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-brand-100 py-4">
+      <div className="border-t border-line py-4">
         <p className="container-bow text-center text-xs text-ink-muted">
           © {new Date().getFullYear()} BOW — Let's Connect. Thiết kế bởi Nguyễn Văn Hoàn.
         </p>

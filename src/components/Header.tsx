@@ -26,21 +26,23 @@ export default function Header() {
 
   return (
     <header
-      className={`sticky top-0 z-50 transition ${
-        scrolled ? 'bg-white/90 shadow-soft backdrop-blur-md' : 'bg-white/70 backdrop-blur-sm'
+      className={`sticky top-0 z-50 transition duration-300 ${
+        scrolled
+          ? 'border-b border-line bg-white/80 shadow-soft backdrop-blur-xl'
+          : 'border-b border-transparent bg-white/60 backdrop-blur-md'
       }`}
     >
-      <div className="container-bow flex h-16 items-center gap-3 sm:h-20 sm:gap-5">
+      <div className="container-bow flex h-16 items-center gap-3 sm:h-[72px] sm:gap-5">
         {/* Logo */}
         <Link to="/" className="flex shrink-0 items-center gap-2.5">
           <img
             src="/assets/bowLogo.jpeg"
             alt="BOW"
-            className="h-10 w-10 rounded-xl object-cover shadow-soft ring-2 ring-white sm:h-12 sm:w-12"
+            className="h-10 w-10 rounded-2xl object-cover shadow-soft ring-2 ring-white sm:h-11 sm:w-11"
           />
           <span className="hidden leading-none sm:block">
             <span className="block text-lg font-extrabold tracking-tight text-ink">BOW</span>
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500">
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-600">
               Let's Connect
             </span>
           </span>
@@ -52,15 +54,15 @@ export default function Header() {
         </div>
 
         {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 lg:flex">
+        <nav className="hidden items-center gap-0.5 lg:flex">
           {nav.map(({ to, label, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
-                `rounded-pill px-3.5 py-2 text-sm font-semibold transition ${
-                  isActive ? 'bg-brand-50 text-brand-700' : 'text-ink-soft hover:bg-brand-50/60 hover:text-brand-700'
+                `rounded-pill px-3.5 py-2 text-sm font-semibold transition duration-200 ${
+                  isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-soft hover:bg-brand-50/70 hover:text-brand-600'
                 }`
               }
             >
@@ -77,7 +79,7 @@ export default function Header() {
         <button
           onClick={() => setOpen((v) => !v)}
           aria-label="Menu"
-          className="ml-auto grid h-10 w-10 place-items-center rounded-xl border border-brand-100 bg-white text-ink-soft lg:hidden"
+          className="ml-auto grid h-10 w-10 place-items-center rounded-xl border border-line bg-white text-ink-soft transition hover:bg-brand-50 lg:hidden"
         >
           {open ? <CloseIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
         </button>
@@ -91,7 +93,7 @@ export default function Header() {
       {/* Mobile dropdown menu */}
       {open && (
         <div className="lg:hidden">
-          <div className="container-bow animate-fade-up border-t border-brand-100 py-3">
+          <div className="container-bow animate-fade-up border-t border-line py-3">
             <nav className="grid gap-1">
               {nav.map(({ to, label, Icon, end }) => (
                 <NavLink
@@ -100,7 +102,7 @@ export default function Header() {
                   end={end}
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold transition ${
-                      isActive ? 'bg-brand-50 text-brand-700' : 'text-ink-soft hover:bg-brand-50'
+                      isActive ? 'bg-brand-50 text-brand-600' : 'text-ink-soft hover:bg-brand-50'
                     }`
                   }
                 >

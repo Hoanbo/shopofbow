@@ -11,7 +11,7 @@
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-sky-soft text-ink font-sans antialiased;
+    @apply bg-[#f6fbff] text-ink font-sans antialiased;
   }
   /* subtle scrollbar */
   ::-webkit-scrollbar {
@@ -28,7 +28,7 @@
 
 @layer components {
   .container-bow {
-    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+    @apply mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8;
   }
   .section-title {
     @apply text-xl font-bold text-ink sm:text-2xl;
@@ -37,13 +37,17 @@
     @apply inline-flex items-center gap-1 rounded-pill px-3 py-1 text-xs font-semibold;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-pill bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white shadow-card transition hover:brightness-105 active:scale-[0.98];
+    @apply inline-flex items-center justify-center gap-2 rounded-pill bg-brand-gradient px-5 py-2.5 text-sm font-semibold text-white shadow-card transition duration-300 hover:brightness-[1.03] hover:shadow-hero active:scale-[0.98];
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-pill border border-brand-200 bg-white px-5 py-2.5 text-sm font-semibold text-brand-700 transition hover:bg-brand-50 active:scale-[0.98];
+    @apply inline-flex items-center justify-center gap-2 rounded-pill border border-line bg-white px-5 py-2.5 text-sm font-semibold text-brand-600 transition duration-300 hover:border-brand-200 hover:bg-brand-50 active:scale-[0.98];
   }
   .card-base {
-    @apply rounded-card border border-brand-100 bg-white shadow-soft transition duration-300;
+    @apply rounded-card border border-line bg-white shadow-soft transition duration-300;
+  }
+  /* Consistent card hover — translateY + subtle scale + shadow */
+  .card-hover {
+    @apply transition duration-300 hover:-translate-y-1.5 hover:scale-[1.02] hover:shadow-card;
   }
 }
 

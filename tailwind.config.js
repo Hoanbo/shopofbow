@@ -4,48 +4,55 @@ export default {
   theme: {
     extend: {
       colors: {
-        // BOW brand palette — cyan / blue / white
+        // BOW brand palette — modern blue / white
         brand: {
-          50: '#ecfeff',
-          100: '#cff9fe',
-          200: '#a5f0fc',
-          300: '#67e3f9',
-          400: '#22ccee',
-          500: '#06b6d4', // primary cyan
-          600: '#0891b2',
-          700: '#0e7490',
-          800: '#155e75',
-          900: '#164e63',
-          950: '#083344',
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#5aa9fb',
+          500: '#3fa9f5', // secondary
+          600: '#1677ff', // primary
+          700: '#0e5fd6',
+          800: '#0d4ea8',
+          900: '#0f3f85',
+          950: '#0a2a5c',
         },
         ink: {
-          DEFAULT: '#0b2b36',
-          soft: '#33555f',
-          muted: '#6b8791',
+          DEFAULT: '#1f2937',
+          soft: '#4b5563',
+          muted: '#6b7280',
         },
+        line: '#e8eef6',
       },
       fontFamily: {
         sans: ['Be Vietnam Pro', 'Inter', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
-        card: '1.25rem',
+        card: '1.25rem', // 20px
+        xl2: '1.5rem', // 24px
+        card2: '1.75rem', // 28px
         pill: '999px',
       },
       boxShadow: {
-        card: '0 8px 30px -12px rgba(6, 182, 212, 0.28)',
-        soft: '0 4px 20px -8px rgba(11, 43, 54, 0.15)',
-        hero: '0 20px 60px -20px rgba(8, 145, 178, 0.45)',
-        nav: '0 -6px 24px -12px rgba(11, 43, 54, 0.18)',
+        card: '0 10px 30px -14px rgba(22, 119, 255, 0.22)',
+        soft: '0 6px 24px -12px rgba(15, 63, 133, 0.12)',
+        hero: '0 24px 60px -24px rgba(22, 119, 255, 0.35)',
+        nav: '0 -6px 24px -14px rgba(15, 63, 133, 0.12)',
       },
       backgroundImage: {
-        'brand-gradient': 'linear-gradient(135deg, #06b6d4 0%, #0891b2 45%, #0e7490 100%)',
-        'hero-gradient': 'linear-gradient(120deg, #22ccee 0%, #06b6d4 40%, #0e7490 100%)',
-        'sky-soft': 'linear-gradient(180deg, #ecfeff 0%, #ffffff 100%)',
+        'brand-gradient': 'linear-gradient(135deg, #3fa9f5 0%, #1677ff 55%, #0e5fd6 100%)',
+        'hero-gradient': 'linear-gradient(125deg, #3fa9f5 0%, #1677ff 55%, #0e5fd6 100%)',
+        'sky-soft': 'linear-gradient(180deg, #f6fbff 0%, #ffffff 100%)',
       },
       keyframes: {
         'fade-up': {
           '0%': { opacity: '0', transform: 'translateY(12px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
         float: {
           '0%,100%': { transform: 'translateY(0)' },
@@ -54,6 +61,7 @@ export default {
       },
       animation: {
         'fade-up': 'fade-up 0.5s ease-out both',
+        'fade-in': 'fade-in 0.6s ease-out both',
         float: 'float 6s ease-in-out infinite',
       },
     },

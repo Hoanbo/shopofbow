@@ -18,7 +18,7 @@ export default function PremiumAppCard({ item }: Props) {
   return (
     <Link
       to={`/premium-apps/${item.slug}`}
-      className="card-base group flex items-center gap-3.5 p-3 hover:-translate-y-0.5 hover:shadow-card sm:p-4"
+      className="card-base card-hover group flex items-center gap-3.5 p-3 sm:p-4"
     >
       <div
         className="relative grid h-16 w-16 shrink-0 place-items-center rounded-2xl shadow-soft sm:h-[70px] sm:w-[70px]"

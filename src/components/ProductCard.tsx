@@ -19,7 +19,7 @@ export default function ProductCard({ item, base }: Props) {
   return (
     <Link
       to={`${base}/${item.slug}`}
-      className="card-base group flex flex-col overflow-hidden hover:-translate-y-1 hover:shadow-card"
+      className="card-base card-hover group flex flex-col overflow-hidden"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-brand-50">
         <div
@@ -52,16 +52,14 @@ export default function ProductCard({ item, base }: Props) {
           <span>· Đã bán {item.sold >= 1000 ? (item.sold / 1000).toFixed(1) + 'k' : item.sold}</span>
         </div>
 
-        <div className="flex items-end justify-between pt-1">
-          <div className="flex flex-col">
-            <span className="text-base font-extrabold text-brand-600 sm:text-lg">{formatVND(item.price)}</span>
+        <div className="flex items-end justify-between gap-2 pt-1.5">
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-base font-extrabold text-brand-600 sm:text-lg">{formatVND(item.price)}</span>
             {item.originalPrice && (
               <span className="text-xs text-ink-muted line-through">{formatVND(item.originalPrice)}</span>
             )}
           </div>
-          <span className="btn-primary !px-3 !py-1.5 !text-xs opacity-0 transition group-hover:opacity-100">
-            Mua ngay
-          </span>
+          <span className="btn-primary shrink-0 !px-3.5 !py-2 !text-xs">Xem chi tiết</span>
         </div>
       </div>
     </Link>
