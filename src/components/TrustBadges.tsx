@@ -9,18 +9,18 @@ export default function TrustBadges() {
   ];
 
   return (
-    <section className="rounded-[24px] border border-[#D8E9FF] bg-[#EEF6FF] p-4 shadow-xs sm:p-5">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+    <section className="rounded-[22px] border border-[#E7EEF8] bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] sm:p-6">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
         {badges.map((badge, index) => {
           const Icon = badge.icon;
           return (
-            <div key={index} className="flex items-center justify-center gap-3 text-sky-900">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D8E9FF] bg-white text-[#0088FF] shadow-xs">
-                <Icon className="h-4.5 w-4.5" />
+            <div key={index} className="flex items-center justify-center gap-3 text-[#2563EB]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#2563EB] shadow-xs">
+                <Icon className="h-5 w-5" />
               </div>
-              <div className="text-left leading-snug">
-                <p className="text-xs font-bold text-slate-800">{badge.title}</p>
-                <p className="text-xs font-medium text-slate-600">{badge.subtitle}</p>
+              <div className="text-left leading-tight">
+                <p className="text-xs font-bold text-[#0F172A] sm:text-sm">{badge.title}</p>
+                <p className="text-xs font-medium text-[#64748B]">{badge.subtitle}</p>
               </div>
             </div>
           );

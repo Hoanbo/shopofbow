@@ -8,30 +8,25 @@
   }
   html {
     scroll-behavior: smooth;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-[#F4F8FC] text-slate-800 font-sans antialiased selection:bg-sky-500 selection:text-white;
+    @apply bg-[#f5f8fd] text-[#0F172A] antialiased selection:bg-[#2563EB] selection:text-white;
   }
   /* subtle scrollbar */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-sky-200 rounded-full hover:bg-sky-300;
+    @apply bg-blue-200/80 rounded-full hover:bg-blue-300;
   }
 }
 
 @layer components {
   .container-bow {
-    @apply mx-auto w-full max-w-[1240px] px-3 sm:px-6 lg:px-8;
-  }
-  .section-title {
-    @apply text-lg font-bold text-slate-900 sm:text-xl;
-  }
-  .card-mockup {
-    @apply rounded-2xl border border-[#EBF2FA] bg-white shadow-[0_4px_20px_rgba(0,140,255,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-sky-200 hover:shadow-[0_8px_30px_rgba(0,140,255,0.12)];
+    @apply mx-auto w-full max-w-[1280px] px-4 sm:px-6;
   }
 }
 

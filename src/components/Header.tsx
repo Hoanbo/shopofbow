@@ -12,13 +12,20 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-[#EBF2FA] bg-white/95 backdrop-blur-md">
       <div className="container-bow flex h-16 items-center justify-between gap-4 sm:h-[72px]">
-        {/* Logo */}
-        <Link to="/" className="flex shrink-0 items-center">
+        {/* Logo - Enhanced Ultra Sharp new-logo.png */}
+        <Link to="/" className="flex shrink-0 items-center gap-2.5">
           <img
             src="/assets/new-logo.png"
-            alt="BOW Let's Connect Logo"
-            className="h-10 w-auto object-contain sm:h-12"
+            alt="BOW Logo"
+            className="h-11 w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-sm transition-transform duration-200 hover:scale-105 sm:h-13"
+            style={{ imageRendering: '-webkit-optimize-contrast' }}
           />
+          <div className="flex flex-col leading-none">
+            <span className="text-xl font-black tracking-tight text-[#00A3FF] sm:text-2xl">BOW</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#FFB703]">
+              Let's Connect
+            </span>
+          </div>
         </Link>
 
         {/* Center Search Bar - Desktop */}
