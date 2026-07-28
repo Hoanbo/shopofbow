@@ -17,7 +17,7 @@ const routeFor = (item: CatalogItem) => {
   return `/${seg}/${item.slug}`;
 };
 
-export default function SearchBar({ variant = 'bar', placeholder = 'Tìm ChatGPT, Netflix, Canva...', className = '' }: Props) {
+export default function SearchBar({ variant = 'bar', placeholder = 'Tìm kiếm AI Tools, Premium Apps...', className = '' }: Props) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<CatalogItem[]>([]);
