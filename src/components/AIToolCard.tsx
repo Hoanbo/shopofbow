@@ -10,21 +10,21 @@ export default function AIToolCard({ item }: Props) {
   return (
     <Link
       to={`/ai-tools/${item.slug}`}
-      className="group flex flex-col items-center justify-between rounded-[22px] border border-[#E7EEF8] bg-white p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.03] hover:border-blue-200 hover:shadow-[0_12px_28px_rgba(37,99,235,0.12)] text-center"
+      className="group flex flex-col items-center justify-between rounded-[28px] border border-[#E7EEF8] bg-white p-5 sm:p-6 shadow-[0_6px_24px_rgba(0,0,0,0.03)] transition-all duration-300 hover:-translate-y-2 hover:scale-[1.03] hover:border-blue-300 hover:shadow-[0_16px_36px_rgba(0,140,255,0.15)] text-center"
     >
       <div className="flex flex-col items-center w-full min-w-0">
-        {/* App Logo ~68x68 */}
+        {/* App Logo ~80x80 */}
         <AppLogo
           slug={item.slug}
           name={item.name}
           image={item.image}
-          className="h-[60px] w-[60px] sm:h-[68px] sm:w-[68px] transition-transform duration-300 group-hover:scale-105"
+          className="h-[70px] w-[70px] sm:h-[80px] sm:w-[80px] transition-transform duration-300 group-hover:scale-105"
         />
-        <h3 className="mt-3 w-full truncate text-xs font-semibold text-[#0F172A] sm:mt-4 sm:text-sm">{item.name}</h3>
+        <h3 className="mt-3.5 w-full truncate text-sm font-extrabold text-[#0F172A] sm:mt-4.5 sm:text-base">{item.name}</h3>
       </div>
 
-      {/* Gradient Blue Button rounded-full */}
-      <span className="mt-3.5 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-1.5 px-3 text-[11px] font-bold text-white shadow-xs transition-all duration-300 group-hover:from-[#0080E0] group-hover:to-[#1D4ED8] group-hover:shadow-md sm:mt-4 sm:py-2 sm:text-xs">
+      {/* Prominent Gradient Blue Pill Button */}
+      <span className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-2 px-4 text-xs font-bold text-white shadow-md transition-all duration-300 group-hover:from-[#0080E0] group-hover:to-[#1D4ED8] group-hover:shadow-lg sm:mt-5 sm:py-2.5 sm:text-sm">
         Xem chi tiết &gt;
       </span>
     </Link>

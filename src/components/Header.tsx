@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import SearchBar from './SearchBar';
 import { SparkIcon } from './icons';
+import newLogo from '../assets/new-logover2.png';
 
 export default function Header() {
   const [showMobileSearch, setShowMobileSearch] = useState(false);
@@ -12,10 +13,10 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-[#EBF2FA] bg-white/95 backdrop-blur-md">
       <div className="container-bow flex h-16 items-center justify-between gap-4 sm:h-[72px]">
-        {/* Logo - Enhanced Ultra Sharp new-logo.png */}
+        {/* Logo - Premium new-logover2.png */}
         <Link to="/" className="flex shrink-0 items-center gap-2.5">
           <img
-            src="/assets/new-logo.png"
+            src={newLogo}
             alt="BOW Logo"
             className="h-11 w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-sm transition-transform duration-200 hover:scale-105 sm:h-13"
             style={{ imageRendering: '-webkit-optimize-contrast' }}

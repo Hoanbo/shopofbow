@@ -22,15 +22,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true;
+
+    // Direct Supabase Authentication
     supabase.auth.getSession().then(({ data }) => {
       if (alive) {
         setSession(data.session);
         setLoading(false);
       }
     });
+
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
+      if (alive) {
+        setSession(s);
+        setLoading(false);
+      }
     });
+
     return () => {
       alive = false;
       sub.subscription.unsubscribe();
@@ -38,12 +45,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: password,
+    });
     if (error) throw error;
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setSession(null);
   };
 
   return (
@@ -53,7 +64,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   return useContext(AuthContext);
 }

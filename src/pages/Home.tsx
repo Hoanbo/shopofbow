@@ -16,18 +16,21 @@ export default function Home() {
   const { data: apps = [], loading: loadingApps } = useAsync(() => fetchByCategory('premium-app'), []);
   const { data: products = [], loading: loadingProducts } = useAsync(() => fetchFeatured(), []);
 
+  // Limit featured products to 3 items per user request
+  const featuredProducts = products.slice(0, 3);
+
   return (
-    <div className="space-y-6 pb-24 sm:space-y-10 sm:pb-16">
+    <div className="space-y-3 pb-10 sm:space-y-4 sm:pb-12">
       {/* Hero Banner */}
       <HeroBanner />
 
       {/* ⭐ AI Tools */}
       <Section
-        icon={<SparkIcon className="h-6 w-6 text-[#2563EB]" />}
+        icon={<SparkIcon className="h-5.5 w-5.5 text-[#2563EB]" />}
         title="AI Tools"
         to="/ai-tools"
       >
-        <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4 lg:grid-cols-6 sm:gap-5 lg:gap-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6 sm:gap-4 lg:gap-5">
           {loadingAi ? (
             <Skeleton count={6} variant="tool" />
           ) : (
@@ -38,11 +41,11 @@ export default function Home() {
 
       {/* 👑 Premium Apps */}
       <Section
-        icon={<AppIcon className="h-6 w-6 text-[#2563EB]" />}
+        icon={<AppIcon className="h-5.5 w-5.5 text-[#2563EB]" />}
         title="Premium Apps"
         to="/premium-apps"
       >
-        <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4 lg:grid-cols-6 sm:gap-5 lg:gap-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6 sm:gap-4 lg:gap-5">
           {loadingApps ? (
             <Skeleton count={6} variant="app" />
           ) : (
@@ -53,21 +56,21 @@ export default function Home() {
 
       {/* ✨ Sản phẩm nổi bật */}
       <Section
-        icon={<StarIcon className="h-6 w-6 text-[#2563EB]" />}
+        icon={<StarIcon className="h-5.5 w-5.5 text-[#2563EB]" />}
         title="Sản phẩm nổi bật"
         to="/products"
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3 sm:gap-4 lg:gap-5">
           {loadingProducts ? (
-            <Skeleton count={4} variant="product" />
+            <Skeleton count={3} variant="product" />
           ) : (
-            products.map((item) => <FeaturedBannerCard key={item.id} item={item} base="/products" />)
+            featuredProducts.map((item) => <FeaturedBannerCard key={item.id} item={item} base="/products" />)
           )}
         </div>
       </Section>
 
       {/* Benefit Badges */}
-      <div className="container-bow pt-2">
+      <div className="container-bow pt-1">
         <TrustBadges />
       </div>
     </div>
