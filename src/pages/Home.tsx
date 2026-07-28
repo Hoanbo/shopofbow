@@ -27,7 +27,7 @@ export default function Home() {
         title="AI Tools"
         to="/ai-tools"
       >
-        <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-5 lg:grid-cols-6">
           {loadingAi ? (
             <Skeleton count={6} variant="tool" />
           ) : (
@@ -42,7 +42,7 @@ export default function Home() {
         title="Premium Apps"
         to="/premium-apps"
       >
-        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 sm:gap-5 lg:grid-cols-6">
           {loadingApps ? (
             <Skeleton count={6} variant="app" />
           ) : (
@@ -57,7 +57,7 @@ export default function Home() {
         title="Sản phẩm nổi bật"
         to="/products"
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {loadingProducts ? (
             <Skeleton count={4} variant="product" />
           ) : (

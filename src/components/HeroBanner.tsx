@@ -16,15 +16,17 @@ export default function HeroBanner() {
         <div className="relative z-10 flex flex-col justify-between gap-6 md:flex-row md:items-center">
           <div className="max-w-2xl">
             {/* Logo + Tagline Header */}
-            <div className="flex items-center gap-3">
-              <img
-                src="/assets/bowLogo.jpeg"
-                alt="BOW Logo"
-                className="h-11 w-11 rounded-2xl object-cover shadow-md ring-2 ring-white/80 sm:h-14 sm:w-14"
-              />
+            <div className="flex items-center gap-3.5">
+              <div className="overflow-hidden rounded-2xl bg-white p-1.5 shadow-lg ring-4 ring-white/30">
+                <img
+                  src="/assets/bowLogo.jpeg"
+                  alt="BOW Banner Logo"
+                  className="h-12 w-12 rounded-xl object-cover sm:h-16 sm:w-16"
+                />
+              </div>
               <div className="flex flex-col leading-tight">
-                <span className="text-xl font-black tracking-tight text-white sm:text-2xl">BOW</span>
-                <span className="text-[11px] font-extrabold uppercase tracking-widest text-amber-300">
+                <span className="text-2xl font-black tracking-tight text-white sm:text-3xl">BOW</span>
+                <span className="text-xs font-extrabold uppercase tracking-widest text-amber-300 sm:text-sm">
                   Let's Connect
                 </span>
               </div>
