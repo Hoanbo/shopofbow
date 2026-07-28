@@ -17,7 +17,7 @@ export default function Home() {
   const { data: products = [], loading: loadingProducts } = useAsync(() => fetchFeatured(), []);
 
   return (
-    <div className="space-y-8 pb-10 sm:space-y-12">
+    <div className="space-y-6 pb-20 sm:space-y-10 sm:pb-12">
       {/* Hero Banner */}
       <HeroBanner />
 
@@ -25,10 +25,9 @@ export default function Home() {
       <Section
         icon={<SparkIcon className="h-5 w-5 text-sky-500" />}
         title="AI Tools"
-        subtitle="Tài khoản AI chính chủ, kích hoạt tức thì"
         to="/ai-tools"
       >
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+        <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
           {loadingAi ? (
             <Skeleton count={6} variant="tool" />
           ) : (
@@ -41,10 +40,9 @@ export default function Home() {
       <Section
         icon={<AppIcon className="h-5 w-5 text-sky-500" />}
         title="Premium Apps"
-        subtitle="Netflix, Spotify, YouTube... giá siêu tốt"
         to="/premium-apps"
       >
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
+        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-4 lg:grid-cols-6">
           {loadingApps ? (
             <Skeleton count={6} variant="app" />
           ) : (
@@ -57,10 +55,9 @@ export default function Home() {
       <Section
         icon={<StarIcon className="h-5 w-5 text-sky-500" />}
         title="Sản phẩm nổi bật"
-        subtitle="Công cụ sáng tạo & tiện ích hàng đầu"
         to="/products"
       >
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {loadingProducts ? (
             <Skeleton count={4} variant="product" />
           ) : (
@@ -70,7 +67,7 @@ export default function Home() {
       </Section>
 
       {/* Trust Badges */}
-      <div className="container-bow">
+      <div className="container-bow pt-2">
         <TrustBadges />
       </div>
     </div>
