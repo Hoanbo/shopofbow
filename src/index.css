@@ -6,14 +6,21 @@
   :root {
     color-scheme: light;
   }
+  .dark {
+    color-scheme: dark;
+  }
   html {
     scroll-behavior: smooth;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-[#f5f8fd] text-[#0F172A] antialiased selection:bg-[#2563EB] selection:text-white;
+    @apply bg-[#F5F9FF] text-[#111827] antialiased selection:bg-[#2563EB] selection:text-white transition-colors duration-300;
   }
+  html.dark body {
+    @apply bg-[#0B1224] text-[#F9FAFB];
+  }
+  
   /* subtle scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
@@ -21,6 +28,9 @@
   }
   ::-webkit-scrollbar-thumb {
     @apply bg-blue-200/80 rounded-full hover:bg-blue-300;
+  }
+  html.dark ::-webkit-scrollbar-thumb {
+    @apply bg-[#1E2A4A] rounded-full hover:bg-slate-700;
   }
 }
 

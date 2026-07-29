@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import type { CatalogItem } from '../data/types';
 import { fetchBySlug, fetchByCategory, fetchFaqs } from '../data/api';
 import { formatVND } from '../data/catalog';
 import { useAsync } from '../hooks/useAsync';
 import { useSeo } from '../hooks/useSeo';
 import { useContact } from '../context/ContactContext';
+import { useAuth } from '../context/AuthContext';
+import CheckoutModal from '../components/CheckoutModal';
 import AppLogo from '../components/AppLogo';
 import AIToolCard from '../components/AIToolCard';
 import PremiumAppCard from '../components/PremiumAppCard';
@@ -44,6 +46,10 @@ export default function Detail({ category, base, crumb }: Props) {
   const { data: related = [] } = useAsync(() => fetchByCategory(category), [category]);
   const { data: faqs = [] } = useAsync(() => (item ? fetchFaqs(item.id) : Promise.resolve([])), [item?.id]);
   const [plan, setPlan] = useState(0);
+  const { session } = useAuth();
+  const [showCheckout, setShowCheckout] = useState(false);
+  const nav = useNavigate();
+  const loc = useLocation();
 
   useSeo({
     title: item?.name,
@@ -217,24 +223,41 @@ export default function Detail({ category, base, crumb }: Props) {
             </div>
           </div>
 
-          {/* CTA Buttons */}
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <a
-              href={fbHref ?? '/contact'}
-              target={fbHref ? '_blank' : undefined}
-              rel={fbHref ? 'noreferrer' : undefined}
-              className="flex items-center justify-center gap-2 rounded-full bg-[#0088FF] py-3.5 px-6 text-sm font-bold text-white shadow-md transition-all duration-300 hover:bg-[#0070E0] hover:scale-[1.02] flex-1"
-            >
-              <MessengerIcon className="h-5 w-5" /> Liên hệ Messenger
-            </a>
-            <a
-              href={zaloHref ?? '/contact'}
-              target={zaloHref ? '_blank' : undefined}
-              rel={zaloHref ? 'noreferrer' : undefined}
-              className="flex items-center justify-center gap-2 rounded-full bg-[#0068FF] py-3.5 px-6 text-sm font-bold text-white shadow-md transition-all duration-300 hover:bg-[#0055DD] hover:scale-[1.02] flex-1"
-            >
-              <ZaloIcon className="h-5 w-5" /> Liên hệ qua Zalo
-            </a>
+          {/* Main Buy Button */}
+          <button
+            onClick={() => {
+              if (!session) {
+                nav('/login', { state: { from: loc.pathname } });
+              } else {
+                setShowCheckout(true);
+              }
+            }}
+            className="w-full mt-6 flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-3.5 px-6 text-sm font-black text-white shadow-md transition-all duration-300 hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-[1.01]"
+          >
+            🛒 Mua Ngay dịch vụ
+          </button>
+
+          {/* Fallback Contact Links */}
+          <div className="mt-4 text-center w-full">
+            <span className="text-xs font-bold text-slate-400 block mb-2">Hoặc mua thủ công qua:</span>
+            <div className="flex gap-3 justify-center w-full">
+              <a
+                href={fbHref ?? '/contact'}
+                target={fbHref ? '_blank' : undefined}
+                rel={fbHref ? 'noreferrer' : undefined}
+                className="flex items-center justify-center gap-1.5 rounded-full border border-[#0088FF] text-[#0088FF] py-2 px-4.5 text-xs font-bold hover:bg-sky-50 transition duration-300 flex-1"
+              >
+                <MessengerIcon className="h-4 w-4" /> Messenger
+              </a>
+              <a
+                href={zaloHref ?? '/contact'}
+                target={zaloHref ? '_blank' : undefined}
+                rel={zaloHref ? 'noreferrer' : undefined}
+                className="flex items-center justify-center gap-1.5 rounded-full border border-[#0068FF] text-[#0068FF] py-2 px-4.5 text-xs font-bold hover:bg-blue-50 transition duration-300 flex-1"
+              >
+                <ZaloIcon className="h-4 w-4" /> Zalo Hotline
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -302,6 +325,15 @@ export default function Detail({ category, base, crumb }: Props) {
             ))}
           </div>
         </div>
+      )}
+      {/* Checkout Modal Popup */}
+      {item && active && (
+        <CheckoutModal
+          isOpen={showCheckout}
+          onClose={() => setShowCheckout(false)}
+          item={item}
+          plan={active}
+        />
       )}
     </div>
   );

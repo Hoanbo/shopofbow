@@ -6,6 +6,8 @@ import Listing from './pages/Listing';
 import Detail from './pages/Detail';
 import Contact from './pages/Contact';
 import NotFound from './pages/NotFound';
+import Auth from './pages/Auth';
+import ClientDashboard from './pages/Dashboard';
 import { AuthProvider } from './context/AuthContext';
 
 // Admin is code-split so the public site never downloads the dashboard bundle.
@@ -18,6 +20,8 @@ const ProductEditor = lazy(() => import('./pages/admin/ProductEditor'));
 const AdminCategories = lazy(() => import('./pages/admin/Categories'));
 const AdminFaqs = lazy(() => import('./pages/admin/Faqs'));
 const AdminContact = lazy(() => import('./pages/admin/Contact'));
+const AdminOrders = lazy(() => import('./pages/admin/Orders'));
+const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 
 const adminSpinner = (
   <div className="grid min-h-dvh place-items-center bg-sky-soft">
@@ -31,6 +35,8 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { path: '/', element: <Home /> },
+      { path: '/login', element: <Auth /> },
+      { path: '/dashboard', element: <ClientDashboard /> },
       {
         path: '/ai-tools',
         element: (
@@ -88,6 +94,8 @@ const router = createBrowserRouter([
           { path: 'categories', element: lazyAdmin(<AdminCategories />) },
           { path: 'faqs', element: lazyAdmin(<AdminFaqs />) },
           { path: 'contact', element: lazyAdmin(<AdminContact />) },
+          { path: 'orders', element: lazyAdmin(<AdminOrders />) },
+          { path: 'settings', element: lazyAdmin(<AdminSettings />) },
         ],
       },
     ],

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listFaqs, createFaq, updateFaq, deleteFaq, type FaqRow } from '../../data/admin';
-import { Field, TextArea, DeleteButton, Banner, AdminCard } from '../../components/admin/ui';
+import { SearchIcon } from '../../components/icons';
 
 export default function AdminFaqs() {
   const [rows, setRows] = useState<FaqRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  
+  // Search & Form States
+  const [searchQuery, setSearchQuery] = useState('');
   const [draft, setDraft] = useState({ question: '', answer: '' });
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +28,8 @@ export default function AdminFaqs() {
     load();
   }, [load]);
 
-  const add = async () => {
+  const add = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!draft.question.trim()) return;
     setBusy(true);
     setErr(null);
@@ -46,6 +50,7 @@ export default function AdminFaqs() {
   };
 
   const onDelete = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa FAQ này không?')) return;
     try {
       await deleteFaq(id);
       setRows((r) => r.filter((x) => x.id !== id));
@@ -63,42 +68,93 @@ export default function AdminFaqs() {
     }
   };
 
+  // Filtered rows
+  const filteredRows = rows.filter((f) =>
+    f.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    f.answer.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* HEADER */}
       <div>
-        <h1 className="text-2xl font-extrabold text-ink">FAQ chung</h1>
-        <p className="text-sm text-ink-muted">Câu hỏi thường gặp hiển thị trên trang Liên hệ.</p>
+        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">FAQ chung</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Quản lý câu hỏi thường gặp hiển thị trên trang chủ và phần liên hệ của BOW.</p>
       </div>
 
-      {err && <Banner kind="error">{err}</Banner>}
-
-      <AdminCard title="Thêm câu hỏi">
-        <div className="space-y-3">
-          <Field label="Câu hỏi" value={draft.question} onChange={(e) => setDraft((d) => ({ ...d, question: e.target.value }))} />
-          <TextArea label="Trả lời" rows={3} value={draft.answer} onChange={(e) => setDraft((d) => ({ ...d, answer: e.target.value }))} />
-          <button onClick={add} disabled={busy} className="btn-primary disabled:opacity-60">
-            {busy ? 'Đang thêm...' : '+ Thêm FAQ'}
-          </button>
+      {err && (
+        <div className="rounded-2xl border border-red-100 bg-red-50 dark:bg-red-950/20 px-4.5 py-3 text-xs font-bold text-red-600 dark:text-red-400">
+          ⚠️ {err}
         </div>
-      </AdminCard>
+      )}
 
-      <AdminCard title={`Danh sách (${rows.length})`}>
-        {loading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-20 animate-pulse rounded-xl bg-brand-50/60" />
-            ))}
+      {/* FORM: ADD FAQ CARD */}
+      <div className="rounded-[28px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-6 shadow-xs">
+        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider border-b border-slate-50 dark:border-slate-800/60 pb-3 mb-4">Thêm câu hỏi mới</h3>
+        <form onSubmit={add} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Câu hỏi thường gặp</label>
+            <input
+              type="text"
+              required
+              value={draft.question}
+              onChange={(e) => setDraft((d) => ({ ...d, question: e.target.value }))}
+              placeholder="Ví dụ: Quy định bảo hành tài khoản ra sao?"
+              className="h-11 w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] px-3.5 text-xs font-bold outline-none transition focus:border-[#2563EB]"
+            />
           </div>
-        ) : rows.length === 0 ? (
-          <p className="py-8 text-center text-ink-muted">Chưa có câu hỏi nào.</p>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">Nội dung trả lời</label>
+            <textarea
+              required
+              value={draft.answer}
+              onChange={(e) => setDraft((d) => ({ ...d, answer: e.target.value }))}
+              placeholder="Nhập nội dung giải đáp chi tiết..."
+              rows={3}
+              className="w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3.5 text-xs font-bold outline-none transition focus:border-[#2563EB]"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-xl bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-6 py-2.5 text-xs font-bold text-white shadow-md disabled:opacity-60 transition hover:scale-102"
+          >
+            {busy ? 'Đang thêm...' : '➕ Thêm câu hỏi'}
+          </button>
+        </form>
+      </div>
+
+      {/* FILTER & SEARCH ROW */}
+      <div className="flex h-11 items-center gap-2 rounded-xl border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] px-4 w-full sm:max-w-md shadow-xs">
+        <SearchIcon className="h-4.5 w-4.5 shrink-0 text-slate-400" />
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Tìm câu hỏi hoặc câu trả lời..."
+          className="w-full bg-transparent text-xs font-bold outline-none placeholder:text-slate-400 text-slate-900 dark:text-white"
+        />
+      </div>
+
+      {/* FAQS LIST CARD */}
+      <div className="rounded-[28px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-6 shadow-xs space-y-4">
+        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider border-b border-slate-50 dark:border-slate-800/60 pb-3">Danh sách câu hỏi ({rows.length})</h3>
+        
+        {loading ? (
+          <div className="py-10 text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-100 dark:border-slate-800 border-t-[#2563EB]" />
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 font-semibold text-xs">
+            Không tìm thấy câu hỏi nào.
+          </div>
         ) : (
-          <div className="space-y-3">
-            {rows.map((f) => (
-              <FaqItem key={f.id} row={f} onSave={saveEdit} onDelete={onDelete} />
+          <div className="space-y-4 divide-y divide-slate-50 dark:divide-slate-800/40">
+            {filteredRows.map((f, idx) => (
+              <FaqItem key={f.id} row={f} onSave={saveEdit} onDelete={onDelete} isFirst={idx === 0} />
             ))}
           </div>
         )}
-      </AdminCard>
+      </div>
     </div>
   );
 }
@@ -107,10 +163,12 @@ function FaqItem({
   row,
   onSave,
   onDelete,
+  isFirst
 }: {
   row: FaqRow;
   onSave: (id: string, patch: Partial<FaqRow>) => void;
   onDelete: (id: string) => void;
+  isFirst: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [q, setQ] = useState(row.question);
@@ -118,18 +176,34 @@ function FaqItem({
 
   if (editing) {
     return (
-      <div className="space-y-3 rounded-xl border border-brand-200 bg-brand-50/40 p-4">
-        <Field label="Câu hỏi" value={q} onChange={(e) => setQ(e.target.value)} />
-        <TextArea label="Trả lời" rows={3} value={a} onChange={(e) => setA(e.target.value)} />
+      <div className={`space-y-4 p-4 rounded-2xl border border-blue-100 dark:border-[#1E2A4A] bg-[#F8FBFF]/60 dark:bg-slate-850/40 ${!isFirst ? 'pt-6' : ''}`}>
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Câu hỏi</label>
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="h-10 w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] px-3.5 text-xs font-bold outline-none"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Nội dung trả lời</label>
+          <textarea
+            value={a}
+            onChange={(e) => setA(e.target.value)}
+            rows={3}
+            className="w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3 text-xs font-bold outline-none"
+          />
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => {
               onSave(row.id, { question: q.trim(), answer: a.trim() });
               setEditing(false);
             }}
-            className="btn-primary !px-4 !py-2 !text-xs"
+            className="rounded-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-4.5 py-2 text-[10px] font-bold text-white shadow-xs"
           >
-            Lưu
+            Lưu thay đổi
           </button>
           <button
             onClick={() => {
@@ -137,7 +211,7 @@ function FaqItem({
               setA(row.answer);
               setEditing(false);
             }}
-            className="btn-ghost !px-4 !py-2 !text-xs"
+            className="rounded-full border border-slate-200 dark:border-slate-850 bg-white dark:bg-[#131C32] hover:bg-slate-50 px-4.5 py-2 text-[10px] font-bold text-slate-500"
           >
             Hủy
           </button>
@@ -147,21 +221,31 @@ function FaqItem({
   }
 
   return (
-    <div className="rounded-xl border border-brand-100 p-4">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-ink">{row.question}</p>
-          <p className="mt-1 text-sm text-ink-muted">{row.answer}</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            onClick={() => setEditing(true)}
-            className="rounded-lg border border-brand-100 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 transition hover:bg-brand-50"
-          >
-            Sửa
-          </button>
-          <DeleteButton onDelete={() => onDelete(row.id)} />
-        </div>
+    <div className={`flex items-start gap-4 justify-between transition ${!isFirst ? 'pt-4' : ''}`}>
+      <div className="space-y-1.5">
+        <h4 className="text-xs font-extrabold text-slate-900 dark:text-white leading-snug">❓ {row.question}</h4>
+        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold pl-5">{row.answer}</p>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          onClick={() => setEditing(true)}
+          className="grid h-8.5 w-8.5 place-items-center rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] text-slate-400 hover:text-[#2563EB] transition shadow-xs"
+          title="Sửa FAQ"
+        >
+          <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+        <button
+          onClick={() => onDelete(row.id)}
+          className="grid h-8.5 w-8.5 place-items-center rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-red-50 text-slate-400 hover:text-red-500 transition shadow-xs"
+          title="Xóa FAQ"
+        >
+          <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
       </div>
     </div>
   );
