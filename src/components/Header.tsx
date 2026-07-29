@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import SearchBar from './SearchBar';
-import { SearchIcon, SparkIcon, StarIcon, HeadsetIcon, HomeIcon } from './icons';
+import { SearchIcon, SparkIcon, StarIcon, HeadsetIcon } from './icons';
 import newLogo from '../assets/new-logover2.png';
 import { useAuth } from '../context/AuthContext';
 
@@ -101,67 +101,52 @@ export default function Header() {
             </Link>
 
             {/* NAVIGATION LINKS - DESKTOP ONLY */}
-            <nav className="hidden lg:flex items-center gap-6.5 text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-6 shrink-0">
-              <NavLink
-                to="/"
-                end
-                className={({ isActive }) =>
-                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
-                    isActive
-                      ? 'text-[#00A3FF] after:w-full'
-                      : 'hover:text-[#00A3FF] after:w-0 hover:after:w-full'
-                  }`
-                }
-              >
-                <HomeIcon className="h-4.5 w-4.5" />
-                Trang chủ
-              </NavLink>
-
+            <nav className="hidden lg:flex items-center gap-5 text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-6 shrink-0">
               <NavLink
                 to="/ai-tools"
                 className={({ isActive }) =>
-                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
+                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 whitespace-nowrap after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
                     isActive
                       ? 'text-[#00A3FF] after:w-full'
                       : 'hover:text-[#00A3FF] after:w-0 hover:after:w-full'
                   }`
                 }
               >
-                <SparkIcon className="h-4.5 w-4.5" />
+                <SparkIcon className="h-5 w-5" />
                 Danh mục
               </NavLink>
               
               <NavLink
                 to="/premium-apps"
                 className={({ isActive }) =>
-                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
+                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 whitespace-nowrap after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
                     isActive
                       ? 'text-[#00A3FF] after:w-full'
                       : 'hover:text-[#00A3FF] after:w-0 hover:after:w-full'
                   }`
                 }
               >
-                <StarIcon className="h-4.5 w-4.5" />
+                <StarIcon className="h-5 w-5" />
                 Yêu thích
               </NavLink>
 
               <NavLink
                 to="/contact"
                 className={({ isActive }) =>
-                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
+                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 whitespace-nowrap after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
                     isActive
                       ? 'text-[#00A3FF] after:w-full'
                       : 'hover:text-[#00A3FF] after:w-0 hover:after:w-full'
                   }`
                 }
               >
-                <HeadsetIcon className="h-4.5 w-4.5" />
+                <HeadsetIcon className="h-5 w-5" />
                 Hỗ trợ
               </NavLink>
             </nav>
 
             {/* CENTER SEARCH BAR - DESKTOP ONLY */}
-            <div className="hidden max-w-xl flex-1 px-8 md:block">
+            <div className="hidden max-w-[460px] flex-1 px-4 md:block">
               <SearchBar className="w-full" />
             </div>
 
@@ -174,7 +159,7 @@ export default function Header() {
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-sky-200 bg-sky-50/50 text-sky-600 shadow-xs transition hover:bg-sky-100"
                   aria-label="Search"
                 >
-                  <SearchIcon className="h-4.5 w-4.5" />
+                  <SearchIcon className="h-5 w-5" />
                 </button>
               </div>
 
@@ -211,51 +196,36 @@ export default function Header() {
                 <div className="h-8.5 w-8.5 animate-pulse rounded-full bg-slate-100" />
               ) : session ? (
                 <div className="relative user-menu-container">
-                  {isAdmin ? (
-                    /* Premium Admin Custom Trigger */
-                    <button
-                      onClick={() => setShowUserMenu((v) => !v)}
-                      className="flex items-center gap-2 rounded-full border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 pl-2 pr-3 py-1 hover:border-amber-300 transition shadow-xs cursor-pointer focus:outline-none"
-                    >
-                      {session.user.user_metadata.avatar_url ? (
-                        <img
-                          src={session.user.user_metadata.avatar_url}
-                          alt="Admin"
-                          className="h-[28px] w-[28px] rounded-full object-cover border border-amber-200"
-                        />
+                  <button
+                    onClick={() => setShowUserMenu((v) => !v)}
+                    className={`flex items-center gap-1.5 md:gap-2 rounded-full transition duration-200 focus:outline-none cursor-pointer ${
+                      isAdmin
+                        ? 'border border-transparent md:border-amber-200 md:dark:border-amber-900/60 md:bg-amber-50/40 md:dark:bg-amber-950/20 pl-1 pr-1 py-1 md:pl-2 md:pr-3 md:py-1'
+                        : 'border border-transparent md:border-slate-200 md:dark:border-slate-800 md:bg-slate-50/40 md:dark:bg-slate-900/20 pl-1 pr-1 py-1 md:pl-2 md:pr-3 md:py-1 hover:border-[#00A3FF]'
+                    }`}
+                  >
+                    {session.user.user_metadata.avatar_url ? (
+                      <img
+                        src={session.user.user_metadata.avatar_url}
+                        alt="Avatar"
+                        className="h-[32px] w-[32px] md:h-[28px] md:w-[28px] rounded-full object-cover border border-slate-200 dark:border-slate-700 md:border-transparent"
+                      />
+                    ) : (
+                      <span className={`flex h-[32px] w-[32px] md:h-[28px] md:w-[28px] items-center justify-center rounded-full text-[11px] md:text-[10px] font-black text-white shadow-xs ${isAdmin ? 'bg-amber-500' : 'bg-brand-500'}`}>
+                        {(session.user.email || 'U').charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    <div className="hidden md:flex items-center gap-1 leading-none text-left shrink-0">
+                      {isAdmin ? (
+                        <span className="block text-[11px] font-black uppercase text-amber-600 dark:text-amber-400">👑 Admin</span>
                       ) : (
-                        <span className="flex h-[28px] w-[28px] items-center justify-center rounded-full bg-amber-500 text-[10px] font-black text-white shadow-xs">
-                          H
-                        </span>
+                        <span className="block text-[11px] font-black text-slate-800 dark:text-slate-200">{displayName}</span>
                       )}
-                      <div className="flex items-center gap-1 leading-none text-left shrink-0">
-                        <span className="block text-[9px] font-black uppercase text-amber-600 dark:text-amber-400">👑 Admin</span>
-                        <span className="block text-[11px] font-black text-slate-800 dark:text-slate-200 ml-0.5">{displayName}</span>
-                        <svg className="h-3 w-3 text-amber-500 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </button>
-                  ) : (
-                    /* Standard User Avatar Trigger */
-                    <button
-                      onClick={() => setShowUserMenu((v) => !v)}
-                      className="flex items-center justify-center rounded-full border-2 border-transparent hover:border-[#00A3FF] hover:shadow-xs transition duration-200 focus:outline-none cursor-pointer"
-                      aria-label="Account Menu"
-                    >
-                      {session.user.user_metadata.avatar_url ? (
-                        <img
-                          src={session.user.user_metadata.avatar_url}
-                          alt="Avatar"
-                          className="h-[38px] w-[38px] rounded-full object-cover"
-                        />
-                      ) : (
-                        <span className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-[11px] font-black text-white shadow-xs">
-                          {(session.user.email || 'U').charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                    </button>
-                  )}
+                      <svg className="h-3 w-3 text-slate-400 dark:text-slate-500 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </button>
 
                   {/* Dropdown Menu */}
                   <div className={`absolute right-0 top-[calc(100%+8px)] z-50 w-52 rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#1e293b] p-2 shadow-hero text-left animate-fade-up ${showUserMenu ? 'block' : 'hidden'}`}>

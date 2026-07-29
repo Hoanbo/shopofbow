@@ -5,7 +5,6 @@ import { fetchBySlug, fetchByCategory, fetchFaqs } from '../data/api';
 import { formatVND } from '../data/catalog';
 import { useAsync } from '../hooks/useAsync';
 import { useSeo } from '../hooks/useSeo';
-import { useContact } from '../context/ContactContext';
 import { useAuth } from '../context/AuthContext';
 import CheckoutModal from '../components/CheckoutModal';
 import AppLogo from '../components/AppLogo';
@@ -20,8 +19,6 @@ import {
   BoltIcon,
   HeadsetIcon,
   ChevronRight,
-  MessengerIcon,
-  ZaloIcon,
 } from '../components/icons';
 
 interface Props {
@@ -38,7 +35,6 @@ const perks = [
 
 export default function Detail({ category, base, crumb }: Props) {
   const { slug } = useParams();
-  const contact = useContact();
   const { data: item, loading } = useAsync(
     () => (slug ? fetchBySlug(slug) : Promise.resolve(null)),
     [slug],
@@ -93,8 +89,6 @@ export default function Detail({ category, base, crumb }: Props) {
 
   const relatedItems = related.filter((i) => i.id !== item.id).slice(0, 4);
   const active = item.plans[plan] ?? item.plans[0];
-  const fbHref = contact.facebookUrl && contact.facebookUrl !== '#' ? contact.facebookUrl : undefined;
-  const zaloHref = contact.zaloUrl && contact.zaloUrl !== '#' ? contact.zaloUrl : undefined;
 
   return (
     <div className="container-bow py-4 sm:py-6 space-y-6">
@@ -170,11 +164,10 @@ export default function Detail({ category, base, crumb }: Props) {
                     <button
                       key={`${p.label}-${i}`}
                       onClick={() => setPlan(i)}
-                      className={`relative rounded-[20px] border p-3.5 text-center transition-all duration-300 ${
-                        plan === i
-                          ? 'border-[#2563EB] bg-[#EEF6FF] text-[#2563EB] shadow-md ring-2 ring-blue-500/20'
-                          : 'border-[#E7EEF8] bg-white text-slate-700 hover:border-blue-300'
-                      }`}
+                      className={`relative rounded-[20px] border p-3.5 text-center transition-all duration-300 ${plan === i
+                        ? 'border-[#2563EB] bg-[#EEF6FF] text-[#2563EB] shadow-md ring-2 ring-blue-500/20'
+                        : 'border-[#E7EEF8] bg-white text-slate-700 hover:border-blue-300'
+                        }`}
                     >
                       {p.highlight && (
                         <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-2.5 py-0.5 text-[10px] font-bold text-white shadow-xs">
@@ -236,29 +229,6 @@ export default function Detail({ category, base, crumb }: Props) {
           >
             🛒 Mua Ngay dịch vụ
           </button>
-
-          {/* Fallback Contact Links */}
-          <div className="mt-4 text-center w-full">
-            <span className="text-xs font-bold text-slate-400 block mb-2">Hoặc mua thủ công qua:</span>
-            <div className="flex gap-3 justify-center w-full">
-              <a
-                href={fbHref ?? '/contact'}
-                target={fbHref ? '_blank' : undefined}
-                rel={fbHref ? 'noreferrer' : undefined}
-                className="flex items-center justify-center gap-1.5 rounded-full border border-[#0088FF] text-[#0088FF] py-2 px-4.5 text-xs font-bold hover:bg-sky-50 transition duration-300 flex-1"
-              >
-                <MessengerIcon className="h-4 w-4" /> Messenger
-              </a>
-              <a
-                href={zaloHref ?? '/contact'}
-                target={zaloHref ? '_blank' : undefined}
-                rel={zaloHref ? 'noreferrer' : undefined}
-                className="flex items-center justify-center gap-1.5 rounded-full border border-[#0068FF] text-[#0068FF] py-2 px-4.5 text-xs font-bold hover:bg-blue-50 transition duration-300 flex-1"
-              >
-                <ZaloIcon className="h-4 w-4" /> Zalo Hotline
-              </a>
-            </div>
-          </div>
         </div>
       </div>
 

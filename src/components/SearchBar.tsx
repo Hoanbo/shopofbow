@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SearchIcon } from './icons';
 import { searchProducts } from '../data/api';
 import { formatVND } from '../data/catalog';
 import type { CatalogItem } from '../data/types';
@@ -17,7 +16,7 @@ const routeFor = (item: CatalogItem) => {
   return `/${seg}/${item.slug}`;
 };
 
-export default function SearchBar({ variant = 'bar', placeholder = 'Tìm kiếm AI Tools, Premium Apps...', className = '' }: Props) {
+export default function SearchBar({ placeholder = 'Tìm kiếm AI Tools, Premium Apps...', className = '' }: Props) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<CatalogItem[]>([]);
@@ -70,12 +69,27 @@ export default function SearchBar({ variant = 'bar', placeholder = 'Tìm kiếm 
   return (
     <div ref={wrap} className={`relative ${className}`}>
       <div
-        className={`flex items-center justify-between gap-2 rounded-full bg-white transition-all duration-300 ${
-          variant === 'bar'
-            ? 'h-11 border border-slate-200/80 pl-5 pr-4.5 shadow-xs hover:shadow-[0_6px_20px_rgba(59,130,246,0.12)] hover:border-[#3B82F6] focus-within:border-[#3B82F6] focus-within:ring-4 focus-within:ring-blue-500/10'
-            : 'h-10 border border-slate-200/80 pl-4.5 pr-4 rounded-full hover:border-[#3B82F6]'
-        }`}
+        className="flex items-center gap-[10px] rounded-full bg-white dark:bg-[#1e293b] w-full max-w-[460px] h-[48px] px-[18px] border border-[#DCE5F2] dark:border-slate-800/80 transition-all duration-200 ease-in-out focus-within:border-[#1677FF] focus-within:shadow-[0_0_0_4px_rgba(22,119,255,0.08)] box-border"
       >
+        {/* Search Icon on the LEFT */}
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#94A3B8"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          preserveAspectRatio="xMidYMid meet"
+          className="shrink-0"
+          style={{ width: '18px', height: '18px', display: 'block', minWidth: '18px', minHeight: '18px' }}
+        >
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+
+        {/* Input */}
         <input
           value={q}
           onChange={(e) => {
@@ -84,9 +98,8 @@ export default function SearchBar({ variant = 'bar', placeholder = 'Tìm kiếm 
           }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
-          className="w-full bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none font-medium pr-2"
+          className="flex-1 h-full border-none outline-none bg-transparent text-[15px] font-medium text-slate-800 dark:text-slate-200 placeholder-[#94A3B8] focus:outline-none focus:ring-0 p-0"
         />
-        <SearchIcon className="h-4.5 w-4.5 shrink-0 text-[#00A3FF] dark:text-[#35A8FF]" />
       </div>
 
       {open && q && (
