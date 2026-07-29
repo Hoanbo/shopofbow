@@ -107,34 +107,20 @@ export default function Detail({ category, base, crumb }: Props) {
 
       {/* Main Detail Grid */}
       <div className="grid gap-6 lg:grid-cols-2 lg:gap-10">
-        {/* Left Column: Product Image & Perks */}
-        <div>
-          <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-[28px] border border-[#E7EEF8] bg-gradient-to-tr from-sky-400/10 via-sky-100/30 to-blue-50/50 p-8 shadow-[0_8px_30px_rgba(0,140,255,0.06)]">
+        {/* Left Column: Product Image */}
+        <div className="h-full">
+          <div className="relative flex aspect-square lg:aspect-auto lg:h-full items-center justify-center overflow-hidden rounded-[28px] border border-[#E7EEF8] bg-gradient-to-tr from-sky-400/10 via-sky-100/30 to-blue-50/50 p-8 shadow-[0_8px_30px_rgba(0,140,255,0.06)]">
             <AppLogo
               slug={item.slug}
               name={item.name}
               image={item.image}
-              className="h-44 w-44 sm:h-56 sm:w-56 filter drop-shadow-md"
+              className="h-56 w-56 sm:h-72 sm:w-72 lg:h-80 lg:w-80 filter drop-shadow-md"
             />
             {item.badge && (
               <span className="absolute left-5 top-5 rounded-full bg-white/90 px-3 py-1 text-xs font-extrabold text-[#2563EB] shadow-sm backdrop-blur-md">
                 {item.badge}
               </span>
             )}
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            {perks.map(({ Icon, label }) => (
-              <div
-                key={label}
-                className="flex flex-col items-center gap-2 rounded-[22px] border border-[#E7EEF8] bg-white p-3.5 text-center shadow-xs transition hover:scale-[1.02]"
-              >
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[#2563EB]">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span className="text-xs font-bold text-[#0F172A]">{label}</span>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -151,7 +137,7 @@ export default function Detail({ category, base, crumb }: Props) {
 
             <div className="mt-4 flex items-center gap-3 text-sm">
               <span className="flex items-center gap-1 font-extrabold text-[#0F172A]">
-                <StarIcon className="h-4.5 w-4.5 text-amber-400" /> {item.rating}
+                <StarIcon className="h-4 w-4 text-amber-400" /> {item.rating}
               </span>
               <span className="text-slate-300">•</span>
               <span className="font-semibold text-slate-500">
@@ -160,7 +146,7 @@ export default function Detail({ category, base, crumb }: Props) {
             </div>
 
             {/* Price Tag */}
-            <div className="mt-5 flex items-baseline gap-3 rounded-[22px] bg-[#EEF6FF] border border-[#D8E9FF] p-4.5">
+            <div className="mt-5 flex items-baseline gap-3 rounded-[22px] bg-[#EEF6FF] border border-[#D8E9FF] p-4 sm:p-5">
               <span className="text-3xl font-black text-[#2563EB]">{formatVND(active.price)}</span>
               {active.originalPrice && (
                 <span className="text-sm font-medium text-slate-400 line-through">
@@ -200,26 +186,6 @@ export default function Detail({ category, base, crumb }: Props) {
               </div>
             )}
 
-            {/* CTA Buttons */}
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <a
-                href={fbHref ?? '/contact'}
-                target={fbHref ? '_blank' : undefined}
-                rel={fbHref ? 'noreferrer' : undefined}
-                className="flex items-center justify-center gap-2 rounded-full bg-[#0088FF] py-3.5 px-6 text-sm font-bold text-white shadow-md transition-all duration-300 hover:bg-[#0070E0] hover:scale-[1.02] flex-1"
-              >
-                <MessengerIcon className="h-5 w-5" /> Liên hệ Messenger
-              </a>
-              <a
-                href={zaloHref ?? '/contact'}
-                target={zaloHref ? '_blank' : undefined}
-                rel={zaloHref ? 'noreferrer' : undefined}
-                className="flex items-center justify-center gap-2 rounded-full bg-[#0068FF] py-3.5 px-6 text-sm font-bold text-white shadow-md transition-all duration-300 hover:bg-[#0055DD] hover:scale-[1.02] flex-1"
-              >
-                <ZaloIcon className="h-5 w-5" /> Liên hệ qua Zalo
-              </a>
-            </div>
-
             {/* Key Features List */}
             {item.features.length > 0 && (
               <div className="mt-6 rounded-[24px] border border-[#E7EEF8] bg-white p-5 shadow-xs">
@@ -234,6 +200,41 @@ export default function Detail({ category, base, crumb }: Props) {
                 </ul>
               </div>
             )}
+
+            {/* Perks Grid */}
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              {perks.map(({ Icon, label }) => (
+                <div
+                  key={label}
+                  className="flex flex-col items-center gap-2 rounded-[22px] border border-[#E7EEF8] bg-white p-3.5 text-center shadow-xs transition hover:scale-[1.02]"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[#2563EB]">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="text-xs font-bold text-[#0F172A]">{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA Buttons */}
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <a
+              href={fbHref ?? '/contact'}
+              target={fbHref ? '_blank' : undefined}
+              rel={fbHref ? 'noreferrer' : undefined}
+              className="flex items-center justify-center gap-2 rounded-full bg-[#0088FF] py-3.5 px-6 text-sm font-bold text-white shadow-md transition-all duration-300 hover:bg-[#0070E0] hover:scale-[1.02] flex-1"
+            >
+              <MessengerIcon className="h-5 w-5" /> Liên hệ Messenger
+            </a>
+            <a
+              href={zaloHref ?? '/contact'}
+              target={zaloHref ? '_blank' : undefined}
+              rel={zaloHref ? 'noreferrer' : undefined}
+              className="flex items-center justify-center gap-2 rounded-full bg-[#0068FF] py-3.5 px-6 text-sm font-bold text-white shadow-md transition-all duration-300 hover:bg-[#0055DD] hover:scale-[1.02] flex-1"
+            >
+              <ZaloIcon className="h-5 w-5" /> Liên hệ qua Zalo
+            </a>
           </div>
         </div>
       </div>

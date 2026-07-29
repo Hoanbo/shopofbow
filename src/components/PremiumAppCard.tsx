@@ -20,7 +20,7 @@ export default function PremiumAppCard({ item }: Props) {
           image={item.image}
           className="h-[70px] w-[70px] sm:h-[80px] sm:w-[80px] transition-transform duration-300 group-hover:scale-105"
         />
-        <h3 className="mt-3.5 w-full truncate text-sm font-extrabold text-[#0F172A] sm:mt-4.5 sm:text-base">{item.name}</h3>
+        <h3 className="mt-3.5 w-full truncate text-sm font-extrabold text-[#0F172A] sm:mt-4 sm:text-base">{item.name}</h3>
       </div>
 
       {/* Prominent Gradient Blue Pill Button */}

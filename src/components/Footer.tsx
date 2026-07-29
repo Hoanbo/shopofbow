@@ -34,7 +34,7 @@ export default function Footer() {
   const channels = buildChannels(contactInfo);
 
   return (
-    <footer className="mt-10 border-t border-[#E7EEF8] bg-white text-[#0F172A]">
+    <footer className="hidden md:block mt-10 border-t border-[#E7EEF8] bg-white text-[#0F172A]">
       {/* Top Banner / Features Bar inside Footer */}
 
 
@@ -79,7 +79,7 @@ export default function Footer() {
                   aria-label={label}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-[#2563EB] text-white shadow-md transition-transform duration-300 hover:scale-110 hover:bg-[#1D4ED8]"
                 >
-                  <Icon className="h-4.5 w-4.5" />
+                  <Icon className="h-5 w-5" />
                 </a>
               ))}
             </div>

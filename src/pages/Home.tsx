@@ -26,7 +26,7 @@ export default function Home() {
 
       {/* ⭐ AI Tools */}
       <Section
-        icon={<SparkIcon className="h-5.5 w-5.5 text-[#2563EB]" />}
+        icon={<SparkIcon className="h-5 w-5 sm:h-6 sm:w-6 text-[#2563EB]" />}
         title="AI Tools"
         to="/ai-tools"
       >
@@ -41,7 +41,7 @@ export default function Home() {
 
       {/* 👑 Premium Apps */}
       <Section
-        icon={<AppIcon className="h-5.5 w-5.5 text-[#2563EB]" />}
+        icon={<AppIcon className="h-5 w-5 sm:h-6 sm:w-6 text-[#2563EB]" />}
         title="Premium Apps"
         to="/premium-apps"
       >
@@ -56,7 +56,7 @@ export default function Home() {
 
       {/* ✨ Sản phẩm nổi bật */}
       <Section
-        icon={<StarIcon className="h-5.5 w-5.5 text-[#2563EB]" />}
+        icon={<StarIcon className="h-5 w-5 sm:h-6 sm:w-6 text-[#2563EB]" />}
         title="Sản phẩm nổi bật"
         to="/products"
       >

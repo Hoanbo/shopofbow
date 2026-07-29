@@ -58,7 +58,7 @@ export default function Listing({ category, title, subtitle }: Props) {
   }, [all, q, sort]);
 
   return (
-    <div className="container-bow py-4 sm:py-6 space-y-5">
+    <div className="container-bow py-3 sm:py-6 space-y-4 sm:space-y-5">
       {/* Hero Header Banner */}
       <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-r from-[#00A3FF] via-[#0088FF] to-[#2563EB] px-6 py-8 text-white shadow-lg sm:px-10 sm:py-10">
         <h1 className="text-2xl font-black sm:text-4xl tracking-tight">{title}</h1>
@@ -68,10 +68,10 @@ export default function Listing({ category, title, subtitle }: Props) {
       </div>
 
       {/* Search & Sort Controls Bar */}
-      <div className="sticky top-16 z-30 -mx-4 flex flex-col gap-3 bg-white/90 px-4 py-3.5 backdrop-blur-md border-y border-[#E7EEF8] sm:top-20 sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky top-16 z-30 -mx-4 flex flex-col gap-2.5 bg-white/90 px-4 py-2.5 backdrop-blur-md border-y border-[#E7EEF8] sm:top-20 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-3.5">
         {/* Search Bar */}
         <div className="flex h-11 items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 shadow-xs transition-all focus-within:border-[#2563EB] focus-within:ring-2 focus-within:ring-blue-100 sm:max-w-xs w-full">
-          <SearchIcon className="h-4.5 w-4.5 shrink-0 text-[#2563EB]" />
+          <SearchIcon className="h-5 w-5 shrink-0 text-[#2563EB]" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
