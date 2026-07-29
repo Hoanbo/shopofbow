@@ -18,7 +18,7 @@
     @apply bg-[#F5F9FF] text-[#111827] antialiased selection:bg-[#2563EB] selection:text-white transition-colors duration-300;
   }
   html.dark body {
-    @apply bg-[#0B1224] text-[#F9FAFB];
+    @apply bg-[#0F172A] text-[#F9FAFB];
   }
   
   /* subtle scrollbar */
@@ -30,7 +30,7 @@
     @apply bg-blue-200/80 rounded-full hover:bg-blue-300;
   }
   html.dark ::-webkit-scrollbar-thumb {
-    @apply bg-[#1E2A4A] rounded-full hover:bg-slate-700;
+    @apply bg-[#334155] rounded-full hover:bg-slate-600;
   }
 }
 
@@ -47,4 +47,185 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ==================================================
+   PREMIUM BLUE-GRAY (SLATE) DARK MODE OVERRIDES
+   ================================================== */
+html.dark {
+  --bg-main: #0F172A; /* Slate-900 */
+  --bg-card: #1E293B; /* Slate-800 */
+  --border-color: rgba(51, 65, 85, 0.45); /* Slate-700 translucent */
+  --border-color-solid: #334155; /* Slate-700 */
+}
+
+html.dark body {
+  background-color: var(--bg-main) !important;
+}
+
+html.dark .bg-\[\#0B1224\] {
+  background-color: var(--bg-main) !important;
+}
+
+html.dark .bg-\[\#131C32\] {
+  background-color: var(--bg-card) !important;
+}
+
+html.dark .bg-\[\#131C32\]\/95 {
+  background-color: rgba(30, 41, 59, 0.95) !important;
+}
+
+html.dark .border-\[\#E8F1FF\] {
+  border-color: var(--border-color) !important;
+}
+
+html.dark .border-\[\#1E2A4A\] {
+  border-color: var(--border-color-solid) !important;
+}
+
+html.dark .border-\[\#1E2A4A\]\/50 {
+  border-color: var(--border-color) !important;
+}
+
+html.dark .border-\[\#DCEAFF\] {
+  border-color: var(--border-color-solid) !important;
+}
+
+html.dark .divide-\[\#1E2A4A\]\/30 > * + * {
+  border-color: rgba(51, 65, 85, 0.3) !important;
+}
+
+html.dark .divide-\[\#E8F1FF\] > * + * {
+  border-color: rgba(51, 65, 85, 0.3) !important;
+}
+
+html.dark .ring-white {
+  --tw-ring-color: var(--bg-card) !important;
+}
+
+/* ==================================================
+   GLOBAL USER HOMEPAGE DARK MODE OVERRIDES (SLATE)
+   ================================================== */
+html.dark header {
+  background-color: rgba(30, 41, 59, 0.95) !important;
+  border-color: rgba(51, 65, 85, 0.4) !important;
+}
+
+html.dark footer {
+  background-color: #1e293b !important;
+  border-color: rgba(51, 65, 85, 0.4) !important;
+}
+
+/* User search input */
+html.dark input, 
+html.dark textarea, 
+html.dark select {
+  background-color: #1e293b !important;
+  color: #f9fafb !important;
+  border-color: #334155 !important;
+}
+
+/* User product cards */
+html.dark .bg-white {
+  background-color: #1e293b !important;
+}
+
+html.dark .text-\[\#0F172A\] {
+  color: #f9fafb !important;
+}
+
+html.dark .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+html.dark .text-slate-700 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-slate-400 {
+  color: #64748b !important;
+}
+
+html.dark .border-\[\#EBF2FA\] {
+  border-color: rgba(51, 65, 85, 0.3) !important;
+}
+
+html.dark .border-slate-100 {
+  border-color: rgba(51, 65, 85, 0.3) !important;
+}
+
+html.dark .border-slate-200 {
+  border-color: rgba(51, 65, 85, 0.4) !important;
+}
+
+html.dark .bg-slate-50 {
+  background-color: #0f172a !important;
+}
+
+html.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+html.dark .bg-blue-50 {
+  background-color: rgba(30, 41, 59, 0.6) !important;
+}
+
+html.dark .bg-sky-50\/50 {
+  background-color: rgba(30, 41, 59, 0.4) !important;
+}
+
+html.dark .border-sky-200 {
+  border-color: rgba(51, 65, 85, 0.4) !important;
+}
+
+html.dark .shadow-hero {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25) !important;
+}
+
+html.dark .shadow-card {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* User detail plans grid card */
+html.dark .bg-sky-soft {
+  background: #1e293b !important;
+}
+
+/* Custom text-ink overrides for Admin form labels in dark mode */
+html.dark .text-ink {
+  color: #f8fafc !important;
+}
+html.dark .text-ink-muted {
+  color: #94a3b8 !important;
+}
+html.dark .text-ink-soft {
+  color: #cbd5e1 !important;
+}
+
+/* Mobile bottom navigation dark overrides */
+html.dark nav.fixed.inset-x-0.bottom-0 {
+  background-color: rgba(30, 41, 59, 0.95) !important;
+  border-color: rgba(51, 65, 85, 0.45) !important;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.25) !important;
+}
+
+html.dark nav.fixed.inset-x-0.bottom-0 span {
+  color: #94a3b8 !important;
+}
+
+html.dark nav.fixed.inset-x-0.bottom-0 a svg {
+  color: #64748b !important;
+}
+
+html.dark nav.fixed.inset-x-0.bottom-0 a.active span,
+html.dark nav.fixed.inset-x-0.bottom-0 a.active svg {
+  color: #35A8FF !important;
 }

@@ -31,7 +31,12 @@ export default function Auth() {
     setBusy(true);
     try {
       await signIn(email, password);
-      nav(loc.state?.from ?? '/', { replace: true });
+      const adminEmails = ['hoankb4@gmail.com', 'admin@shopofbow.com'];
+      if (adminEmails.includes(email.trim().toLowerCase())) {
+        nav('/admin', { replace: true });
+      } else {
+        nav('/dashboard', { replace: true });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đăng nhập thất bại. Vui lòng kiểm tra lại.');
     } finally {

@@ -70,13 +70,12 @@ export default function SearchBar({ variant = 'bar', placeholder = 'Tìm kiếm 
   return (
     <div ref={wrap} className={`relative ${className}`}>
       <div
-        className={`flex items-center gap-2 rounded-pill bg-white transition ${
+        className={`flex items-center justify-between gap-2 rounded-full bg-white transition-all duration-300 ${
           variant === 'bar'
-            ? 'h-12 border border-brand-100 px-4 shadow-soft focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand-100'
-            : 'h-10 border border-brand-100 px-3'
+            ? 'h-11 border border-slate-200/80 pl-5 pr-4.5 shadow-xs hover:shadow-[0_6px_20px_rgba(59,130,246,0.12)] hover:border-[#3B82F6] focus-within:border-[#3B82F6] focus-within:ring-4 focus-within:ring-blue-500/10'
+            : 'h-10 border border-slate-200/80 pl-4.5 pr-4 rounded-full hover:border-[#3B82F6]'
         }`}
       >
-        <SearchIcon className="h-5 w-5 shrink-0 text-brand-500" />
         <input
           value={q}
           onChange={(e) => {
@@ -85,8 +84,9 @@ export default function SearchBar({ variant = 'bar', placeholder = 'Tìm kiếm 
           }}
           onFocus={() => setOpen(true)}
           placeholder={placeholder}
-          className="w-full bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
+          className="w-full bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none font-medium pr-2"
         />
+        <SearchIcon className="h-4.5 w-4.5 shrink-0 text-[#00A3FF] dark:text-[#35A8FF]" />
       </div>
 
       {open && q && (

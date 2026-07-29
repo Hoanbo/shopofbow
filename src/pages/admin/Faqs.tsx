@@ -126,7 +126,7 @@ export default function AdminFaqs() {
 
       {/* FILTER & SEARCH ROW */}
       <div className="flex h-11 items-center gap-2 rounded-xl border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] px-4 w-full sm:max-w-md shadow-xs">
-        <SearchIcon className="h-4.5 w-4.5 shrink-0 text-slate-400" />
+        <SearchIcon className="h-5 w-5 shrink-0 text-slate-400" />
         <input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}

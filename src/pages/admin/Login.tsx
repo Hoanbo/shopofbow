@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Banner } from '../../components/admin/ui';
 
 export default function Login() {
-  const { session, signIn, loading } = useAuth();
+  const { session, signIn, loading, isAdmin } = useAuth();
   const nav = useNavigate();
   const loc = useLocation() as { state?: { from?: string } };
   const [email, setEmail] = useState('');
@@ -13,6 +13,9 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
 
   if (!loading && session) {
+    if (!isAdmin) {
+      return <Navigate to="/" replace />;
+    }
     return <Navigate to={loc.state?.from ?? '/admin'} replace />;
   }
 
@@ -21,6 +24,12 @@ export default function Login() {
     setError(null);
     setBusy(true);
     try {
+      const adminEmails = ['hoankb4@gmail.com', 'admin@shopofbow.com'];
+      if (!adminEmails.includes(email.trim().toLowerCase())) {
+        setError('Tài khoản của bạn không có quyền truy cập trang quản trị Admin.');
+        setBusy(false);
+        return;
+      }
       await signIn(email.trim(), password);
       nav(loc.state?.from ?? '/admin', { replace: true });
     } catch (err) {

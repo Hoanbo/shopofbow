@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 interface AuthValue {
   session: Session | null;
   loading: boolean;
+  isAdmin: boolean;
   balance: number;
   refreshBalance: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -17,6 +18,7 @@ interface AuthValue {
 const AuthContext = createContext<AuthValue>({
   session: null,
   loading: true,
+  isAdmin: false,
   balance: 0,
   refreshBalance: async () => {},
   signIn: async () => {},
@@ -29,6 +31,7 @@ const AuthContext = createContext<AuthValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [balance, setBalance] = useState<number>(0);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchBalance = async (userId: string) => {
@@ -55,8 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (session?.user?.id) {
       fetchBalance(session.user.id);
+      setIsAdmin(
+        session.user.email
+          ? ['hoankb4@gmail.com', 'admin@shopofbow.com'].includes(session.user.email.toLowerCase())
+          : false
+      );
     } else {
       setBalance(0);
+      setIsAdmin(false);
     }
   }, [session]);
 
@@ -126,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, loading, balance, refreshBalance, signIn, signUp, verifyOtp, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, loading, isAdmin, balance, refreshBalance, signIn, signUp, verifyOtp, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
