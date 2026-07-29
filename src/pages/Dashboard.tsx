@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -7,7 +7,7 @@ import { CloseIcon } from '../components/icons';
 const BANK_CONFIG = {
   bankId: 'BIDV',
   accountNo: '4330700679',
-  accountName: 'NGUYEN VAN HOANG',
+  accountName: 'NGUYEN VAN HOAN',
 };
 
 type Order = {
@@ -63,13 +63,6 @@ function OrderCard({
       if (diff <= 0) {
         setTimeLeft('Hết hạn thanh toán');
         setIsExpired(true);
-        // Silently mark as cancelled in database
-        (supabase.from('orders') as any)
-          .update({ status: 'cancelled' })
-          .eq('id', order.id)
-          .then(() => {
-            onCancelSuccess();
-          });
         return false;
       }
 
@@ -86,7 +79,7 @@ function OrderCard({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [order, onCancelSuccess]);
+  }, [order.id, order.status, order.created_at, onCancelSuccess]);
 
   const handleCancel = async () => {
     if (!window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) return;
@@ -172,6 +165,7 @@ export default function Dashboard() {
   // Orders State
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [errorOrders, setErrorOrders] = useState<string | null>(null);
   const [selectedPayOrder, setSelectedPayOrder] = useState<Order | null>(null);
 
   // Deposit State
@@ -191,31 +185,32 @@ export default function Dashboard() {
   }, [session, nav]);
 
   // Fetch Orders
-  const fetchOrders = async () => {
-    if (!session) return;
+  const fetchOrders = useCallback(async () => {
+    if (!session?.user?.id) return;
     setLoadingOrders(true);
+    setErrorOrders(null);
     try {
       const { data, error } = await supabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        setOrders(data as Order[]);
-      }
-    } catch (err) {
+      if (error) throw error;
+      setOrders((data || []) as Order[]);
+    } catch (err: any) {
       console.error('Error fetching orders:', err);
+      setErrorOrders('Không thể tải lịch sử đơn hàng. Vui lòng thử lại.');
     } finally {
       setLoadingOrders(false);
     }
-  };
+  }, [session?.user?.id]);
 
   useEffect(() => {
-    if (session) {
+    if (session?.user?.id) {
       fetchOrders();
       refreshBalance();
     }
-  }, [session, activeTab]);
+  }, [session?.user?.id, activeTab]);
 
   if (!session) return null;
 
@@ -281,11 +276,12 @@ export default function Dashboard() {
               ].map((t) => (
                 <button
                   key={t.id}
+                  type="button"
                   onClick={() => setSearchParams({ tab: t.id })}
-                  className={`flex w-full items-center rounded-2xl px-4 py-3 text-xs font-bold transition ${
+                  className={`flex w-full items-center rounded-2xl px-4 py-3 text-xs font-bold transition-all duration-200 ${
                     activeTab === t.id
-                      ? 'bg-gradient-to-r from-[#00A3FF]/10 to-[#2563EB]/10 text-[#2563EB]'
-                      : 'text-[#0F172A] hover:bg-slate-50'
+                      ? 'bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-xs'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   {t.label}
@@ -308,19 +304,40 @@ export default function Dashboard() {
               </div>
 
               {loadingOrders ? (
-                <div className="py-20 text-center">
-                  <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-100 border-t-[#2563EB]" />
+                <div className="mt-5 space-y-4">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="animate-pulse rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+                      <div className="flex justify-between items-center">
+                        <div className="space-y-2 flex-1">
+                          <div className="h-4 w-1/3 rounded-md bg-slate-100 dark:bg-slate-800" />
+                          <div className="h-3 w-1/4 rounded-md bg-slate-50 dark:bg-slate-800/50" />
+                        </div>
+                        <div className="h-6 w-16 rounded-full bg-slate-100 dark:bg-slate-800" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : errorOrders ? (
+                <div className="py-16 text-center space-y-4">
+                  <span className="text-4xl block">⚠️</span>
+                  <p className="text-sm font-semibold text-rose-500">{errorOrders}</p>
+                  <button
+                    onClick={fetchOrders}
+                    className="inline-flex rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-6 py-2.5 text-xs font-bold text-white shadow-md hover:scale-102 transition"
+                  >
+                    Tải lại đơn hàng
+                  </button>
                 </div>
               ) : orders.length === 0 ? (
                 <div className="py-16 text-center space-y-3">
                   <span className="text-4xl block">📦</span>
-                  <p className="text-sm font-medium text-slate-500">Bạn chưa có đơn hàng nào.</p>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Bạn chưa có đơn hàng nào.</p>
                   <Link to="/" className="inline-flex rounded-full bg-[#2563EB] px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-[#1D4ED8] transition">
-                    Mua sắm ngay
+                    Khám phá sản phẩm
                   </Link>
                 </div>
               ) : (
-                <div className="mt-5 space-y-4">
+                <div className="mt-5 space-y-4 animate-fade-in">
                   {orders.map((o) => (
                     <OrderCard
                       key={o.id}
@@ -356,7 +373,7 @@ export default function Dashboard() {
               {/* Deposit section */}
               <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-6 shadow-xs">
                 <h3 className="text-base font-extrabold text-[#0F172A] border-b border-slate-50 pb-3">Nạp tiền vào ví (Chuyển khoản tự động)</h3>
-                
+
                 <div className="mt-4 space-y-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
@@ -386,11 +403,10 @@ export default function Dashboard() {
                       <button
                         key={amt}
                         onClick={() => setDepositAmount(amt)}
-                        className={`rounded-full border px-4 py-1 text-xs font-bold transition ${
-                          depositAmount === amt
-                            ? 'border-[#2563EB] bg-blue-50 text-[#2563EB]'
-                            : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                        }`}
+                        className={`rounded-full border px-4 py-1 text-xs font-bold transition ${depositAmount === amt
+                          ? 'border-[#2563EB] bg-blue-50 text-[#2563EB]'
+                          : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                          }`}
                       >
                         {amt.toLocaleString('vi-VN')}đ
                       </button>
@@ -416,7 +432,7 @@ export default function Dashboard() {
                         <p><strong>Chủ tài khoản:</strong> {BANK_CONFIG.accountName}</p>
                         <p><strong>Số tiền nạp:</strong> <span className="font-extrabold text-blue-600">{depositAmount.toLocaleString('vi-VN')}đ</span></p>
                         <p className="flex items-center gap-2">
-                          <strong>Nội dung nạp:</strong> 
+                          <strong>Nội dung nạp:</strong>
                           <span className="font-black text-sm bg-blue-100 text-[#2563EB] px-2 py-0.5 rounded-md">{depositCode}</span>
                         </p>
                       </div>
@@ -431,7 +447,7 @@ export default function Dashboard() {
           {activeTab === 'profile' && (
             <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-6 shadow-xs">
               <h2 className="text-lg font-black text-[#0F172A] border-b border-slate-50 pb-3">Hồ sơ của tôi</h2>
-              
+
               <div className="mt-5 space-y-6 max-w-lg">
                 <div className="flex items-center gap-4">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-xl font-black text-white shadow-xs">
@@ -512,7 +528,7 @@ export default function Dashboard() {
       {selectedPayOrder && (
         <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setSelectedPayOrder(null)} />
-          
+
           <div className="relative w-full max-w-md transform overflow-hidden rounded-[28px] border border-slate-100 bg-white p-6 shadow-2xl transition-all sm:p-8 animate-fade-up text-center space-y-5">
             <button
               onClick={() => setSelectedPayOrder(null)}

@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Listing from './pages/Listing';
@@ -37,43 +37,22 @@ const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       { path: '/login', element: <Auth /> },
       { path: '/dashboard', element: <ClientDashboard /> },
-      {
-        path: '/ai-tools',
-        element: (
-          <Listing
-            category="ai-tool"
-            base="/ai-tools"
-            title="AI Tools"
-            subtitle="Tài khoản AI chính chủ — ChatGPT, Claude, Gemini... kích hoạt tức thì, bảo hành trọn gói."
-          />
-        ),
-      },
-      { path: '/ai-tools/:slug', element: <Detail category="ai-tool" base="/ai-tools" crumb="AI Tools" /> },
-      {
-        path: '/premium-apps',
-        element: (
-          <Listing
-            category="premium-app"
-            base="/premium-apps"
-            title="Premium Apps"
-            subtitle="Netflix, Spotify, YouTube Premium... giá siêu tốt, dùng ngay."
-            layout="list"
-          />
-        ),
-      },
-      { path: '/premium-apps/:slug', element: <Detail category="premium-app" base="/premium-apps" crumb="Premium Apps" /> },
+      { path: '/ai-tools', element: <Navigate to="/products" replace /> },
+      { path: '/ai-tools/:slug', element: <Detail category="ai-tool" base="/products" crumb="Sản phẩm" /> },
+      { path: '/premium-apps', element: <Navigate to="/products" replace /> },
+      { path: '/premium-apps/:slug', element: <Detail category="premium-app" base="/products" crumb="Sản phẩm" /> },
       {
         path: '/products',
         element: (
           <Listing
-            category="product"
+            category="all"
             base="/products"
-            title="Featured Products"
-            subtitle="Công cụ sáng tạo & tiện ích được yêu thích nhất."
+            title="Sản phẩm"
+            subtitle="Khám phá thế giới AI Tools & Premium Apps hàng đầu. Kích hoạt tự động, bảo hành trọn gói."
           />
         ),
       },
-      { path: '/products/:slug', element: <Detail category="product" base="/products" crumb="Sản phẩm" /> },
+      { path: '/products/:slug', element: <Detail category="all" base="/products" crumb="Sản phẩm" /> },
       { path: '/contact', element: <Contact /> },
       { path: '*', element: <NotFound /> },
     ],

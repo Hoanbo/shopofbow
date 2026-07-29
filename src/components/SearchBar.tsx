@@ -11,9 +11,7 @@ interface Props {
 }
 
 const routeFor = (item: CatalogItem) => {
-  const seg =
-    item.category === 'ai-tool' ? 'ai-tools' : item.category === 'premium-app' ? 'premium-apps' : 'products';
-  return `/${seg}/${item.slug}`;
+  return `/products/${item.slug}`;
 };
 
 export default function SearchBar({ placeholder = 'Tìm kiếm AI Tools, Premium Apps...', className = '' }: Props) {

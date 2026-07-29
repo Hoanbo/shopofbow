@@ -229,3 +229,19 @@ html.dark nav.fixed.inset-x-0.bottom-0 a.active span,
 html.dark nav.fixed.inset-x-0.bottom-0 a.active svg {
   color: #35A8FF !important;
 }
+
+/* premium smooth fade-in entry animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

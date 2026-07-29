@@ -198,14 +198,19 @@ const MOCK_ITEMS: CatalogItem[] = [
     group: 'Premium Apps',
     image: '/assets/youtube.jpg',
     accent: '#ff0000',
-    price: 39000,
+    price: 35000,
     originalPrice: 79000,
     rating: 4.9,
     sold: 5400,
     featured: true,
     badge: 'Siêu rẻ',
     features: ['Không quảng cáo', 'Phát nhạc nền', 'Tải video ngoại tuyến'],
-    plans: [{ label: '1 tháng', duration: '30 ngày', price: 39000 }],
+    plans: [
+      { label: '1 tháng', duration: '30 ngày', price: 35000 },
+      { label: '3 tháng', duration: '90 ngày', price: 140000 },
+      { label: '6 tháng', duration: '180 ngày', price: 260000 },
+      { label: '12 tháng', duration: '365 ngày', price: 470000 }
+    ],
   },
   {
     id: 'app-2',
@@ -218,13 +223,15 @@ const MOCK_ITEMS: CatalogItem[] = [
     group: 'Premium Apps',
     image: '/assets/netflix.png',
     accent: '#e50914',
-    price: 79000,
+    price: 65000,
     originalPrice: 260000,
     rating: 4.9,
     sold: 4200,
     featured: true,
     features: ['Phim Ultra HD 4K', 'Xem trên nhiều thiết bị'],
-    plans: [{ label: '1 tháng', duration: '30 ngày', price: 79000 }],
+    plans: [
+      { label: '1 tháng', duration: '30 ngày', price: 65000 }
+    ],
   },
   {
     id: 'app-3',
@@ -237,13 +244,18 @@ const MOCK_ITEMS: CatalogItem[] = [
     group: 'Premium Apps',
     image: '/assets/capcut.png',
     accent: '#000000',
-    price: 59000,
+    price: 10000,
     originalPrice: 199000,
     rating: 4.9,
     sold: 2300,
     featured: true,
     features: ['Mở khóa hiệu ứng VIP', 'Xóa nền AI'],
-    plans: [{ label: '1 tháng', duration: '30 ngày', price: 59000 }],
+    plans: [
+      { label: '1 tuần', duration: '7 ngày', price: 10000 },
+      { label: '1 tháng', duration: '30 ngày', price: 65000 },
+      { label: '6 tháng', duration: '180 ngày', price: 480000 },
+      { label: '12 tháng', duration: '365 ngày', price: 950000 }
+    ],
   },
   {
     id: 'app-4',
@@ -256,13 +268,15 @@ const MOCK_ITEMS: CatalogItem[] = [
     group: 'Premium Apps',
     image: '/assets/locket.png',
     accent: '#ffb703',
-    price: 49000,
+    price: 50000,
     originalPrice: 149000,
     rating: 4.8,
     sold: 1650,
     featured: false,
     features: ['Tính năng VIP', 'Icon ứng dụng độc quyền'],
-    plans: [{ label: '1 tháng', duration: '30 ngày', price: 49000 }],
+    plans: [
+      { label: 'Vĩnh viễn', duration: 'Trọn đời', price: 50000 }
+    ],
   },
   {
     id: 'app-5',
@@ -320,6 +334,23 @@ export async function fetchByCategory(type: ProductType): Promise<CatalogItem[]>
     console.warn('Supabase fetch failed, falling back to mock catalog:', e);
   }
   return MOCK_ITEMS.filter((item) => item.category === type);
+}
+
+/** Fetch all active products across all categories. */
+export async function fetchAllProducts(): Promise<CatalogItem[]> {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select(PRODUCT_COLS)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+    if (!error && data && data.length > 0) {
+      return data.map((row) => mapProduct(row as ProductRow));
+    }
+  } catch (e) {
+    console.warn('Supabase fetch failed, falling back to mock catalog:', e);
+  }
+  return MOCK_ITEMS;
 }
 
 /** Featured products across all categories (is_featured = true). */

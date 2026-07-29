@@ -22,7 +22,7 @@ import {
 } from '../components/icons';
 
 interface Props {
-  category: CatalogItem['category'];
+  category: CatalogItem['category'] | 'all';
   base: string;
   crumb: string;
 }
@@ -39,7 +39,10 @@ export default function Detail({ category, base, crumb }: Props) {
     () => (slug ? fetchBySlug(slug) : Promise.resolve(null)),
     [slug],
   );
-  const { data: related = [] } = useAsync(() => fetchByCategory(category), [category]);
+  const { data: related = [] } = useAsync(
+    () => (item ? fetchByCategory(item.category) : Promise.resolve([])),
+    [item?.category],
+  );
   const { data: faqs = [] } = useAsync(() => (item ? fetchFaqs(item.id) : Promise.resolve([])), [item?.id]);
   const [plan, setPlan] = useState(0);
   const { session } = useAuth();
@@ -70,7 +73,7 @@ export default function Detail({ category, base, crumb }: Props) {
     );
   }
 
-  if (!item || item.category !== category) {
+  if (!item || (category !== 'all' && item.category !== category)) {
     return (
       <div className="container-bow py-20 text-center">
         <div className="mx-auto max-w-md rounded-[28px] border border-[#E7EEF8] bg-white p-8 shadow-sm">
@@ -146,10 +149,10 @@ export default function Detail({ category, base, crumb }: Props) {
             </div>
 
             {/* Price Tag */}
-            <div className="mt-5 flex items-baseline gap-3 rounded-[22px] bg-[#EEF6FF] border border-[#D8E9FF] p-4 sm:p-5">
-              <span className="text-3xl font-black text-[#2563EB]">{formatVND(active.price)}</span>
+            <div className="mt-5 flex items-baseline gap-3 rounded-[22px] bg-[#EEF6FF] dark:bg-blue-950/20 border border-[#D8E9FF] dark:border-blue-900/40 p-4 sm:p-5">
+              <span className="text-3xl font-black text-[#2563EB] dark:text-[#35A8FF]">{formatVND(active.price)}</span>
               {active.originalPrice && (
-                <span className="text-sm font-medium text-slate-400 line-through">
+                <span className="text-sm font-medium text-slate-400 dark:text-slate-500 line-through">
                   {formatVND(active.originalPrice)}
                 </span>
               )}
@@ -158,15 +161,15 @@ export default function Detail({ category, base, crumb }: Props) {
             {/* Plan Selector */}
             {item.plans.length > 0 && (
               <div className="mt-6">
-                <h3 className="text-sm font-extrabold text-[#0F172A]">Chọn gói nâng cấp:</h3>
+                <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">Chọn gói nâng cấp:</h3>
                 <div className="mt-2.5 grid grid-cols-3 gap-3">
                   {item.plans.map((p, i) => (
                     <button
                       key={`${p.label}-${i}`}
                       onClick={() => setPlan(i)}
                       className={`relative rounded-[20px] border p-3.5 text-center transition-all duration-300 ${plan === i
-                        ? 'border-[#2563EB] bg-[#EEF6FF] text-[#2563EB] shadow-md ring-2 ring-blue-500/20'
-                        : 'border-[#E7EEF8] bg-white text-slate-700 hover:border-blue-300'
+                        ? 'border-[#2563EB] bg-[#EEF6FF] dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-md ring-2 ring-blue-500/20'
+                        : 'border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-blue-300'
                         }`}
                     >
                       {p.highlight && (
@@ -174,9 +177,9 @@ export default function Detail({ category, base, crumb }: Props) {
                           Tốt nhất
                         </span>
                       )}
-                      <span className="block text-sm font-extrabold text-[#0F172A]">{p.label}</span>
-                      <span className="block text-xs font-medium text-slate-400">{p.duration}</span>
-                      <span className="mt-1 block text-sm font-extrabold text-[#2563EB]">
+                      <span className={`block text-sm font-extrabold ${plan === i ? 'text-[#2563EB] dark:text-[#35A8FF]' : 'text-[#0F172A] dark:text-slate-200'}`}>{p.label}</span>
+                      <span className="block text-xs font-medium text-slate-400 dark:text-slate-500">{p.duration}</span>
+                      <span className={`mt-1 block text-sm font-extrabold ${plan === i ? 'text-[#2563EB] dark:text-[#35A8FF]' : 'text-[#2563EB] dark:text-blue-400'}`}>
                         {formatVND(p.price)}
                       </span>
                     </button>
@@ -187,12 +190,12 @@ export default function Detail({ category, base, crumb }: Props) {
 
             {/* Key Features List */}
             {item.features.length > 0 && (
-              <div className="mt-6 rounded-[24px] border border-[#E7EEF8] bg-white p-5 shadow-xs">
-                <h3 className="text-sm font-extrabold text-[#0F172A]">Tính năng nổi bật:</h3>
+              <div className="mt-6 rounded-[24px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
+                <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">Tính năng nổi bật:</h3>
                 <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
                   {item.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-xs sm:text-sm font-medium text-slate-700">
-                      <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#2563EB]" />
+                    <li key={f} className="flex items-start gap-2.5 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
+                      <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#2563EB] dark:text-[#35A8FF]" />
                       {f}
                     </li>
                   ))}
@@ -205,12 +208,12 @@ export default function Detail({ category, base, crumb }: Props) {
               {perks.map(({ Icon, label }) => (
                 <div
                   key={label}
-                  className="flex flex-col items-center gap-2 rounded-[22px] border border-[#E7EEF8] bg-white p-3.5 text-center shadow-xs transition hover:scale-[1.02]"
+                  className="flex flex-col items-center gap-2 rounded-[22px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 p-3.5 text-center shadow-xs transition hover:scale-[1.02]"
                 >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[#2563EB]">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF]">
                     <Icon className="h-5 w-5" />
                   </span>
-                  <span className="text-xs font-bold text-[#0F172A]">{label}</span>
+                  <span className="text-xs font-bold text-[#0F172A] dark:text-slate-200">{label}</span>
                 </div>
               ))}
             </div>

@@ -4,21 +4,21 @@ import { useContact } from '../context/ContactContext';
 import newLogo from '../assets/new-logover2.png';
 
 const aiToolLinks = [
-  { to: '/ai-tools/chatgpt-plus', label: 'ChatGPT Plus chính chủ' },
-  { to: '/ai-tools/claude-pro', label: 'Claude 3.5 Sonnet Pro' },
-  { to: '/ai-tools/gemini-advanced', label: 'Google Gemini Advanced' },
-  { to: '/ai-tools/grok-ai', label: 'Grok Premium AI' },
-  { to: '/ai-tools/perplexity-pro', label: 'Perplexity Pro AI' },
-  { to: '/ai-tools/cursor-pro', label: 'Cursor Pro Code AI' },
+  { to: '/products/chatgpt-plus', label: 'ChatGPT Plus chính chủ' },
+  { to: '/products/claude-pro', label: 'Claude 3.5 Sonnet Pro' },
+  { to: '/products/gemini-advanced', label: 'Google Gemini Advanced' },
+  { to: '/products/grok-ai', label: 'Grok Premium AI' },
+  { to: '/products/perplexity-pro', label: 'Perplexity Pro AI' },
+  { to: '/products/cursor-pro', label: 'Cursor Pro Code AI' },
 ];
 
 const premiumAppLinks = [
-  { to: '/premium-apps/youtube-premium', label: 'YouTube Premium 4K' },
-  { to: '/premium-apps/netflix-premium', label: 'Netflix 4K Ultra HD' },
-  { to: '/premium-apps/capcut-pro', label: 'CapCut Pro chính chủ' },
-  { to: '/premium-apps/spotify-premium', label: 'Spotify Premium Hifi' },
-  { to: '/premium-apps/canva-pro', label: 'Canva Pro bản quyền' },
-  { to: '/premium-apps/locket-gold', label: 'Locket Gold VIP' },
+  { to: '/products/youtube-premium', label: 'YouTube Premium 4K' },
+  { to: '/products/netflix-premium', label: 'Netflix 4K Ultra HD' },
+  { to: '/products/capcut-pro', label: 'CapCut Pro chính chủ' },
+  { to: '/products/spotify-premium', label: 'Spotify Premium Hifi' },
+  { to: '/products/canva-pro', label: 'Canva Pro bản quyền' },
+  { to: '/products/locket-gold', label: 'Locket Gold VIP' },
 ];
 
 const supportLinks = [
@@ -34,7 +34,7 @@ export default function Footer() {
   const channels = buildChannels(contactInfo);
 
   return (
-    <footer className="hidden md:block mt-10 border-t border-[#E7EEF8] bg-white text-[#0F172A]">
+    <footer className="hidden md:block mt-10 border-t border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 text-[#0F172A] dark:text-slate-300">
       {/* Top Banner / Features Bar inside Footer */}
 
 
@@ -46,7 +46,7 @@ export default function Footer() {
             <img
               src={newLogo}
               alt="BOW Logo"
-              className="h-10 w-auto object-contain filter drop-shadow-xs"
+              className="h-10 w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-[0_1.5px_2px_rgba(15,23,42,0.12)] drop-shadow-[0_1px_4px_rgba(0,163,255,0.2)] dark:drop-shadow-[0_0_8px_rgba(53,168,255,0.2)]"
             />
             <div className="flex flex-col leading-none">
               <span className="text-xl font-black tracking-tight text-[#00A3FF]">BOW</span>
@@ -141,15 +141,15 @@ export default function Footer() {
       </div>
 
       {/* Bottom Bar */}
-      <div className="border-t border-[#E7EEF8] bg-slate-50/70 py-4">
-        <div className="container-bow flex flex-col items-center justify-between gap-2 text-xs font-medium text-slate-500 sm:flex-row">
+      <div className="border-t border-[#E7EEF8] dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60 py-4">
+        <div className="container-bow flex flex-col items-center justify-between gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 sm:flex-row">
           <p>© {new Date().getFullYear()} BOW — Let's Connect. Tất cả quyền được bảo lưu.</p>
           <div className="flex items-center gap-4">
-            <Link to="/contact" className="hover:text-[#2563EB] transition">Chính sách bảo mật</Link>
+            <Link to="/contact" className="hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition">Chính sách bảo mật</Link>
             <span>•</span>
-            <Link to="/contact" className="hover:text-[#2563EB] transition">Điều khoản sử dụng</Link>
+            <Link to="/contact" className="hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition">Điều khoản sử dụng</Link>
             <span>•</span>
-            <Link to="/contact" className="hover:text-[#2563EB] transition">Sitemap</Link>
+            <Link to="/contact" className="hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition">Sitemap</Link>
           </div>
         </div>
       </div>

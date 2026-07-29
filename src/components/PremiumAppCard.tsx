@@ -9,7 +9,7 @@ interface Props {
 export default function PremiumAppCard({ item }: Props) {
   return (
     <Link
-      to={`/premium-apps/${item.slug}`}
+      to={`/products/${item.slug}`}
       className="group flex flex-col items-center justify-between rounded-[28px] border border-[#E7EEF8] bg-white p-5 sm:p-6 shadow-[0_6px_24px_rgba(0,0,0,0.03)] transition-all duration-300 hover:-translate-y-2 hover:scale-[1.03] hover:border-blue-300 hover:shadow-[0_16px_36px_rgba(0,140,255,0.15)] text-center"
     >
       <div className="flex flex-col items-center w-full min-w-0">

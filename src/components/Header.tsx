@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import SearchBar from './SearchBar';
-import { SearchIcon, SparkIcon, StarIcon, HeadsetIcon } from './icons';
+import { SearchIcon, AppIcon, HeadsetIcon } from './icons';
 import newLogo from '../assets/new-logover2.png';
 import { useAuth } from '../context/AuthContext';
 
@@ -89,7 +89,7 @@ export default function Header() {
               <img
                 src={newLogo}
                 alt="BOW Logo"
-                className="h-[44px] w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-xs transition-transform duration-200 hover:scale-105"
+                className="h-[44px] w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-[0_1.5px_2px_rgba(15,23,42,0.12)] drop-shadow-[0_1px_4px_rgba(0,163,255,0.2)] dark:drop-shadow-[0_0_8px_rgba(53,168,255,0.2)] transition-transform duration-200 hover:scale-105"
                 style={{ imageRendering: '-webkit-optimize-contrast' }}
               />
               <div className="flex flex-col leading-none">
@@ -103,7 +103,7 @@ export default function Header() {
             {/* NAVIGATION LINKS - DESKTOP ONLY */}
             <nav className="hidden lg:flex items-center gap-5 text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 ml-6 shrink-0">
               <NavLink
-                to="/ai-tools"
+                to="/products"
                 className={({ isActive }) =>
                   `flex items-center gap-1.5 relative py-1 transition-colors duration-200 whitespace-nowrap after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
                     isActive
@@ -112,22 +112,8 @@ export default function Header() {
                   }`
                 }
               >
-                <SparkIcon className="h-5 w-5" />
-                Danh mục
-              </NavLink>
-              
-              <NavLink
-                to="/premium-apps"
-                className={({ isActive }) =>
-                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 whitespace-nowrap after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
-                    isActive
-                      ? 'text-[#00A3FF] after:w-full'
-                      : 'hover:text-[#00A3FF] after:w-0 hover:after:w-full'
-                  }`
-                }
-              >
-                <StarIcon className="h-5 w-5" />
-                Yêu thích
+                <AppIcon className="h-5 w-5" />
+                Sản phẩm
               </NavLink>
 
               <NavLink
@@ -166,7 +152,7 @@ export default function Header() {
               {/* Theme Toggle Button */}
               <button
                 onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-800 bg-sky-50/20 dark:bg-slate-800/30 text-[#00A3FF] dark:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-700/80 bg-sky-50/20 dark:bg-slate-800/60 text-[#00A3FF] dark:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
                 title={theme === 'light' ? 'Bật Dark Mode' : 'Bật Light Mode'}
               >
                 {theme === 'light' ? (
@@ -183,7 +169,7 @@ export default function Header() {
               {/* Notification Bell */}
               <button
                 onClick={() => alert('Hiện tại chưa có thông báo mới.')}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-800 bg-sky-50/20 dark:bg-slate-800/30 text-slate-400 hover:text-[#00A3FF] dark:hover:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-700/80 bg-sky-50/20 dark:bg-slate-800/60 text-slate-400 hover:text-[#00A3FF] dark:hover:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
                 title="Thông báo"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -329,7 +315,7 @@ export default function Header() {
               ) : (
                 <Link
                   to="/login"
-                  className="inline-flex h-9 items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-4.5 text-xs font-bold text-white shadow-md hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-105 transition-all duration-300"
+                  className="inline-flex h-[38px] items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-6 text-xs font-black uppercase tracking-wider text-white shadow-[0_4px_12px_rgba(37,99,235,0.18)] hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-102 hover:shadow-[0_6px_16px_rgba(37,99,235,0.28)] transition-all duration-300"
                 >
                   Đăng nhập
                 </Link>
