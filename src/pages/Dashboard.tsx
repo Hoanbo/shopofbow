@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { CloseIcon } from '../components/icons';
+import { useToast } from '../components/Toast';
 
 const BANK_CONFIG = {
   bankId: 'MB', // MB Bank (mã VietQR)
@@ -229,6 +230,7 @@ export default function Dashboard() {
   // Profile Edit State
   const [fullName, setFullName] = useState(session?.user?.user_metadata?.full_name || '');
   const [updatingProfile, setUpdatingProfile] = useState(false);
+  const toast = useToast();
 
   // Chỉ redirect khi auth đã load xong VÀ thực sự chưa đăng nhập.
   // Không redirect trong lúc auth đang loading -> tránh F5 bị đá ra /login.
@@ -286,9 +288,9 @@ export default function Dashboard() {
         .eq('id', session.user.id);
       if (dbErr) throw dbErr;
 
-      alert('Cập nhật hồ sơ thành công!');
+      toast.success('Cập nhật hồ sơ thành công!');
     } catch (err: any) {
-      alert(err.message || 'Lỗi cập nhật hồ sơ.');
+      toast.error(err.message || 'Lỗi cập nhật hồ sơ.');
     } finally {
       setUpdatingProfile(false);
     }

@@ -21,6 +21,15 @@ const SEPAY_API_KEY = process.env.SEPAY_API_KEY!;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
+// Module-level client: tái sử dụng giữa các invocation trên warm Lambda.
+// createClient() khởi tạo SDK headers, pools, JWT parser — chỉ cần làm 1 lần.
+const _supabase =
+  SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+    : null;
+
 // Luôn trả 200 cho SePay (tránh SePay retry vô hạn) — kèm thông điệp để log.
 const ok = (message: string, extra: Record<string, unknown> = {}) => ({
   statusCode: 200,
@@ -43,6 +52,8 @@ export const handler: Handler = async (event) => {
     console.error('[sepay-webhook] Thiếu SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY');
     return { statusCode: 500, body: JSON.stringify({ error: 'Supabase not configured' }) };
   }
+
+  const supabase = _supabase!;
 
   // ── Parse payload SePay ───────────────────────────────────
   let payload: any;
@@ -73,10 +84,6 @@ export const handler: Handler = async (event) => {
   const paymentCode = match[0].toUpperCase();
 
   // ── Cập nhật đơn hàng bằng service_role (bypass RLS) ──────
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
   const { data: order, error: findErr } = await supabase
     .from('orders')
     .select('id, user_id, product_name, plan_label, price, status, payment_code, notes')

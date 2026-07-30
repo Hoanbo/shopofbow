@@ -4,6 +4,7 @@ import { listProducts, deleteProduct, setFeatured, setActive, type ProductRow } 
 import { formatVND } from '../../data/catalog';
 import type { ProductType } from '../../lib/database.types';
 import { SearchIcon } from '../../components/icons';
+import { useToast } from '../../components/Toast';
 
 type Filter = 'all' | ProductType;
 
@@ -20,6 +21,7 @@ export default function AdminProducts() {
   const [err, setErr] = useState<string | null>(null);
   const [type, setType] = useState<Filter>('all');
   const [q, setQ] = useState('');
+  const toast = useToast();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,7 +56,7 @@ export default function AdminProducts() {
       await setFeatured(row.id, !row.is_featured);
       setRows((r) => r.map((x) => (x.id === row.id ? { ...x, is_featured: !x.is_featured } : x)));
     } catch (e: any) {
-      alert('Không thể cập nhật nổi bật: ' + e.message);
+      toast.error('Không thể cập nhật nổi bật: ' + e.message);
     }
   };
 
@@ -63,7 +65,7 @@ export default function AdminProducts() {
       await setActive(row.id, !row.is_active);
       setRows((r) => r.map((x) => (x.id === row.id ? { ...x, is_active: !x.is_active } : x)));
     } catch (e: any) {
-      alert('Không thể cập nhật hiển thị: ' + e.message);
+      toast.error('Không thể cập nhật hiển thị: ' + e.message);
     }
   };
 

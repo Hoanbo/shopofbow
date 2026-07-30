@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { SearchIcon } from '../../components/icons';
+import { useToast } from '../../components/Toast';
 
 type Order = {
   id: string;
@@ -41,6 +42,7 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const toast = useToast();
   
   // Delivery details modal state
   const [deliveryOrder, setDeliveryOrder] = useState<Order | null>(null);
@@ -84,7 +86,7 @@ export default function AdminOrders() {
         }
       }
     } catch (err: any) {
-      alert(err.message || 'Lỗi khi tải đơn hàng.');
+      toast.error(err.message || 'Lỗi khi tải đơn hàng.');
     } finally {
       setLoading(false);
     }
@@ -103,7 +105,7 @@ export default function AdminOrders() {
       if (error) throw error;
       fetchOrders();
     } catch (err: any) {
-      alert(err.message || 'Lỗi khi cập nhật trạng thái.');
+      toast.error(err.message || 'Lỗi khi cập nhật trạng thái.');
     }
   };
 
@@ -124,7 +126,7 @@ export default function AdminOrders() {
       setDeliveryDetails('');
       fetchOrders();
     } catch (err: any) {
-      alert(err.message || 'Lỗi khi bàn giao đơn hàng.');
+      toast.error(err.message || 'Lỗi khi bàn giao đơn hàng.');
     } finally {
       setSubmittingDelivery(false);
     }
@@ -138,13 +140,13 @@ export default function AdminOrders() {
       });
       if (error) throw error;
       if (data === 'success') {
-        alert('Hoàn tiền về ví thành công!');
+        toast.success('Hoàn tiền về ví thành công!');
         fetchOrders();
       } else {
         throw new Error('Giao dịch hoàn tiền thất bại.');
       }
     } catch (err: any) {
-      alert(err.message || 'Lỗi hoàn tiền.');
+      toast.error(err.message || 'Lỗi hoàn tiền.');
     }
   };
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToast } from '../../components/Toast';
 
 type Message = {
   id: number;
@@ -50,6 +51,7 @@ export default function AdminContact() {
   const [selectedMsgId, setSelectedMsgId] = useState<number | null>(null);
   const [replyText, setReplyText] = useState('');
   const [filter, setFilter] = useState<'inbox' | 'archived'>('inbox');
+  const toast = useToast();
 
   // Load from localStorage or seed
   useEffect(() => {
@@ -99,7 +101,7 @@ export default function AdminContact() {
 
     saveToStorage(updated);
     setReplyText('');
-    alert('Đã gửi thư phản hồi khách hàng thành công!');
+    toast.success('Đã gửi thư phản hồi khách hàng thành công!');
   };
 
   const handleArchive = (id: number) => {

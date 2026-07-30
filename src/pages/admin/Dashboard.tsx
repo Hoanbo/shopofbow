@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { fetchStats } from '../../data/admin';
 import { ArrowRight } from '../../components/icons';
+import { useToast } from '../../components/Toast';
 
 // Chart timeline datasets
 const CHARTS_DATA: Record<string, { labels: string[]; values: number[] }> = {
@@ -42,6 +43,7 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [activeRange, setActiveRange] = useState<'7d' | '30d' | '12m'>('7d');
+  const toast = useToast();
 
   // Load stats from both fetchStats and custom queries
   const loadDashboardData = async () => {
@@ -305,7 +307,7 @@ export default function Dashboard() {
           </div>
 
           <button
-            onClick={() => alert('Hệ thống đã tự động sao lưu và tối ưu hóa cơ sở dữ liệu!')}
+            onClick={() => toast.info('Hệ thống đã tự động sao lưu và tối ưu hóa cơ sở dữ liệu!')}
             className="w-full mt-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-150 dark:border-slate-800 p-3 text-xs font-bold text-slate-600 dark:text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
           >
             🛡️ Backup dữ liệu ngay
