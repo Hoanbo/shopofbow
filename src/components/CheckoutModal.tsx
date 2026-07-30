@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { CloseIcon, CheckIcon } from './icons';
 import type { CatalogItem } from '../data/types';
+import { notifyTelegramNewOrder } from '../services/telegram';
 
 interface Plan {
   label: string;
@@ -63,7 +64,34 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
       if (rpcErr) throw rpcErr;
       if (data === 'success') {
         await refreshBalance();
+
+        // Tạo thông báo admin trong DB
+        const orderMeta = {
+          payment_code: paymentCode,
+          customer_name: session.user.user_metadata?.full_name || 'Thành viên',
+          customer_email: session.user.email || '',
+          product_name: item.name,
+          plan_label: plan.label,
+          price: plan.price,
+          payment_method: 'wallet' as const,
+          notes: notes.trim() || undefined,
+          created_at: new Date().toISOString(),
+        };
+
+        await (supabase.from('notifications') as any).insert({
+          type: 'new_order',
+          title: 'Đơn hàng mới (Ví)',
+          message: `${orderMeta.customer_name} vừa đặt ${item.name} - ${plan.label} · ${plan.price.toLocaleString('vi-VN')}đ`,
+          is_admin: true,
+          is_read: false,
+        });
+
+        // Gửi Telegram (non-blocking)
+        notifyTelegramNewOrder(orderMeta);
+
         setStep('success');
+      } else if (data === 'insufficient_balance') {
+        throw new Error('Số dư ví không đủ. Vui lòng nạp thêm.');
       } else {
         throw new Error('Giao dịch thất bại. Vui lòng thử lại.');
       }
@@ -90,6 +118,31 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
       });
 
       if (insErr) throw insErr;
+
+      // Tạo thông báo admin trong DB
+      const orderMeta = {
+        payment_code: paymentCode,
+        customer_name: session.user.user_metadata?.full_name || 'Thành viên',
+        customer_email: session.user.email || '',
+        product_name: item.name,
+        plan_label: plan.label,
+        price: plan.price,
+        payment_method: 'vietqr' as const,
+        notes: notes.trim() || undefined,
+        created_at: new Date().toISOString(),
+      };
+
+      await (supabase.from('notifications') as any).insert({
+        type: 'new_order',
+        title: 'Đơn hàng mới (QR)',
+        message: `${orderMeta.customer_name} vừa đặt ${item.name} - ${plan.label} · ${plan.price.toLocaleString('vi-VN')}đ`,
+        is_admin: true,
+        is_read: false,
+      });
+
+      // Gửi Telegram (non-blocking)
+      notifyTelegramNewOrder(orderMeta);
+
       setStep('payment');
     } catch (err: any) {
       setError(err?.message || err?.details || 'Lỗi tạo đơn hàng thanh toán.');

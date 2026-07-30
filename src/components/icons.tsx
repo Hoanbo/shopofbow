@@ -122,9 +122,10 @@ export const MessengerIcon = (p: P) => (
 
 export const ZaloIcon = (p: P) => (
   <svg {...base({ fill: 'currentColor', stroke: 'none', ...p })} viewBox="0 0 24 24">
-    <path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm3.4 5.1H5.2v1.4h1.9L5 13.2v1.1h3.5v-1.4H6.4l2.1-3.6V8.1Zm2.2 0h-1.5v6.2h1.5V8.1Zm5.6 2.1c-1.4 0-2.4 1-2.4 2.2s1 2.1 2.3 2.1c.6 0 1.1-.2 1.4-.6v.5H19v-4.1h-1.5v.5c-.3-.6-.9-1.1-1.3-1.1Zm.2 1.3c.6 0 1 .5 1 1s-.4 1-1 1-1-.4-1-1 .4-1 1-1Z" />
+    <path d="M12 2C6.48 2 2 6.48 2 12c0 5.52 4.48 10 10 10s10-4.48 10-10c0-5.52-4.48-10-10-10zm4.93 6.18h-1.2c-.29 0-.57.13-.78.35l-3.7 4.13V8.18H9.9v7.64h1.35v-2.52l.91-1.02 2.79 3.54h1.68l-3.5-4.44 3.3-3.67c.01-.01.02-.01.03-.02V8.18h-.53zm-7.48 0H8.1v7.64h1.35V8.18z" />
   </svg>
 );
+
 
 export const TelegramIcon = (p: P) => (
   <svg {...base({ fill: 'currentColor', stroke: 'none', ...p })} viewBox="0 0 24 24">

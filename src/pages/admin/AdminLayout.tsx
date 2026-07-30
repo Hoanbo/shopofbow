@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 import {
   HomeIcon,
   CheckIcon,
@@ -53,15 +54,73 @@ export default function AdminLayout() {
 
   const doSignOut = async () => {
     await signOut();
-    nav('/admin/login', { replace: true });
+    nav('/', { replace: true });
   };
 
-  // Mock Notifications
-  const mockAlerts = [
-    { id: 1, text: '📦 Đơn hàng mới #BOW92746 cần bàn giao', time: '5 phút trước' },
-    { id: 2, text: '✉️ Tin nhắn liên hệ mới từ khách hàng', time: '20 phút trước' },
-    { id: 3, text: '🔔 Hệ thống đã đối soát tự động thành công', time: '1 giờ trước' },
-  ];
+  // ── Real Notifications from DB ──────────────────────────────
+  type Notif = { id: string; title: string; message: string; is_read: boolean; created_at: string };
+  const [notifs, setNotifs] = useState<Notif[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const unreadCount = notifs.filter((n) => !n.is_read).length;
+
+  // Fetch admin notifications from DB
+  const fetchNotifs = async () => {
+    const { data } = await (supabase
+      .from('notifications')
+      .select('id, title, message, is_read, created_at')
+      .eq('is_admin', true)
+      .order('created_at', { ascending: false })
+      .limit(30) as any);
+    if (data) setNotifs(data);
+  };
+
+  // Mark all as read
+  const markAllRead = async () => {
+    await (supabase.from('notifications') as any)
+      .update({ is_read: true })
+      .eq('is_admin', true)
+      .eq('is_read', false);
+    setNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
+  };
+
+  // Format relative time
+  const relTime = (iso: string) => {
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60) return 'Vừa xong';
+    if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
+    return `${Math.floor(diff / 86400)} ngày trước`;
+  };
+
+  useEffect(() => {
+    fetchNotifs();
+
+    // Subscribe to new admin notifications via Realtime
+    const channel = supabase
+      .channel('admin-notifications')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: 'is_admin=eq.true',
+      }, (payload) => {
+        const newNotif = payload.new as Notif;
+        setNotifs((prev) => [newNotif, ...prev]);
+        // Play chime sound
+        if (!audioRef.current) {
+          audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2ozMVia0fXJlFEvLUmLxfbRmlgtKj2Bu/DMnFgqKDR3r+7ImFQlJC1spujCk1AgICVgn+S9kE0cHCFXlN26jEoZGR5PlM6yjUcVFhlIjce0lVATEhZGi8y3m1INERROi8u5nFILERRNjcq7nlIMERRMjsq6n1INERROjcm7oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMN');
+        }
+        audioRef.current.currentTime = 0;
+        audioRef.current.volume = 0.4;
+        audioRef.current.play().catch(() => {});
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Navigation Links List component
   const navList = (
@@ -126,6 +185,20 @@ export default function AdminLayout() {
 
           {/* Quick Actions / Notifications / Theme / Avatar */}
           <div className="flex items-center gap-3">
+            {/* View Storefront Button */}
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Mở trang cửa hàng"
+              className="hidden sm:flex items-center gap-1.5 h-11 px-4 rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F0F7FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400 text-xs font-bold hover:text-[#2563EB] dark:hover:text-[#35A8FF]"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Xem Website
+            </a>
+
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
@@ -146,25 +219,41 @@ export default function AdminLayout() {
             {/* Notification Bell Dropdown */}
             <div className="relative">
               <button
-                onClick={() => setShowNotifications((v) => !v)}
+                onClick={() => { setShowNotifications((v) => !v); if (!showNotifications) fetchNotifs(); }}
                 className="relative grid h-11 w-11 place-items-center rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
-                <span className="absolute right-3.5 top-3.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#131C32]" />
+                {unreadCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white ring-2 ring-white dark:ring-[#131C32]">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
 
               {showNotifications && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                  <div className="absolute right-0 mt-2 z-50 w-80 rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-4 shadow-xl text-left animate-fade-up">
-                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider mb-3">Thông báo mới</h4>
-                    <div className="divide-y divide-slate-100 dark:divide-slate-800/60 max-h-60 overflow-y-auto">
-                      {mockAlerts.map((alert) => (
-                        <div key={alert.id} className="py-2.5 space-y-0.5">
-                          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 leading-snug">{alert.text}</p>
-                          <span className="text-[10px] text-slate-400 font-medium">{alert.time}</span>
+                  <div className="absolute right-0 mt-2 z-50 w-80 rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] shadow-xl text-left animate-fade-up overflow-hidden">
+                    <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                      <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Thông báo {unreadCount > 0 && <span className="ml-1 rounded-full bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 text-[9px]">{unreadCount} mới</span>}
+                      </h4>
+                      {unreadCount > 0 && (
+                        <button onClick={markAllRead} className="text-[10px] font-bold text-[#2563EB] hover:underline">
+                          Đánh dấu đã đọc
+                        </button>
+                      )}
+                    </div>
+                    <div className="divide-y divide-slate-50 dark:divide-slate-800/50 max-h-72 overflow-y-auto">
+                      {notifs.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-slate-400 font-medium">Chưa có thông báo nào</div>
+                      ) : notifs.map((n) => (
+                        <div key={n.id} className={`px-4 py-3 space-y-0.5 transition-colors ${ !n.is_read ? 'bg-blue-50/60 dark:bg-blue-950/20' : '' }`}>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug">{n.title}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">{n.message}</p>
+                          <span className="text-[10px] text-slate-400 font-medium">{relTime(n.created_at)}</span>
                         </div>
                       ))}
                     </div>

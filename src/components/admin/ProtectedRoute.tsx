@@ -1,10 +1,9 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-/** Guards /admin routes — redirects to login when not authenticated. */
+/** Guards /admin routes — redirects to homepage when not authenticated. */
 export default function ProtectedRoute() {
   const { session, loading, isAdmin } = useAuth();
-  const loc = useLocation();
 
   if (loading) {
     return (
@@ -15,7 +14,7 @@ export default function ProtectedRoute() {
   }
 
   if (!session) {
-    return <Navigate to="/admin/login" state={{ from: loc.pathname }} replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (!isAdmin) {

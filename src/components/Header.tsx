@@ -166,16 +166,18 @@ export default function Header() {
                 )}
               </button>
 
-              {/* Notification Bell */}
-              <button
-                onClick={() => alert('Hiện tại chưa có thông báo mới.')}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-700/80 bg-sky-50/20 dark:bg-slate-800/60 text-slate-400 hover:text-[#00A3FF] dark:hover:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
-                title="Thông báo"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-              </button>
+              {/* Notification Bell — no native alert */}
+              <div className="relative">
+                <button
+                  onClick={() => {}}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-700/80 bg-sky-50/20 dark:bg-slate-800/60 text-slate-400 hover:text-[#00A3FF] dark:hover:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
+                  title="Thông báo"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </button>
+              </div>
 
               {/* User Profile / Login */}
               {loading ? (
@@ -315,7 +317,7 @@ export default function Header() {
               ) : (
                 <Link
                   to="/login"
-                  className="inline-flex h-[38px] items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-6 text-xs font-black uppercase tracking-wider text-white shadow-[0_4px_12px_rgba(37,99,235,0.18)] hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-102 hover:shadow-[0_6px_16px_rgba(37,99,235,0.28)] transition-all duration-300"
+                  className="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-4 sm:px-6 text-[11px] sm:text-xs font-black uppercase tracking-wide text-white shadow-[0_4px_12px_rgba(37,99,235,0.18)] hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-102 hover:shadow-[0_6px_16px_rgba(37,99,235,0.28)] transition-all duration-300"
                 >
                   Đăng nhập
                 </Link>
