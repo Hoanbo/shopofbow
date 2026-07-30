@@ -5,8 +5,8 @@ import { supabase } from '../lib/supabase';
 import { CloseIcon } from '../components/icons';
 
 const BANK_CONFIG = {
-  bankId: 'BIDV',
-  accountNo: '4330700679',
+  bankId: 'MB', // MB Bank (mã VietQR)
+  accountNo: '0966821315',
   accountName: 'NGUYEN VAN HOAN',
 };
 
@@ -52,6 +52,9 @@ function OrderCard({
 }) {
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [isExpired, setIsExpired] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
     if (order.status !== 'pending_payment') return;
@@ -82,15 +85,19 @@ function OrderCard({
   }, [order.id, order.status, order.created_at, onCancelSuccess]);
 
   const handleCancel = async () => {
-    if (!window.confirm('Bạn có chắc chắn muốn hủy đơn hàng này?')) return;
+    setCancelling(true);
+    setCancelError(null);
     try {
       const { error } = await (supabase.from('orders') as any)
         .update({ status: 'cancelled' })
         .eq('id', order.id);
       if (error) throw error;
+      setConfirmingCancel(false);
       onCancelSuccess();
     } catch (err: any) {
-      alert(err.message || 'Lỗi khi hủy đơn hàng.');
+      setCancelError(err.message || 'Lỗi khi hủy đơn hàng. Vui lòng thử lại.');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -135,7 +142,7 @@ function OrderCard({
           <div className="flex items-center gap-2.5 justify-end">
             <button
               type="button"
-              onClick={handleCancel}
+              onClick={() => { setCancelError(null); setConfirmingCancel(true); }}
               className="rounded-full border border-slate-200 bg-white hover:bg-slate-50 px-4 py-1.5 text-xs font-bold text-slate-500 transition"
             >
               ❌ Hủy đơn hàng
@@ -147,6 +154,52 @@ function OrderCard({
             >
               💳 Thanh toán ngay (Quét QR)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal xác nhận hủy đơn (thay cho window.confirm) */}
+      {confirmingCancel && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs"
+            onClick={() => !cancelling && setConfirmingCancel(false)}
+          />
+          <div className="relative w-full max-w-sm transform overflow-hidden rounded-[24px] border border-slate-100 bg-white p-6 shadow-2xl animate-fade-up text-center space-y-4">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 border border-rose-100 text-2xl">
+              ⚠️
+            </div>
+            <div>
+              <h3 className="text-base font-black text-[#0F172A]">Hủy đơn hàng?</h3>
+              <p className="mt-1.5 text-xs font-medium text-slate-500 leading-relaxed">
+                Bạn có chắc chắn muốn hủy đơn <strong className="text-[#0F172A]">{order.product_name}</strong> (Mã: {order.payment_code})? Hành động này không thể hoàn tác.
+              </p>
+            </div>
+
+            {cancelError && (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-2.5 text-xs font-semibold text-red-600">
+                {cancelError}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmingCancel(false)}
+                disabled={cancelling}
+                className="flex-1 rounded-full border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-60 transition"
+              >
+                Giữ lại đơn
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="flex-1 rounded-full bg-rose-500 py-2.5 text-xs font-bold text-white hover:bg-rose-600 disabled:opacity-60 transition"
+              >
+                {cancelling ? 'Đang hủy...' : 'Xác nhận hủy'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -427,7 +480,7 @@ export default function Dashboard() {
                         <div className="rounded-xl bg-amber-50 border border-amber-100 p-3.5 text-amber-800 font-semibold mb-3">
                           ⚠️ Nhập chính xác Nội dung chuyển khoản để hệ thống đối soát và cộng tiền ví tự động trong 30 giây!
                         </div>
-                        <p><strong>Ngân hàng:</strong> {BANK_CONFIG.bankId} (Ngân hàng BIDV)</p>
+                        <p><strong>Ngân hàng:</strong> MB Bank</p>
                         <p><strong>Số tài khoản:</strong> {BANK_CONFIG.accountNo}</p>
                         <p><strong>Chủ tài khoản:</strong> {BANK_CONFIG.accountName}</p>
                         <p><strong>Số tiền nạp:</strong> <span className="font-extrabold text-blue-600">{depositAmount.toLocaleString('vi-VN')}đ</span></p>
@@ -529,7 +582,7 @@ export default function Dashboard() {
         <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setSelectedPayOrder(null)} />
 
-          <div className="relative w-full max-w-md transform overflow-hidden rounded-[28px] border border-slate-100 bg-white p-6 shadow-2xl transition-all sm:p-8 animate-fade-up text-center space-y-5">
+          <div className="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto transform rounded-[28px] border border-slate-100 bg-white p-6 shadow-2xl transition-all sm:p-8 animate-fade-up text-center space-y-5">
             <button
               onClick={() => setSelectedPayOrder(null)}
               className="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-full border border-slate-100 bg-slate-50 text-slate-500 hover:bg-slate-100 transition"
@@ -556,7 +609,7 @@ export default function Dashboard() {
 
             {/* details */}
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3.5 text-left text-xs space-y-1.5 text-[#0F172A]">
-              <p><strong>Ngân hàng:</strong> {BANK_CONFIG.bankId} (BIDV)</p>
+              <p><strong>Ngân hàng:</strong> MB Bank</p>
               <p><strong>Số tài khoản:</strong> {BANK_CONFIG.accountNo}</p>
               <p><strong>Chủ tài khoản:</strong> {BANK_CONFIG.accountName}</p>
               <p className="text-blue-600 flex justify-between font-bold">

@@ -19,9 +19,9 @@ interface Props {
 }
 
 const BANK_CONFIG = {
-  bankId: 'BIDV', // BIDV
-  accountNo: '4330700679',
-  accountName: 'NGUYEN VAN HOANG',
+  bankId: 'MB', // MB Bank (mã VietQR)
+  accountNo: '0966821315',
+  accountName: 'NGUYEN VAN HOAN',
 };
 
 export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
@@ -30,6 +30,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
   const [notes, setNotes] = useState('');
   const [step, setStep] = useState<'checkout' | 'payment' | 'success'>('checkout');
   const [paymentCode, setPaymentCode] = useState('');
+  const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -41,9 +42,51 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
       setStep('checkout');
       setError(null);
       setNotes('');
+      setOrderId(null);
       setMethod(balance >= plan.price ? 'wallet' : 'vietqr');
     }
   }, [isOpen, plan.price, balance]);
+
+  // Ở bước thanh toán QR: theo dõi realtime đơn hàng.
+  // Khi SePay xác nhận (status -> 'pending_delivery'), tự chuyển sang màn thành công.
+  // Kèm fallback poll mỗi 5s phòng khi Realtime chưa bật cho bảng orders.
+  useEffect(() => {
+    if (step !== 'payment' || !orderId) return;
+
+    let cancelled = false;
+    const settleIfPaid = (status?: string | null) => {
+      if (!cancelled && status && status !== 'pending_payment' && status !== 'cancelled') {
+        setStep('success');
+      }
+    };
+
+    const checkOnce = async () => {
+      const { data } = await (supabase
+        .from('orders')
+        .select('status')
+        .eq('id', orderId)
+        .maybeSingle() as any);
+      settleIfPaid(data?.status);
+    };
+    checkOnce();
+
+    const channel = supabase
+      .channel(`order-${orderId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
+        (payload) => settleIfPaid((payload.new as { status?: string })?.status),
+      )
+      .subscribe();
+
+    const poll = setInterval(checkOnce, 5000);
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
+  }, [step, orderId]);
 
   if (!isOpen || !session) return null;
 
@@ -65,29 +108,19 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
       if (data === 'success') {
         await refreshBalance();
 
-        // Tạo thông báo admin trong DB
-        const orderMeta = {
+        // Thông báo admin trong DB do trigger `notify_admin_new_order` tạo (server-side).
+        // Ở đây chỉ gửi Telegram (chạy qua Netlify server-side, không dính RLS).
+        notifyTelegramNewOrder({
           payment_code: paymentCode,
           customer_name: session.user.user_metadata?.full_name || 'Thành viên',
           customer_email: session.user.email || '',
           product_name: item.name,
           plan_label: plan.label,
           price: plan.price,
-          payment_method: 'wallet' as const,
+          payment_method: 'wallet',
           notes: notes.trim() || undefined,
           created_at: new Date().toISOString(),
-        };
-
-        await (supabase.from('notifications') as any).insert({
-          type: 'new_order',
-          title: 'Đơn hàng mới (Ví)',
-          message: `${orderMeta.customer_name} vừa đặt ${item.name} - ${plan.label} · ${plan.price.toLocaleString('vi-VN')}đ`,
-          is_admin: true,
-          is_read: false,
         });
-
-        // Gửi Telegram (non-blocking)
-        notifyTelegramNewOrder(orderMeta);
 
         setStep('success');
       } else if (data === 'insufficient_balance') {
@@ -106,42 +139,39 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
     setError(null);
     setLoading(true);
     try {
-      // Insert order with status 'pending_payment'
-      const { error: insErr } = await (supabase.from('orders') as any).insert({
-        user_id: session.user.id,
-        product_name: item.name,
-        plan_label: plan.label,
-        price: plan.price,
-        status: 'pending_payment',
-        payment_code: paymentCode,
-        notes: notes.trim()
-      });
+      const customerName = session.user.user_metadata?.full_name || 'Thành viên';
+      const customerEmail = session.user.email || '';
+
+      // Insert order with status 'pending_payment' và lấy về id để theo dõi realtime
+      const { data: inserted, error: insErr } = await (supabase.from('orders') as any)
+        .insert({
+          user_id: session.user.id,
+          product_name: item.name,
+          plan_label: plan.label,
+          price: plan.price,
+          status: 'pending_payment',
+          payment_code: paymentCode,
+          notes: notes.trim(),
+        })
+        .select('id')
+        .single();
 
       if (insErr) throw insErr;
+      setOrderId(inserted?.id ?? null);
 
-      // Tạo thông báo admin trong DB
-      const orderMeta = {
+      // Thông báo admin do trigger DB (notify_admin_new_order) tự tạo — an toàn RLS.
+      // Telegram vẫn gửi từ client qua Netlify function (server-side, không dính RLS).
+      notifyTelegramNewOrder({
         payment_code: paymentCode,
-        customer_name: session.user.user_metadata?.full_name || 'Thành viên',
-        customer_email: session.user.email || '',
+        customer_name: customerName,
+        customer_email: customerEmail,
         product_name: item.name,
         plan_label: plan.label,
         price: plan.price,
-        payment_method: 'vietqr' as const,
+        payment_method: 'vietqr',
         notes: notes.trim() || undefined,
         created_at: new Date().toISOString(),
-      };
-
-      await (supabase.from('notifications') as any).insert({
-        type: 'new_order',
-        title: 'Đơn hàng mới (QR)',
-        message: `${orderMeta.customer_name} vừa đặt ${item.name} - ${plan.label} · ${plan.price.toLocaleString('vi-VN')}đ`,
-        is_admin: true,
-        is_read: false,
       });
-
-      // Gửi Telegram (non-blocking)
-      notifyTelegramNewOrder(orderMeta);
 
       setStep('payment');
     } catch (err: any) {
@@ -169,7 +199,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" onClick={onClose} />
 
       {/* Modal Container */}
-      <div className="relative w-full max-w-lg transform overflow-hidden rounded-[28px] border border-slate-100 bg-white p-6 shadow-2xl transition-all sm:p-8 animate-fade-up">
+      <div className="relative w-full max-w-lg max-h-[90dvh] overflow-y-auto overscroll-contain transform rounded-[28px] border border-slate-100 bg-white p-6 shadow-2xl transition-all sm:p-8 animate-fade-up">
         {/* Close Button */}
         {step !== 'success' && (
           <button
@@ -291,7 +321,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left text-xs space-y-2 text-[#0F172A]">
               <div className="flex justify-between font-medium">
                 <span className="text-slate-500">Ngân hàng thụ hưởng:</span>
-                <span className="font-extrabold">{BANK_CONFIG.bankId} (MB Bank)</span>
+                <span className="font-extrabold">MB Bank</span>
               </div>
               <div className="flex justify-between font-medium">
                 <span className="text-slate-500">Số tài khoản:</span>
@@ -308,7 +338,13 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
             </div>
 
             <div className="rounded-xl bg-sky-50 border border-sky-100 p-3 text-xs text-sky-700 font-semibold leading-relaxed">
-              👉 Hệ thống SePay sẽ quét biến động số dư và tự động duyệt đơn ngay lập tức (10s - 30s) sau khi bạn chuyển khoản đúng nội dung và số tiền.
+              👉 Sau khi bạn chuyển khoản đúng nội dung và số tiền, hệ thống SePay sẽ tự động xác nhận và duyệt đơn trong 10s - 30s. Màn hình sẽ tự chuyển khi thanh toán thành công — vui lòng không đóng cửa sổ này.
+            </div>
+
+            {/* Trạng thái chờ xác nhận tự động */}
+            <div className="flex items-center justify-center gap-2.5 rounded-xl border border-amber-100 bg-amber-50 py-2.5 text-xs font-bold text-amber-600">
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-300 border-t-amber-600" />
+              Đang chờ xác nhận thanh toán tự động…
             </div>
 
             <div className="flex gap-3">
@@ -321,14 +357,15 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setStep('success');
-                }}
-                className="flex-1 rounded-full bg-[#2563EB] py-2.5 text-xs font-bold text-white hover:bg-[#1D4ED8]"
+                onClick={onClose}
+                className="flex-1 rounded-full bg-slate-100 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-200"
               >
-                Tôi đã chuyển khoản
+                Đóng (đơn vẫn được lưu)
               </button>
             </div>
+            <p className="text-[11px] font-medium text-slate-400 leading-relaxed">
+              Bạn có thể đóng cửa sổ và theo dõi trạng thái trong mục <strong>Đơn hàng của tôi</strong>. Đơn sẽ tự cập nhật khi nhận được thanh toán.
+            </p>
           </div>
         )}
 

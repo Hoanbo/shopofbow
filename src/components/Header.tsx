@@ -58,7 +58,9 @@ export default function Header() {
   // Vietnamese first word of name extraction (e.g. Nguyễn Văn Hoàn -> Nguyễn)
   const displayName = session?.user?.user_metadata?.full_name
     ? session.user.user_metadata.full_name.trim().split(' ')[0]
-    : 'Admin';
+    : isAdmin
+      ? 'Admin'
+      : 'Thành viên';
 
   return (
     <header
