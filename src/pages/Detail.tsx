@@ -286,7 +286,11 @@ export default function Detail({ category, base, crumb }: Props) {
               Xem tất cả &gt;
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 sm:gap-5">
+          <div className={
+            category === 'ai-tool' || category === 'premium-app'
+              ? 'grid grid-cols-2 gap-4 md:grid-cols-4 sm:gap-5'
+              : 'grid grid-cols-1 gap-3.5 sm:gap-4 md:grid-cols-2 lg:grid-cols-4 lg:gap-5'
+          }>
             {relatedItems.map((r) => (
               category === 'ai-tool' ? (
                 <AIToolCard key={r.id} item={r} />

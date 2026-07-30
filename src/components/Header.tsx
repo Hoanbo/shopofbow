@@ -85,16 +85,16 @@ export default function Header() {
           /* STANDARD HEADER LAYOUT */
           <>
             {/* LOGO */}
-            <Link to="/" className="flex shrink-0 items-center gap-2.5">
+            <Link to="/" className="flex shrink-0 items-center gap-2">
               <img
                 src={newLogo}
                 alt="BOW Logo"
-                className="h-[44px] w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-[0_1.5px_2px_rgba(15,23,42,0.12)] drop-shadow-[0_1px_4px_rgba(0,163,255,0.2)] dark:drop-shadow-[0_0_8px_rgba(53,168,255,0.2)] transition-transform duration-200 hover:scale-105"
+                className="h-[38px] sm:h-[44px] w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-[0_1.5px_2px_rgba(15,23,42,0.12)] drop-shadow-[0_1px_4px_rgba(0,163,255,0.2)] dark:drop-shadow-[0_0_8px_rgba(53,168,255,0.2)] transition-transform duration-200 hover:scale-105"
                 style={{ imageRendering: '-webkit-optimize-contrast' }}
               />
               <div className="flex flex-col leading-none">
-                <span className="text-2xl sm:text-3xl font-black tracking-tight text-[#00A3FF]">BOW</span>
-                <span className="text-[8px] font-black uppercase tracking-widest text-[#FFB703] mt-0.5">
+                <span className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-[#00A3FF]">BOW</span>
+                <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-[#FFB703] mt-0.5">
                   Let's Connect
                 </span>
               </div>
@@ -137,7 +137,7 @@ export default function Header() {
             </div>
 
             {/* RIGHT SIDE ACTIONS */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
               {/* Mobile Search Trigger */}
               <div className="md:hidden">
                 <button
@@ -166,8 +166,8 @@ export default function Header() {
                 )}
               </button>
 
-              {/* Notification Bell — no native alert */}
-              <div className="relative">
+              {/* Notification Bell — hidden on mobile, only visible sm+ */}
+              <div className="relative hidden sm:block">
                 <button
                   onClick={() => {}}
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-700/80 bg-sky-50/20 dark:bg-slate-800/60 text-slate-400 hover:text-[#00A3FF] dark:hover:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
@@ -317,7 +317,7 @@ export default function Header() {
               ) : (
                 <Link
                   to="/login"
-                  className="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-4 sm:px-6 text-[11px] sm:text-xs font-black uppercase tracking-wide text-white shadow-[0_4px_12px_rgba(37,99,235,0.18)] hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-102 hover:shadow-[0_6px_16px_rgba(37,99,235,0.28)] transition-all duration-300"
+                  className="shrink-0 inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-3.5 sm:px-6 text-[11px] sm:text-xs font-black uppercase tracking-wide text-white shadow-[0_4px_12px_rgba(37,99,235,0.18)] hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-102 hover:shadow-[0_6px_16px_rgba(37,99,235,0.28)] transition-all duration-300"
                 >
                   Đăng nhập
                 </Link>
