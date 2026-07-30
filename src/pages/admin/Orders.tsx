@@ -52,7 +52,7 @@ export default function AdminOrders() {
     try {
       const { data, error } = await (supabase
         .from('orders')
-        .select('*, profiles(email, full_name)') as any)
+        .select('*, profiles!orders_user_profile_fk(email, full_name)') as any)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

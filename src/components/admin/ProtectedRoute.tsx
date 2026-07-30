@@ -1,24 +1,22 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-/** Guards /admin routes — redirects to homepage when not authenticated. */
+/**
+ * Guards /admin routes. AuthProvider đã chặn render cho tới khi auth load xong,
+ * nên tại đây session/isAdmin luôn ở trạng thái cuối cùng — quyết định điều
+ * hướng là chính xác, không có cửa sổ race.
+ */
 export default function ProtectedRoute() {
-  const { session, loading, isAdmin } = useAuth();
+  const { session, isAdmin } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-sky-soft">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-100 border-t-brand-500" />
-      </div>
-    );
-  }
-
+  // Chưa đăng nhập → về trang đăng nhập admin.
   if (!session) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
 
+  // Đã đăng nhập nhưng không phải admin → về trang chủ.
+  // (Không dùng alert() trong render — đó là side-effect gây lỗi.)
   if (!isAdmin) {
-    alert('Tài khoản của bạn không có quyền truy cập trang quản trị Admin.');
     return <Navigate to="/" replace />;
   }
 

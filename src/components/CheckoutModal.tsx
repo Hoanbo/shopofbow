@@ -3,7 +3,6 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { CloseIcon, CheckIcon } from './icons';
 import type { CatalogItem } from '../data/types';
-import { notifyTelegramNewOrder } from '../services/telegram';
 
 interface Plan {
   label: string;
@@ -108,20 +107,8 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
       if (data === 'success') {
         await refreshBalance();
 
-        // Thông báo admin trong DB do trigger `notify_admin_new_order` tạo (server-side).
-        // Ở đây chỉ gửi Telegram (chạy qua Netlify server-side, không dính RLS).
-        notifyTelegramNewOrder({
-          payment_code: paymentCode,
-          customer_name: session.user.user_metadata?.full_name || 'Thành viên',
-          customer_email: session.user.email || '',
-          product_name: item.name,
-          plan_label: plan.label,
-          price: plan.price,
-          payment_method: 'wallet',
-          notes: notes.trim() || undefined,
-          created_at: new Date().toISOString(),
-        });
-
+        // Thông báo admin (chuông + Telegram) do DB trigger `tg_notify_order`
+        // tự tạo server-side từ dữ liệu đơn — client KHÔNG tự gửi để tránh giả mạo.
         setStep('success');
       } else if (data === 'insufficient_balance') {
         throw new Error('Số dư ví không đủ. Vui lòng nạp thêm.');
@@ -139,9 +126,6 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
     setError(null);
     setLoading(true);
     try {
-      const customerName = session.user.user_metadata?.full_name || 'Thành viên';
-      const customerEmail = session.user.email || '';
-
       // Insert order with status 'pending_payment' và lấy về id để theo dõi realtime
       const { data: inserted, error: insErr } = await (supabase.from('orders') as any)
         .insert({
@@ -159,20 +143,8 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
       if (insErr) throw insErr;
       setOrderId(inserted?.id ?? null);
 
-      // Thông báo admin do trigger DB (notify_admin_new_order) tự tạo — an toàn RLS.
-      // Telegram vẫn gửi từ client qua Netlify function (server-side, không dính RLS).
-      notifyTelegramNewOrder({
-        payment_code: paymentCode,
-        customer_name: customerName,
-        customer_email: customerEmail,
-        product_name: item.name,
-        plan_label: plan.label,
-        price: plan.price,
-        payment_method: 'vietqr',
-        notes: notes.trim() || undefined,
-        created_at: new Date().toISOString(),
-      });
-
+      // Thông báo admin (chuông + Telegram) do DB trigger `tg_notify_order`
+      // tự tạo server-side từ dữ liệu đơn — client KHÔNG tự gửi để tránh giả mạo.
       setStep('payment');
     } catch (err: any) {
       setError(err?.message || err?.details || 'Lỗi tạo đơn hàng thanh toán.');

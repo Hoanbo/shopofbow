@@ -2,11 +2,12 @@ import { useState, type FormEvent, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { CheckIcon } from '../components/icons';
+import { mapAuthError } from '../lib/authErrors';
 
 type Mode = 'signin' | 'signup' | 'otp';
 
 export default function Auth() {
-  const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading } = useAuth();
+  const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading, isAdmin } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,12 +19,15 @@ export default function Auth() {
   const nav = useNavigate();
   const loc = useLocation() as { state?: { from?: string } };
 
-  // If user is already logged in, redirect them to home (or the page they came from)
+  // Nguồn redirect DUY NHẤT: chỉ chạy khi auth đã load xong VÀ đã có session.
+  // Ưu tiên trang người dùng định vào (loc.state.from); nếu không có thì
+  // điều hướng theo vai trò (admin -> /admin, user -> /dashboard).
+  // Đặt tất cả logic ở một chỗ để tránh nhiều lệnh nav() tranh nhau.
   useEffect(() => {
-    if (!loading && session) {
-      nav(loc.state?.from ?? '/', { replace: true });
-    }
-  }, [session, loading, nav, loc.state?.from]);
+    if (loading || !session) return;
+    const dest = loc.state?.from ?? (isAdmin ? '/admin' : '/dashboard');
+    nav(dest, { replace: true });
+  }, [session, loading, isAdmin, nav, loc.state?.from]);
 
   const handleSignIn = async (e: FormEvent) => {
     e.preventDefault();
@@ -31,14 +35,10 @@ export default function Auth() {
     setBusy(true);
     try {
       await signIn(email, password);
-      const adminEmails = ['hoankb4@gmail.com', 'admin@shopofbow.com'];
-      if (adminEmails.includes(email.trim().toLowerCase())) {
-        nav('/admin', { replace: true });
-      } else {
-        nav('/dashboard', { replace: true });
-      }
+      // Không nav() ở đây — để useEffect redirect duy nhất xử lý sau khi
+      // session cập nhật và isAdmin được suy ra đồng bộ. Tránh 2 lệnh nav tranh nhau.
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Đăng nhập thất bại. Vui lòng kiểm tra lại.');
+      setError(mapAuthError(err, 'signin'));
     } finally {
       setBusy(false);
     }
@@ -57,7 +57,7 @@ export default function Auth() {
       setSuccess('Mã OTP xác thực đã được gửi về email của bạn.');
       setMode('otp');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Đăng ký thất bại. Vui lòng kiểm tra lại.');
+      setError(mapAuthError(err, 'signup'));
     } finally {
       setBusy(false);
     }
@@ -70,11 +70,10 @@ export default function Auth() {
     try {
       await verifyOtp(email, otpToken);
       setSuccess('Xác thực tài khoản thành công! Bạn đang được đăng nhập.');
-      setTimeout(() => {
-        nav(loc.state?.from ?? '/', { replace: true });
-      }, 1500);
+      // Không setTimeout — verifyOtp đã tạo session, useEffect redirect duy nhất
+      // sẽ tự điều hướng khi session cập nhật.
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Mã OTP không đúng hoặc đã hết hạn.');
+      setError(mapAuthError(err, 'otp'));
     } finally {
       setBusy(false);
     }
@@ -85,7 +84,7 @@ export default function Auth() {
     try {
       await signInWithGoogle();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lỗi kết nối đăng nhập Google.');
+      setError(mapAuthError(err, 'google'));
     }
   };
 
@@ -258,7 +257,7 @@ export default function Auth() {
                     await signUp(email, password);
                     setSuccess('Đã gửi lại mã OTP mới.');
                   } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Gửi lại OTP thất bại.');
+                    setError(mapAuthError(err, 'signup'));
                   }
                 }}
                 className="hover:text-[#2563EB] transition"

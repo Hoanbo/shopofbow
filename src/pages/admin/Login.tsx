@@ -1,22 +1,22 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useLocation, Navigate } from 'react-router-dom';
+import { useAuth, ADMIN_EMAILS } from '../../context/AuthContext';
 import { Banner } from '../../components/admin/ui';
 
 export default function Login() {
   const { session, signIn, loading, isAdmin } = useAuth();
-  const nav = useNavigate();
   const loc = useLocation() as { state?: { from?: string } };
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // NGUỒN ĐIỀU HƯỚNG DUY NHẤT — chạy trong render, dựa trên state auth đã ổn định.
+  // isAdmin là giá trị derived đồng bộ từ session (xem AuthContext) nên khi
+  // session != null thì isAdmin đã chính xác trong CÙNG render → không có race.
+  // Không nav() thủ công trong submit để tránh 2 nguồn điều hướng tranh nhau.
   if (!loading && session) {
-    if (!isAdmin) {
-      return <Navigate to="/" replace />;
-    }
-    return <Navigate to={loc.state?.from ?? '/admin'} replace />;
+    return <Navigate to={isAdmin ? (loc.state?.from ?? '/admin') : '/'} replace />;
   }
 
   const submit = async (e: FormEvent) => {
@@ -24,14 +24,16 @@ export default function Login() {
     setError(null);
     setBusy(true);
     try {
-      const adminEmails = ['hoankb4@gmail.com', 'admin@shopofbow.com'];
-      if (!adminEmails.includes(email.trim().toLowerCase())) {
+      // Chặn sớm ở client cho UX (hiện lỗi rõ ràng). Bảo vệ thật nằm ở
+      // ProtectedRoute + RLS, không phụ thuộc kiểm tra phía client này.
+      if (!ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
         setError('Tài khoản của bạn không có quyền truy cập trang quản trị Admin.');
         setBusy(false);
         return;
       }
       await signIn(email.trim(), password);
-      nav(loc.state?.from ?? '/admin', { replace: true });
+      // Không nav() ở đây — sau khi session cập nhật, guard <Navigate> ở trên
+      // sẽ tự điều hướng tới /admin. Một nguồn điều hướng duy nhất.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đăng nhập thất bại. Kiểm tra email & mật khẩu Supabase của bạn.');
     } finally {

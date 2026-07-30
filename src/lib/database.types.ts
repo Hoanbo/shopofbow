@@ -3,6 +3,14 @@
 // Views, Functions, Enums, CompositeTypes all present).
 export type ProductType = 'ai-tool' | 'premium-app' | 'product';
 
+export type OrderStatus =
+  | 'pending_payment'
+  | 'pending_delivery'
+  | 'processing'
+  | 'completed'
+  | 'cancelled'
+  | 'refunded';
+
 export interface Database {
   public: {
     Tables: {
@@ -64,7 +72,14 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['product_plans']['Row']>;
         Update: Partial<Database['public']['Tables']['product_plans']['Row']>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'product_plans_product_id_fkey';
+            columns: ['product_id'];
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       product_features: {
         Row: {
@@ -75,7 +90,14 @@ export interface Database {
         };
         Insert: Partial<Database['public']['Tables']['product_features']['Row']>;
         Update: Partial<Database['public']['Tables']['product_features']['Row']>;
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'product_features_product_id_fkey';
+            columns: ['product_id'];
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       faqs: {
         Row: {
@@ -102,9 +124,98 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['contact_settings']['Row']>;
         Relationships: [];
       };
+      profiles: {
+        Row: {
+          id: string;
+          full_name: string | null;
+          avatar_url: string | null;
+          phone: string | null;
+          email: string | null;
+          balance: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['profiles']['Row']> & { id: string };
+        Update: Partial<Database['public']['Tables']['profiles']['Row']>;
+        Relationships: [];
+      };
+      orders: {
+        Row: {
+          id: string;
+          user_id: string;
+          product_name: string;
+          plan_label: string;
+          price: number;
+          status: OrderStatus;
+          payment_code: string;
+          notes: string | null;
+          account_details: string | null;
+          tg_message_id: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['orders']['Row']> & {
+          user_id: string;
+          product_name: string;
+          plan_label: string;
+          payment_code: string;
+        };
+        Update: Partial<Database['public']['Tables']['orders']['Row']>;
+        Relationships: [
+          {
+            foreignKeyName: 'orders_user_profile_fk';
+            columns: ['user_id'];
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      notifications: {
+        Row: {
+          id: string;
+          type: string;
+          title: string;
+          message: string;
+          order_id: string | null;
+          user_id: string | null;
+          is_admin: boolean;
+          is_read: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database['public']['Tables']['notifications']['Row']> & {
+          type: string;
+          title: string;
+          message: string;
+        };
+        Update: Partial<Database['public']['Tables']['notifications']['Row']>;
+        Relationships: [
+          {
+            foreignKeyName: 'notifications_order_id_fkey';
+            columns: ['order_id'];
+            referencedRelation: 'orders';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      buy_with_wallet: {
+        Args: {
+          p_user_id: string;
+          p_product_name: string;
+          p_plan_label: string;
+          p_price: number;
+          p_payment_code: string;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      refund_order: {
+        Args: { p_order_id: string };
+        Returns: string;
+      };
+    };
     Enums: {
       product_type: ProductType;
     };

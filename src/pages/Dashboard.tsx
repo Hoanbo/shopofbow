@@ -208,7 +208,7 @@ function OrderCard({
 }
 
 export default function Dashboard() {
-  const { session, balance, refreshBalance } = useAuth();
+  const { session, balance, refreshBalance, loading: authLoading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const nav = useNavigate();
 
@@ -230,12 +230,13 @@ export default function Dashboard() {
   const [fullName, setFullName] = useState(session?.user?.user_metadata?.full_name || '');
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
-  // Redirect if not logged in
+  // Chỉ redirect khi auth đã load xong VÀ thực sự chưa đăng nhập.
+  // Không redirect trong lúc auth đang loading -> tránh F5 bị đá ra /login.
   useEffect(() => {
-    if (!session) {
+    if (!authLoading && !session) {
       nav('/login', { replace: true });
     }
-  }, [session, nav]);
+  }, [authLoading, session, nav]);
 
   // Fetch Orders
   const fetchOrders = useCallback(async () => {

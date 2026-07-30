@@ -2,6 +2,32 @@ import { supabase } from '../lib/supabase';
 import type { CatalogItem, PlanTier } from './types';
 import type { Database, ProductType } from '../lib/database.types';
 
+// ─── Module-level promise cache ──────────────────────────────────────────────
+// Giải quyết duplicate requests từ React StrictMode (dev) và nhiều consumer
+// cùng fetch dữ liệu giống nhau (production). Mỗi cache entry lưu promise đang
+// pending + thời điểm hết hạn. Caller thứ 2 nhận cùng promise → chỉ 1 request
+// thực sự được gửi đến Supabase.
+interface CacheEntry<T> {
+  promise: Promise<T>;
+  expiresAt: number;
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const _cache = new Map<string, CacheEntry<any>>();
+
+function withCache<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const entry = _cache.get(key) as CacheEntry<T> | undefined;
+  if (entry && now < entry.expiresAt) return entry.promise;
+  const promise = fetcher().catch((err) => {
+    // Xóa cache khi lỗi để lần sau retry được
+    _cache.delete(key);
+    throw err;
+  });
+  _cache.set(key, { promise, expiresAt: now + ttlMs });
+  return promise;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 type ProductRow = Database['public']['Tables']['products']['Row'];
 type PlanRow = Database['public']['Tables']['product_plans']['Row'];
 type FeatureRow = Database['public']['Tables']['product_features']['Row'];
@@ -319,21 +345,23 @@ const MOCK_ITEMS: CatalogItem[] = [
 ];
 
 /** List products of a category type (cards don't need plans/features). */
-export async function fetchByCategory(type: ProductType): Promise<CatalogItem[]> {
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(PRODUCT_COLS)
-      .eq('type', type)
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
-    if (!error && data && data.length > 0) {
-      return data.map((row) => mapProduct(row as ProductRow));
+export function fetchByCategory(type: ProductType): Promise<CatalogItem[]> {
+  return withCache(`cat:${type}`, 60_000, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select(PRODUCT_COLS)
+        .eq('type', type)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+      if (!error && data && data.length > 0) {
+        return data.map((row) => mapProduct(row as ProductRow));
+      }
+    } catch (e) {
+      console.warn('Supabase fetch failed, falling back to mock catalog:', e);
     }
-  } catch (e) {
-    console.warn('Supabase fetch failed, falling back to mock catalog:', e);
-  }
-  return MOCK_ITEMS.filter((item) => item.category === type);
+    return MOCK_ITEMS.filter((item) => item.category === type);
+  });
 }
 
 /** Fetch all active products across all categories. */
@@ -354,21 +382,23 @@ export async function fetchAllProducts(): Promise<CatalogItem[]> {
 }
 
 /** Featured products across all categories (is_featured = true). */
-export async function fetchFeatured(): Promise<CatalogItem[]> {
-  try {
-    const { data, error } = await supabase
-      .from('products')
-      .select(PRODUCT_COLS)
-      .eq('is_active', true)
-      .eq('is_featured', true)
-      .order('sort_order', { ascending: true });
-    if (!error && data && data.length > 0) {
-      return data.map((row) => mapProduct(row as ProductRow));
+export function fetchFeatured(): Promise<CatalogItem[]> {
+  return withCache('featured', 60_000, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select(PRODUCT_COLS)
+        .eq('is_active', true)
+        .eq('is_featured', true)
+        .order('sort_order', { ascending: true });
+      if (!error && data && data.length > 0) {
+        return data.map((row) => mapProduct(row as ProductRow));
+      }
+    } catch (e) {
+      console.warn('Supabase fetch failed, falling back to mock catalog:', e);
     }
-  } catch (e) {
-    console.warn('Supabase fetch failed, falling back to mock catalog:', e);
-  }
-  return MOCK_ITEMS.filter((item) => item.featured);
+    return MOCK_ITEMS.filter((item) => item.featured);
+  });
 }
 
 /** Single product with plans + features, by slug. */
@@ -430,19 +460,21 @@ const CONTACT_FALLBACK: ContactSettings = {
 };
 
 /** Contact settings (single row). Falls back to safe defaults. */
-export async function fetchContactSettings(): Promise<ContactSettings> {
-  const { data, error } = await supabase
-    .from('contact_settings')
-    .select('facebook_url, zalo_url, support_phone, support_email')
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  const row = data as ContactRow | null;
-  if (!row) return CONTACT_FALLBACK;
-  return {
-    facebookUrl: row.facebook_url ?? '#',
-    zaloUrl: row.zalo_url ?? '#',
-    supportPhone: row.support_phone ?? '',
-    supportEmail: row.support_email ?? '',
-  };
+export function fetchContactSettings(): Promise<ContactSettings> {
+  return withCache('contact_settings', 300_000, async () => {
+    const { data, error } = await supabase
+      .from('contact_settings')
+      .select('facebook_url, zalo_url, support_phone, support_email')
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    const row = data as ContactRow | null;
+    if (!row) return CONTACT_FALLBACK;
+    return {
+      facebookUrl: row.facebook_url ?? '#',
+      zaloUrl: row.zalo_url ?? '#',
+      supportPhone: row.support_phone ?? '',
+      supportEmail: row.support_email ?? '',
+    };
+  });
 }

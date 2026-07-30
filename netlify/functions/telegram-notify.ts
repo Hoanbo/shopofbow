@@ -1,38 +1,59 @@
 // netlify/functions/telegram-notify.ts
-// Serverless function — KHÔNG expose token ra Frontend
-// Được gọi từ Frontend qua: POST /.netlify/functions/telegram-notify
+// ============================================================
+// Gửi thông báo Telegram cho admin về đơn hàng.
 //
-// Hướng A: đơn QR (pending_payment) được gửi kèm 2 nút inline
-//   [ ✅ Xác nhận đã nhận tiền ] [ ❌ Hủy đơn ]
-// message_id trả về được lưu vào orders.tg_message_id (service role) để
-// sau này webhook SePay / callback có thể SỬA lại tin nhắn (gỡ nút).
+// BẢO MẬT (đã vá lỗ hổng public/no-auth):
+//   • BẮT BUỘC header  Authorization: Apikey <INTERNAL_API_KEY>
+//     (giống cơ chế của sepay-webhook). Không có / sai secret => 401.
+//   • Chỉ được gọi SERVER→SERVER từ DB trigger (pg_net), KHÔNG phải client.
+//     Vì vậy secret không bao giờ vào bundle JS.
+//   • Client KHÔNG còn được cung cấp nội dung. Function chỉ nhận:
+//         { order_id: uuid, event: 'new_order' | 'order_cancelled' }
+//     rồi TỰ ĐỌC đơn từ DB bằng service_role => customer_name / product_name
+//     / price... luôn là dữ liệu tin cậy, client không thể giả mạo.
+//   • Không còn nhánh gửi "message" tự do.
+//
+// Env (Netlify): INTERNAL_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+//                SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// ============================================================
 
 import type { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID!;
-
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
+type OrderEvent = 'new_order' | 'order_cancelled';
+
 export const handler: Handler = async (event) => {
-  // Only allow POST
+  // 1. Chỉ chấp nhận POST
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  // Validate env vars
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    console.error('[telegram-notify] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID env vars');
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Telegram not configured' }),
-    };
+  // 2. Xác thực secret (thống nhất với sepay-webhook: "Apikey <key>")
+  const authHeader = event.headers['authorization'] || event.headers['Authorization'] || '';
+  if (!INTERNAL_API_KEY || authHeader !== `Apikey ${INTERNAL_API_KEY}`) {
+    console.error('[telegram-notify] Unauthorized — thiếu hoặc sai INTERNAL_API_KEY');
+    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
+  // 3. Kiểm tra cấu hình bắt buộc
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.error('[telegram-notify] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID');
+    return { statusCode: 500, body: JSON.stringify({ error: 'Telegram not configured' }) };
+  }
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[telegram-notify] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+    return { statusCode: 500, body: JSON.stringify({ error: 'Supabase not configured' }) };
+  }
+
+  // 4. Parse & validate payload — chỉ nhận order_id + event
   let payload: any;
   try {
     payload = JSON.parse(event.body || '{}');
@@ -40,60 +61,96 @@ export const handler: Handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
   }
 
-  const { type, order } = payload;
+  const orderId: unknown = payload.order_id;
+  const evt: unknown = payload.event;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (typeof orderId !== 'string' || !UUID_RE.test(orderId)) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Missing or invalid order_id' }) };
+  }
+  if (evt !== 'new_order' && evt !== 'order_cancelled') {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Missing or invalid event' }) };
+  }
+  const orderEvent = evt as OrderEvent;
+
+  // 5. Đọc đơn hàng TỪ DB (nguồn dữ liệu tin cậy) — client không cấp nội dung
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: order, error: findErr } = await supabase
+    .from('orders')
+    .select(
+      'id, user_id, product_name, plan_label, price, status, payment_code, notes, created_at, tg_message_id, ' +
+        'profiles:profiles!orders_user_profile_fk(full_name, email)',
+    )
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (findErr) {
+    console.error('[telegram-notify] Lỗi truy vấn đơn:', findErr);
+    return { statusCode: 500, body: JSON.stringify({ error: 'Order lookup failed' }) };
+  }
+  if (!order) {
+    return { statusCode: 404, body: JSON.stringify({ error: 'Order not found' }) };
+  }
+
+  const profile: any = Array.isArray((order as any).profiles)
+    ? (order as any).profiles[0]
+    : (order as any).profiles;
+  const customerName = profile?.full_name || 'Thành viên';
+  const customerEmail = profile?.email || 'N/A';
+
+  // 6. Dựng nội dung từ dữ liệu DB
+  const vnd = (v: number) => (Number(v) || 0).toLocaleString('vi-VN') + 'đ';
+  const dateStr = new Date((order as any).created_at || Date.now()).toLocaleString('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   let text = '';
-  // Nút inline (chỉ dùng cho đơn QR chờ thanh toán)
   let replyMarkup: any = undefined;
 
-  if (type === 'new_order' && order) {
-    const vnd = (v: number) => v.toLocaleString('vi-VN') + 'đ';
-    const date = new Date(order.created_at || Date.now()).toLocaleString('vi-VN', {
-      timeZone: 'Asia/Ho_Chi_Minh',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    const isQrPending = order.payment_method === 'vietqr' && order.status === 'pending_payment';
-
+  if (orderEvent === 'new_order') {
+    const isQrPending = (order as any).status === 'pending_payment';
     text = `🔔 <b>ĐƠN HÀNG MỚI</b>
 
-📦 <b>Mã đơn:</b> <code>#${order.payment_code || 'N/A'}</code>
-👤 <b>Khách hàng:</b> ${escapeHtml(order.customer_name || 'Thành viên')}
-📧 <b>Email:</b> ${escapeHtml(order.customer_email || 'N/A')}
-🛍 <b>Sản phẩm:</b> ${escapeHtml(order.product_name || 'N/A')}
-📋 <b>Gói:</b> ${escapeHtml(order.plan_label || 'N/A')}
-💰 <b>Giá trị:</b> ${vnd(Number(order.price) || 0)}
-💳 <b>Thanh toán:</b> ${order.payment_method === 'wallet' ? '✅ Ví số dư (đã thanh toán)' : '⏳ Chuyển khoản ngân hàng (chờ xác nhận)'}
-📝 <b>Ghi chú:</b> ${order.notes ? escapeHtml(order.notes) : '—'}
-🕐 <b>Thời gian:</b> ${date}
+📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>
+👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}
+📧 <b>Email:</b> ${escapeHtml(customerEmail)}
+🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}
+📋 <b>Gói:</b> ${escapeHtml((order as any).plan_label || 'N/A')}
+💰 <b>Giá trị:</b> ${vnd((order as any).price)}
+💳 <b>Thanh toán:</b> ${isQrPending ? '⏳ Chuyển khoản ngân hàng (chờ xác nhận)' : '✅ Đã thanh toán'}
+📝 <b>Ghi chú:</b> ${(order as any).notes ? escapeHtml((order as any).notes) : '—'}
+🕐 <b>Thời gian:</b> ${dateStr}
 
 ${isQrPending ? '👉 SePay sẽ tự xác nhận khi tiền vào. Nếu cần, bấm nút bên dưới để duyệt thủ công.' : '👉 Vào <b>Admin Dashboard</b> để xử lý đơn hàng.'}`;
 
-    // Gắn nút inline khi là đơn QR chờ thanh toán và biết order_id
-    if (isQrPending && order.order_id) {
+    if (isQrPending) {
       replyMarkup = {
         inline_keyboard: [
           [
-            { text: '✅ Xác nhận đã nhận tiền', callback_data: `confirm:${order.order_id}` },
-            { text: '❌ Hủy đơn', callback_data: `cancel:${order.order_id}` },
+            { text: '✅ Xác nhận đã nhận tiền', callback_data: `confirm:${(order as any).id}` },
+            { text: '❌ Hủy đơn', callback_data: `cancel:${(order as any).id}` },
           ],
         ],
       };
     }
-  } else if (type === 'order_cancelled' && order) {
+  } else {
+    // order_cancelled
     text = `❌ <b>ĐƠN HÀNG BỊ HỦY</b>
 
-📦 <b>Mã đơn:</b> <code>#${order.payment_code || 'N/A'}</code>
-🛍 <b>Sản phẩm:</b> ${escapeHtml(order.product_name || 'N/A')}
-👤 <b>Khách hàng:</b> ${escapeHtml(order.customer_name || 'Thành viên')}`;
-  } else {
-    text = `🔔 <b>Thông báo từ BOW</b>\n\n${escapeHtml(payload.message || 'Không có nội dung')}`;
+📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>
+🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}
+👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}`;
   }
 
+  // 7. Gửi Telegram
   try {
     const res = await fetch(TELEGRAM_API, {
       method: 'POST',
@@ -107,49 +164,29 @@ ${isQrPending ? '👉 SePay sẽ tự xác nhận khi tiền vào. Nếu cần, 
       }),
     });
 
-    const data = await res.json() as any;
-
+    const data = (await res.json()) as any;
     if (!data.ok) {
       console.error('[telegram-notify] Telegram API error:', data);
-      return {
-        statusCode: 502,
-        body: JSON.stringify({ error: 'Telegram API error', details: data }),
-      };
+      return { statusCode: 502, body: JSON.stringify({ error: 'Telegram API error' }) };
     }
 
-    // Lưu message_id vào đơn để webhook/callback sửa lại tin nhắn sau này
+    // Lưu message_id để webhook/callback gỡ nút sau này (chỉ đơn QR chờ thanh toán)
     const messageId = data.result?.message_id;
-    if (messageId && order?.order_id && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    if (messageId && orderEvent === 'new_order') {
       try {
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        await supabase
-          .from('orders')
-          .update({ tg_message_id: messageId })
-          .eq('id', order.order_id);
+        await supabase.from('orders').update({ tg_message_id: messageId }).eq('id', (order as any).id);
       } catch (err) {
-        // Non-blocking: không có message_id thì chỉ mất khả năng gỡ nút tự động
         console.warn('[telegram-notify] Không lưu được tg_message_id:', err);
       }
     }
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, message_id: messageId ?? null }),
-    };
+    return { statusCode: 200, body: JSON.stringify({ success: true, message_id: messageId ?? null }) };
   } catch (err: any) {
     console.error('[telegram-notify] Fetch error:', err);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Internal error', message: err.message }),
-    };
+    return { statusCode: 500, body: JSON.stringify({ error: 'Internal error' }) };
   }
 };
 
 function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
