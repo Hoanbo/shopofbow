@@ -8,6 +8,9 @@ dist
 dist-ssr
 *.local
 
+# Claude AI settings (có thể chứa secrets trong allowed commands)
+.claude/
+
 # env — never commit secrets
 .env
 .env.local
