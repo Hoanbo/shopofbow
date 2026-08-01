@@ -59,7 +59,7 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
    - `0003_admin.sql` — quyền ghi cho user đã đăng nhập + bucket Storage `assets`
 3. **Tạo tài khoản admin**: **Authentication → Users → Add user** (nhập email + mật khẩu, tick *Auto Confirm*).
 4. **Tắt đăng ký công khai** để chỉ admin được tạo có thể đăng nhập: **Authentication → Providers → Email** → tắt *Enable sign-ups* (khuyến nghị).
-5. Đăng nhập admin tại `/admin/login`.
+5. Đăng nhập bằng tài khoản admin tại `/login`, sau đó truy cập `/admin`.
 
 ### Upload ảnh
 Migration `0003_admin.sql` đã tạo bucket công khai `assets`. Admin có thể upload logo/banner trực tiếp trong trang chỉnh sửa sản phẩm. Nếu chưa chạy migration này, chức năng upload sẽ báo lỗi (vẫn có thể dán URL ảnh thủ công).

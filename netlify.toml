@@ -4,7 +4,9 @@
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "20"
+  # Node 22+ bắt buộc: @supabase/supabase-js v2.110 dùng native WebSocket
+  # khi khởi tạo Realtime client. Node 20 làm function crash lúc load module.
+  NODE_VERSION = "22"
 
 # SPA fallback — every route serves index.html so React Router
 # handles it client-side (no 404 on refresh / deep links).

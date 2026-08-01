@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 /**
@@ -8,10 +8,11 @@ import { useAuth } from '../../context/AuthContext';
  */
 export default function ProtectedRoute() {
   const { session, isAdmin } = useAuth();
+  const loc = useLocation();
 
-  // Chưa đăng nhập → về trang đăng nhập admin.
+  // Chưa đăng nhập → về trang đăng nhập chung, nhớ đích để quay lại sau khi login.
   if (!session) {
-    return <Navigate to="/admin/login" replace />;
+    return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
   }
 
   // Đã đăng nhập nhưng không phải admin → về trang chủ.

@@ -13,7 +13,6 @@ import { AuthProvider } from './context/AuthContext';
 // Admin is code-split so the public site never downloads the dashboard bundle.
 const ProtectedRoute = lazy(() => import('./components/admin/ProtectedRoute'));
 const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
-const Login = lazy(() => import('./pages/admin/Login'));
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
 const AdminProducts = lazy(() => import('./pages/admin/Products'));
 const ProductEditor = lazy(() => import('./pages/admin/ProductEditor'));
@@ -58,7 +57,8 @@ const router = createBrowserRouter([
     ],
   },
   // ─────────────── Admin ───────────────
-  { path: '/admin/login', element: lazyAdmin(<Login />) },
+  // Không có trang login riêng cho admin — dùng chung /login với người dùng.
+  // ProtectedRoute sẽ chuyển hướng về /login khi chưa đăng nhập.
   {
     element: lazyAdmin(<ProtectedRoute />),
     children: [
