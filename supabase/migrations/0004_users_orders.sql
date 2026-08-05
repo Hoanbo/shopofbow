@@ -16,6 +16,9 @@ create table if not exists profiles (
   updated_at  timestamptz not null default now()
 );
 
+-- Đảm bảo cột updated_at tồn tại trên bảng profiles (tránh schema drift)
+alter table public.profiles add column if not exists updated_at timestamptz not null default now();
+
 drop trigger if exists profiles_set_updated_at on profiles;
 create trigger profiles_set_updated_at
   before update on profiles
@@ -90,6 +93,9 @@ create table if not exists orders (
   updated_at      timestamptz not null default now()
 );
 
+-- Đảm bảo cột updated_at tồn tại trên bảng orders (tránh schema drift)
+alter table public.orders add column if not exists updated_at timestamptz not null default now();
+
 create index if not exists orders_user_idx on orders(user_id);
 create index if not exists orders_status_idx on orders(status);
 create index if not exists orders_created_at_idx on orders(created_at desc);
@@ -122,34 +128,86 @@ drop policy if exists "admin all orders" on orders;
 create policy "admin all orders" on orders
   for all to service_role using (true);
 
--- ============================================================
--- 4. Bật Realtime cho bảng orders (để client theo dõi live)
--- ============================================================
--- Lưu ý: Bạn cũng cần vào Supabase Dashboard > Database > Replication
--- và bật Realtime cho bảng orders
-alter publication supabase_realtime add table orders;
+-- Bật Realtime cho bảng orders (an toàn khi chạy lại)
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'orders'
+  ) then
+    alter publication supabase_realtime add table orders;
+  end if;
+end$$;
 
 -- ============================================================
--- 5. Hàm RPC buy_with_wallet — thanh toán bằng số dư ví
--- (nếu chưa có trong database — cần service_role key để gọi từ Backend)
+-- 5. Hàm RPC buy_with_wallet — thanh toán bằng số dư ví (Bảo mật cao)
 -- ============================================================
 create or replace function buy_with_wallet(
-  p_user_id     uuid,
+  p_user_id      uuid,
   p_product_name text,
-  p_plan_label  text,
-  p_price       numeric,
+  p_plan_label   text,
+  p_price        numeric,
   p_payment_code text,
-  p_notes       text default null
+  p_notes        text default null,
+  p_product_id   uuid default null,
+  p_plan_id      uuid default null
 )
-returns text language plpgsql security definer as $$
+returns text language plpgsql security definer set search_path = public as $$
 declare
-  v_balance numeric;
+  v_balance    numeric;
+  v_real_price numeric := null;
 begin
-  -- Đọc số dư ví
+  -- 1. Bảo mật: Yêu cầu auth.uid() trùng với p_user_id (chống giả mạo trừ tiền người khác)
+  if auth.uid() is null or p_user_id is distinct from auth.uid() then
+    return 'unauthorized';
+  end if;
+
+  -- 2. Bảo mật: Tra cứu giá thật từ DB (chống client sửa p_price thành 0đ hay 1đ)
+  if p_plan_id is not null then
+    select price into v_real_price
+    from public.product_plans
+    where id = p_plan_id and is_active = true;
+  end if;
+
+  if v_real_price is null and p_plan_label is not null then
+    if p_product_id is not null then
+      select price into v_real_price
+      from public.product_plans
+      where product_id = p_product_id and name = p_plan_label and is_active = true
+      limit 1;
+    elsif p_product_name is not null then
+      select pp.price into v_real_price
+      from public.product_plans pp
+      join public.products p on p.id = pp.product_id
+      where p.name = p_product_name and pp.name = p_plan_label and pp.is_active = true
+      limit 1;
+    end if;
+  end if;
+
+  if v_real_price is null then
+    if p_product_id is not null then
+      select base_price into v_real_price
+      from public.products
+      where id = p_product_id and is_active = true;
+    elsif p_product_name is not null then
+      select base_price into v_real_price
+      from public.products
+      where name = p_product_name and is_active = true;
+    end if;
+  end if;
+
+  -- Ghi đè p_price bằng giá chuẩn từ DB nếu tìm thấy
+  if v_real_price is not null then
+    p_price := v_real_price;
+  end if;
+
+  -- 3. Đọc số dư ví & khóa dòng để tránh race condition
   select balance into v_balance
   from public.profiles
   where id = p_user_id
-  for update; -- khóa dòng để tránh race condition
+  for update;
 
   if v_balance is null then
     return 'no_profile';
@@ -159,13 +217,13 @@ begin
     return 'insufficient_balance';
   end if;
 
-  -- Trừ tiền ví
+  -- 4. Trừ tiền ví
   update public.profiles
   set balance = balance - p_price,
       updated_at = now()
   where id = p_user_id;
 
-  -- Tạo đơn hàng với trạng thái pending_delivery (đã thanh toán, chờ bàn giao)
+  -- 5. Tạo đơn hàng với trạng thái pending_delivery (đã thanh toán ví, chờ bàn giao)
   insert into public.orders (user_id, product_name, plan_label, price, status, payment_code, notes)
   values (p_user_id, p_product_name, p_plan_label, p_price, 'pending_delivery', p_payment_code, p_notes);
 
@@ -173,20 +231,25 @@ begin
 end$$;
 
 -- ============================================================
--- 6. Hàm RPC refund_order — hoàn tiền về ví
+-- 6. Hàm RPC refund_order — hoàn tiền về ví (chỉ Admin)
 -- ============================================================
 create or replace function refund_order(p_order_id uuid)
-returns text language plpgsql security definer as $$
+returns text language plpgsql security definer set search_path = public as $$
 declare
   v_order orders%rowtype;
 begin
+  -- Bảo mật: Chỉ Admin mới được thực hiện hoàn tiền
+  if not is_admin() then
+    return 'unauthorized';
+  end if;
+
   select * into v_order from orders where id = p_order_id;
 
   if not found then
     return 'order_not_found';
   end if;
 
-  if v_order.status not in ('pending_delivery', 'processing', 'completed') then
+  if v_order.status not in ('pending_delivery', 'processing') then
     return 'invalid_status';
   end if;
 
@@ -203,4 +266,89 @@ begin
   where id = p_order_id;
 
   return 'success';
+end$$;
+
+-- ============================================================
+-- 7. Hàm RPC cancel_and_refund_own_order — User hủy đơn & nhận lại tiền vào ví
+-- ============================================================
+create or replace function cancel_and_refund_own_order(p_order_id uuid)
+returns text language plpgsql security definer set search_path = public as $$
+declare
+  v_order orders%rowtype;
+begin
+  -- 1. Yêu cầu người dùng đã đăng nhập
+  if auth.uid() is null then
+    return 'unauthorized';
+  end if;
+
+  -- 2. Đọc đơn hàng của chính user đó & khóa dòng chống race condition
+  select * into v_order
+  from public.orders
+  where id = p_order_id and user_id = auth.uid()
+  for update;
+
+  if not found then
+    return 'order_not_found';
+  end if;
+
+  -- Đơn đã hủy hoặc đã hoàn thành -> không thể hủy
+  if v_order.status in ('cancelled', 'completed', 'refunded') then
+    return 'cannot_cancel';
+  end if;
+
+  -- Đảm bảo các cột updated_at tồn tại
+  alter table public.profiles add column if not exists updated_at timestamptz not null default now();
+  alter table public.orders add column if not exists updated_at timestamptz not null default now();
+
+  -- 3. Đơn chưa thanh toán: Chỉ đổi trạng thái hủy
+  if v_order.status = 'pending_payment' then
+    update public.orders
+    set status = 'cancelled',
+        updated_at = now()
+    where id = p_order_id;
+
+    return 'success';
+  end if;
+
+  -- 4. Đơn đã thanh toán (pending_delivery hoặc processing): Hủy & Hoàn tiền ví tự động
+  if v_order.status in ('pending_delivery', 'processing') then
+    -- Hoàn tiền về ví khách hàng
+    update public.profiles
+    set balance = balance + v_order.price,
+        updated_at = now()
+    where id = auth.uid();
+
+    -- Cập nhật đơn thành đã hủy
+    update public.orders
+    set status = 'cancelled',
+        updated_at = now()
+    where id = p_order_id;
+
+    -- Thông báo User
+    insert into public.notifications (type, title, message, order_id, user_id, is_admin, is_read)
+    values (
+      'system',
+      'Hủy đơn & Hoàn tiền ví',
+      'Bạn đã hủy đơn ' || v_order.payment_code || '. Số tiền ' || to_char(v_order.price, 'FM999,999,999') || 'đ đã được hoàn về ví số dư của bạn.',
+      v_order.id,
+      auth.uid(),
+      false,
+      false
+    );
+
+    -- Thông báo Admin
+    insert into public.notifications (type, title, message, order_id, is_admin, is_read)
+    values (
+      'new_order',
+      'Khách tự hủy đơn & Hoàn tiền ví',
+      'Khách hàng đã hủy đơn ' || v_order.payment_code || ' (' || v_order.product_name || '). Tiền đã hoàn tự động về ví khách hàng.',
+      v_order.id,
+      true,
+      false
+    );
+
+    return 'refunded_success';
+  end if;
+
+  return 'cannot_cancel';
 end$$;

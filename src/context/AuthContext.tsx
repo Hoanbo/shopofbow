@@ -115,11 +115,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password: password,
     });
     if (error) throw error;
+    // Supabase trả về data.user với identities = [] nếu email đã được đăng ký trước đó
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      throw new Error('User already registered');
+    }
   };
 
   const verifyOtp = async (email: string, token: string) => {

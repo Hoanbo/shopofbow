@@ -5,79 +5,201 @@ import { fetchStats } from '../../data/admin';
 import { ArrowRight } from '../../components/icons';
 import { useToast } from '../../components/Toast';
 
-// Chart timeline datasets
-const CHARTS_DATA: Record<string, { labels: string[]; values: number[] }> = {
-  '7d': {
-    labels: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
-    values: [420000, 680000, 510000, 890000, 1250000, 1100000, 1450000],
-  },
-  '30d': {
-    labels: ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4'],
-    values: [4800000, 6200000, 5800000, 8900000],
-  },
-  '12m': {
-    labels: ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'],
-    values: [28000000, 32000000, 30000000, 45000000, 52000000, 48000000, 61000000, 68000000, 72000000, 85000000, 92000000, 112000000],
-  },
-};
+type RangeMode = '7d' | '30d' | '12m';
 
-type LiveStats = {
-  totalProducts: number;
-  totalAiTools: number;
-  totalPremiumApps: number;
-  totalFeatured: number;
-  totalOrders: number;
-  totalUsers: number;
-  totalRevenue: number;
-};
+interface DynamicChart {
+  labels: string[];
+  values: number[];
+}
+
+interface StatChange {
+  text: string;
+  isPos: boolean;
+}
+
+interface ActivityItem {
+  id: string;
+  text: string;
+  tag: string;
+  iconBg: string;
+  time: string;
+}
+
+interface OrderRow {
+  id: string;
+  price: number;
+  status: string;
+  created_at: string;
+  payment_code?: string;
+  product_name?: string;
+}
+
+interface ProfileRow {
+  id: string;
+  created_at: string;
+}
+
+interface ProductRow {
+  id: string;
+  created_at: string;
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const past = new Date(dateStr).getTime();
+  if (isNaN(past)) return 'Vừa xong';
+  const diffSec = Math.floor((Date.now() - past) / 1000);
+  if (diffSec < 60) return 'Vừa xong';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} phút trước`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} giờ trước`;
+  const diffDay = Math.floor(diffHour / 24);
+  return `${diffDay} ngày trước`;
+}
+
+function calcPercentageChange(current: number, previous: number): StatChange {
+  if (previous === 0) {
+    if (current === 0) return { text: '0.0%', isPos: true };
+    return { text: '+100%', isPos: true };
+  }
+  const pct = ((current - previous) / previous) * 100;
+  const isPos = pct >= 0;
+  return { text: `${isPos ? '+' : ''}${pct.toFixed(1)}%`, isPos };
+}
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<LiveStats>({
+  const [stats, setStats] = useState({
     totalProducts: 0,
-    totalAiTools: 0,
-    totalPremiumApps: 0,
-    totalFeatured: 0,
     totalOrders: 0,
     totalUsers: 0,
     totalRevenue: 0,
   });
+  const [changes, setChanges] = useState<{
+    revenue: StatChange;
+    orders: StatChange;
+    products: StatChange;
+    users: StatChange;
+  }>({
+    revenue: { text: '0.0%', isPos: true },
+    orders: { text: '0.0%', isPos: true },
+    products: { text: '0.0%', isPos: true },
+    users: { text: '0.0%', isPos: true },
+  });
+
   const [loading, setLoading] = useState(true);
-  const [activeRange, setActiveRange] = useState<'7d' | '30d' | '12m'>('7d');
+  const [activeRange, setActiveRange] = useState<RangeMode>('7d');
+  const [chartData, setChartData] = useState<Record<RangeMode, DynamicChart>>({
+    '7d': { labels: [], values: [] },
+    '30d': { labels: [], values: [] },
+    '12m': { labels: [], values: [] },
+  });
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const toast = useToast();
 
-  // Load stats from both fetchStats and custom queries
   const loadDashboardData = async () => {
     setLoading(true);
     try {
       const base = await fetchStats();
 
-      // Count orders
-      const { count: ordersCount } = await (supabase
+      // 1. Fetch all orders for revenue, stats, and real charts
+      const { data: ordersData } = await (supabase
         .from('orders')
-        .select('*', { count: 'exact', head: true }) as any);
+        .select('id, price, status, created_at, payment_code, product_name')
+        .order('created_at', { ascending: false }) as any);
 
-      // Count users (profiles)
-      const { count: usersCount } = await (supabase
+      const allOrders: OrderRow[] = ordersData || [];
+
+      // 2. Fetch all profiles
+      const { data: profilesData } = await (supabase
         .from('profiles')
-        .select('*', { count: 'exact', head: true }) as any);
+        .select('id, created_at') as any);
+      const allProfiles: ProfileRow[] = profilesData || [];
 
-      // Sum revenue (completed orders price)
-      const { data: revenueData } = await (supabase
-        .from('orders')
-        .select('price')
-        .eq('status', 'completed') as any);
+      // 3. Fetch all products
+      const { data: productsData } = await (supabase
+        .from('products')
+        .select('id, created_at') as any);
+      const allProducts: ProductRow[] = productsData || [];
 
-      const totalRev = (revenueData || []).reduce(
-        (acc: number, curr: any) => acc + Number(curr.price || 0),
-        0
-      );
+      // Sum completed revenue
+      const completedOrders = allOrders.filter((o) => o.status === 'completed');
+      const totalRev = completedOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
 
       setStats({
-        ...base,
-        totalOrders: ordersCount || 0,
-        totalUsers: usersCount || 0,
+        totalProducts: allProducts.length || base.totalProducts || 0,
+        totalOrders: allOrders.length,
+        totalUsers: allProfiles.length,
         totalRevenue: totalRev,
       });
+
+      // 4. Calculate real percentage changes (last 30 days vs previous 30 days)
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+
+      const revCurr = completedOrders
+        .filter((o) => now - new Date(o.created_at).getTime() <= 30 * dayMs)
+        .reduce((sum, o) => sum + Number(o.price || 0), 0);
+      const revPrev = completedOrders
+        .filter((o) => {
+          const diff = now - new Date(o.created_at).getTime();
+          return diff > 30 * dayMs && diff <= 60 * dayMs;
+        })
+        .reduce((sum, o) => sum + Number(o.price || 0), 0);
+
+      const ordCurr = allOrders.filter((o) => now - new Date(o.created_at).getTime() <= 30 * dayMs).length;
+      const ordPrev = allOrders.filter((o) => {
+        const diff = now - new Date(o.created_at).getTime();
+        return diff > 30 * dayMs && diff <= 60 * dayMs;
+      }).length;
+
+      const prodCurr = allProducts.filter((p) => p.created_at && now - new Date(p.created_at).getTime() <= 30 * dayMs).length;
+      const prodPrev = allProducts.filter((p) => p.created_at && now - new Date(p.created_at).getTime() > 30 * dayMs).length;
+
+      const userCurr = allProfiles.filter((u) => u.created_at && now - new Date(u.created_at).getTime() <= 30 * dayMs).length;
+      const userPrev = allProfiles.filter((u) => u.created_at && now - new Date(u.created_at).getTime() > 30 * dayMs).length;
+
+      setChanges({
+        revenue: calcPercentageChange(revCurr, revPrev),
+        orders: calcPercentageChange(ordCurr, ordPrev),
+        products: calcPercentageChange(prodCurr, prodPrev),
+        users: calcPercentageChange(userCurr, userPrev),
+      });
+
+      // 5. Build dynamic chart datasets for 7d, 30d, 12m from real database
+      buildCharts(allOrders);
+
+      // 6. Fetch real activity timeline from notifications
+      const { data: notifData } = await (supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(8) as any);
+
+      const acts: ActivityItem[] = [];
+      if (notifData && notifData.length > 0) {
+        notifData.forEach((n: any) => {
+          acts.push({
+            id: n.id,
+            text: n.message || n.title,
+            tag: n.type === 'new_order' ? 'Đơn hàng' : n.type === 'order_cancelled' ? 'Hủy đơn' : 'Thông báo',
+            iconBg: n.type === 'new_order' ? 'bg-emerald-500 text-white' : n.type === 'order_cancelled' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white',
+            time: formatRelativeTime(n.created_at),
+          });
+        });
+      } else {
+        // Fallback: build activity from latest orders if notifications table is empty
+        allOrders.slice(0, 6).forEach((ord) => {
+          acts.push({
+            id: ord.id,
+            text: `Đơn hàng #${ord.payment_code || ord.id.substring(0, 8)} — ${ord.product_name || 'Sản phẩm'} (${Number(ord.price).toLocaleString('vi-VN')}đ)`,
+            tag: ord.status === 'completed' ? 'Hoàn tất' : ord.status === 'cancelled' ? 'Hủy đơn' : 'Đơn mới',
+            iconBg: ord.status === 'completed' ? 'bg-emerald-500 text-white' : ord.status === 'cancelled' ? 'bg-red-500 text-white' : 'bg-[#2563EB] text-white',
+            time: formatRelativeTime(ord.created_at),
+          });
+        });
+      }
+      setActivities(acts);
+
     } catch (e) {
       console.error('Failed loading live stats:', e);
     } finally {
@@ -85,19 +207,83 @@ export default function Dashboard() {
     }
   };
 
+  const buildCharts = (orders: OrderRow[]) => {
+    const now = new Date();
+
+    // 7d Chart
+    const days7: { label: string; start: number; end: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const dayName = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][d.getDay()];
+      const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0).getTime();
+      const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59).getTime();
+      days7.push({ label: `${dayName} ${d.getDate()}/${d.getMonth() + 1}`, start, end });
+    }
+    const val7d = days7.map((day) =>
+      orders
+        .filter((o) => {
+          const t = new Date(o.created_at).getTime();
+          return t >= day.start && t <= day.end && o.status === 'completed';
+        })
+        .reduce((sum, o) => sum + Number(o.price || 0), 0)
+    );
+
+    // 30d Chart (4 Weeks)
+    const weeks30: { label: string; start: number; end: number }[] = [];
+    const dayMs = 24 * 60 * 60 * 1000;
+    for (let i = 3; i >= 0; i--) {
+      const start = now.getTime() - (i + 1) * 7 * dayMs;
+      const end = now.getTime() - i * 7 * dayMs;
+      weeks30.push({ label: `Tuần ${4 - i}`, start, end });
+    }
+    const val30d = weeks30.map((w) =>
+      orders
+        .filter((o) => {
+          const t = new Date(o.created_at).getTime();
+          return t >= w.start && t < w.end && o.status === 'completed';
+        })
+        .reduce((sum, o) => sum + Number(o.price || 0), 0)
+    );
+
+    // 12m Chart (12 Months)
+    const months12: { label: string; year: number; month: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months12.push({
+        label: `T${d.getMonth() + 1}`,
+        year: d.getFullYear(),
+        month: d.getMonth(),
+      });
+    }
+    const val12m = months12.map((m) =>
+      orders
+        .filter((o) => {
+          const d = new Date(o.created_at);
+          return d.getFullYear() === m.year && d.getMonth() === m.month && o.status === 'completed';
+        })
+        .reduce((sum, o) => sum + Number(o.price || 0), 0)
+    );
+
+    setChartData({
+      '7d': { labels: days7.map((d) => d.label), values: val7d },
+      '30d': { labels: weeks30.map((w) => w.label), values: val30d },
+      '12m': { labels: months12.map((m) => m.label), values: val12m },
+    });
+  };
+
   useEffect(() => {
     loadDashboardData();
   }, []);
 
-  // Helpers for chart drawing
-  const currentChart = CHARTS_DATA[activeRange];
-  const maxVal = Math.max(...currentChart.values) || 1;
+  // Dynamic Chart SVG calculations
+  const currentChart = chartData[activeRange];
+  const maxVal = Math.max(...(currentChart.values.length ? currentChart.values : [0])) || 100000;
   const chartHeight = 160;
   const chartWidth = 500;
 
-  // Generate SVG path coordinate points
-  const points = currentChart.values.map((v, i) => {
-    const x = (i / (currentChart.values.length - 1)) * chartWidth;
+  const points = (currentChart.values.length ? currentChart.values : [0]).map((v, i) => {
+    const count = Math.max(currentChart.values.length, 1);
+    const x = count > 1 ? (i / (count - 1)) * chartWidth : chartWidth / 2;
     const y = chartHeight - (v / maxVal) * (chartHeight - 30) - 15;
     return `${x},${y}`;
   });
@@ -120,36 +306,32 @@ export default function Dashboard() {
             key: 'revenue',
             label: 'Tổng doanh thu',
             value: `${stats.totalRevenue.toLocaleString('vi-VN')}đ`,
-            change: '+18.2%',
-            isPos: true,
-            iconBg: 'bg-[#1E88FF]/10 text-[#2563EB]',
+            change: changes.revenue.text,
+            isPos: changes.revenue.isPos,
             svgPath: 'M 0,20 Q 20,5 40,25 T 80,10 T 120,30'
           },
           {
             key: 'orders',
             label: 'Tổng đơn hàng',
             value: stats.totalOrders.toLocaleString('vi-VN'),
-            change: '+14.5%',
-            isPos: true,
-            iconBg: 'bg-[#EF4444]/10 text-red-500',
+            change: changes.orders.text,
+            isPos: changes.orders.isPos,
             svgPath: 'M 0,30 Q 25,10 50,25 T 100,5 T 120,15'
           },
           {
             key: 'products',
             label: 'Sản phẩm hiện có',
             value: stats.totalProducts.toLocaleString('vi-VN'),
-            change: '+3.1%',
-            isPos: true,
-            iconBg: 'bg-[#22C55E]/10 text-emerald-500',
+            change: changes.products.text,
+            isPos: changes.products.isPos,
             svgPath: 'M 0,15 Q 30,30 60,10 T 120,5'
           },
           {
             key: 'users',
             label: 'Tổng thành viên',
             value: stats.totalUsers.toLocaleString('vi-VN'),
-            change: '+9.4%',
-            isPos: true,
-            iconBg: 'bg-[#F59E0B]/10 text-amber-500',
+            change: changes.users.text,
+            isPos: changes.users.isPos,
             svgPath: 'M 0,25 Q 35,5 70,20 T 120,10'
           },
         ].map((c) => (
@@ -194,7 +376,7 @@ export default function Dashboard() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-50 dark:border-slate-800/60 pb-4">
             <div>
               <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Doanh thu cửa hàng</h3>
-              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Biểu đồ biểu diễn dòng tiền luân chuyển.</p>
+              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Biểu đồ biểu diễn dòng tiền luân chuyển từ đơn hàng thực tế.</p>
             </div>
             
             {/* Chart toggle range */}
@@ -206,7 +388,7 @@ export default function Dashboard() {
               ].map((r) => (
                 <button
                   key={r.key}
-                  onClick={() => setActiveRange(r.key as any)}
+                  onClick={() => setActiveRange(r.key as RangeMode)}
                   className={`rounded-lg px-3 py-1.5 text-[10px] font-bold transition-all ${
                     activeRange === r.key
                       ? 'bg-white dark:bg-[#131C32] text-[#2563EB] shadow-xs'
@@ -243,17 +425,21 @@ export default function Dashboard() {
               {/* Data points */}
               {points.map((p, idx) => {
                 const [x, y] = p.split(',');
+                const val = currentChart.values[idx] || 0;
                 return (
-                  <circle
-                    key={idx}
-                    cx={x}
-                    cy={y}
-                    r={5}
-                    fill="#FFFFFF"
-                    stroke="#2563EB"
-                    strokeWidth={2.5}
-                    className="cursor-pointer hover:r-7 transition-all"
-                  />
+                  <g key={idx} className="group">
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={5}
+                      fill="#FFFFFF"
+                      stroke="#2563EB"
+                      strokeWidth={2.5}
+                      className="cursor-pointer hover:r-7 transition-all"
+                    />
+                    {/* Tooltip on hover */}
+                    <title>{`${currentChart.labels[idx] || ''}: ${val.toLocaleString('vi-VN')}đ`}</title>
+                  </g>
                 );
               })}
             </svg>
@@ -317,30 +503,29 @@ export default function Dashboard() {
 
       {/* RECENT ACTIVITIES TIMELINE */}
       <div className="rounded-[28px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-6 shadow-xs">
-        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider border-b border-slate-50 dark:border-slate-800/60 pb-3">Lịch sử hoạt động</h3>
+        <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider border-b border-slate-50 dark:border-slate-800/60 pb-3">Lịch sử hoạt động thực tế</h3>
         
-        <div className="mt-6 relative before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800 space-y-6">
-          {[
-            { text: 'Có đơn hàng mới #BOW92746 cần bàn giao', tag: 'Đơn hàng', iconBg: 'bg-emerald-500 text-white', time: '5 phút trước' },
-            { text: 'Admin đã thêm sản phẩm mới "Canva Pro 1 năm"', tag: 'Sản phẩm', iconBg: 'bg-blue-500 text-white', time: '40 phút trước' },
-            { text: 'Cập nhật cài đặt mạng xã hội kênh Zalo & Facebook', tag: 'Cài đặt', iconBg: 'bg-amber-500 text-white', time: '2 giờ trước' },
-            { text: 'Đã hoàn tiền đơn hàng #BOW81735 về ví thành viên', tag: 'Hoàn tiền', iconBg: 'bg-red-500 text-white', time: '5 giờ trước' },
-          ].map((act, idx) => (
-            <div key={idx} className="flex gap-4 items-start pl-1 relative">
-              <span className={`h-6.5 w-6.5 rounded-full flex items-center justify-center text-[10px] shrink-0 font-bold shadow-xs relative z-10 ${act.iconBg}`}>
-                {act.tag.charAt(0)}
-              </span>
-              <div className="flex-1 text-xs">
-                <p className="font-bold text-slate-800 dark:text-slate-200">{act.text}</p>
-                <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400 font-semibold">
-                  <span>{act.time}</span>
-                  <span>•</span>
-                  <span className="text-[#2563EB]">{act.tag}</span>
+        {activities.length === 0 ? (
+          <p className="mt-4 text-xs font-medium text-slate-400 text-center py-4">Chưa có hoạt động nào được ghi nhận.</p>
+        ) : (
+          <div className="mt-6 relative before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800 space-y-6">
+            {activities.map((act) => (
+              <div key={act.id} className="flex gap-4 items-start pl-1 relative">
+                <span className={`h-6.5 w-6.5 rounded-full flex items-center justify-center text-[10px] shrink-0 font-bold shadow-xs relative z-10 ${act.iconBg}`}>
+                  {act.tag.charAt(0)}
+                </span>
+                <div className="flex-1 text-xs">
+                  <p className="font-bold text-slate-800 dark:text-slate-200">{act.text}</p>
+                  <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-400 font-semibold">
+                    <span>{act.time}</span>
+                    <span>•</span>
+                    <span className="text-[#2563EB]">{act.tag}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

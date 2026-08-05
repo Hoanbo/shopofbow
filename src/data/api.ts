@@ -18,12 +18,23 @@ function withCache<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Pr
   const now = Date.now();
   const entry = _cache.get(key) as CacheEntry<T> | undefined;
   if (entry && now < entry.expiresAt) return entry.promise;
-  const promise = fetcher().catch((err) => {
-    // Xóa cache khi lỗi để lần sau retry được
-    _cache.delete(key);
-    throw err;
+
+  let resolvePromise!: (val: T) => void;
+  let rejectPromise!: (err: any) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
   });
+
   _cache.set(key, { promise, expiresAt: now + ttlMs });
+
+  fetcher()
+    .then((val) => resolvePromise(val))
+    .catch((err) => {
+      _cache.delete(key);
+      rejectPromise(err);
+    });
+
   return promise;
 }
 // ─────────────────────────────────────────────────────────────────────────────

@@ -47,7 +47,7 @@ returns boolean language sql stable security definer as $$
 $$;
 
 -- ------------------------------------------------------------
--- 3. RLS: admin toàn quyền trên orders, đọc toàn bộ profiles
+-- 3. RLS: admin toàn quyền trên orders, đọc toàn bộ profiles, và sửa catalog
 -- ------------------------------------------------------------
 drop policy if exists "admin read all orders" on orders;
 create policy "admin read all orders" on orders
@@ -64,6 +64,31 @@ drop policy if exists "admin read all profiles" on profiles;
 create policy "admin read all profiles" on profiles
   for select to authenticated
   using (is_admin());
+
+-- Sửa RLS cho các bảng catalog công khai: chỉ admin mới được insert/update/delete
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'categories','products','product_plans',
+    'product_features','faqs','contact_settings'
+  ]
+  loop
+    execute format('drop policy if exists "admin insert %1$s" on %1$s;', t);
+    execute format('drop policy if exists "admin update %1$s" on %1$s;', t);
+    execute format('drop policy if exists "admin delete %1$s" on %1$s;', t);
+
+    execute format(
+      'create policy "admin insert %1$s" on %1$s for insert to authenticated with check (is_admin());', t
+    );
+    execute format(
+      'create policy "admin update %1$s" on %1$s for update to authenticated using (is_admin()) with check (is_admin());', t
+    );
+    execute format(
+      'create policy "admin delete %1$s" on %1$s for delete to authenticated using (is_admin());', t
+    );
+  end loop;
+end$$;
 
 -- ------------------------------------------------------------
 -- 4. FK orders.user_id -> profiles(id) để PostgREST embed profiles

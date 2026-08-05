@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -56,6 +57,7 @@ function OrderCard({
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     if (order.status !== 'pending_payment') return;
@@ -89,10 +91,22 @@ function OrderCard({
     setCancelling(true);
     setCancelError(null);
     try {
-      const { error } = await (supabase.from('orders') as any)
-        .update({ status: 'cancelled' })
-        .eq('id', order.id);
-      if (error) throw error;
+      const { data, error: rpcErr } = await (supabase as any).rpc('cancel_and_refund_own_order', {
+        p_order_id: order.id,
+      });
+
+      if (rpcErr) throw rpcErr;
+
+      if (data === 'refunded_success') {
+        toast.success(`Hủy đơn thành công! ${order.price.toLocaleString('vi-VN')}đ đã được hoàn về ví số dư.`);
+      } else if (data === 'success') {
+        toast.success('Hủy đơn hàng thành công!');
+      } else if (data === 'cannot_cancel') {
+        throw new Error('Đơn hàng không thể hủy ở trạng thái hiện tại.');
+      } else {
+        throw new Error('Hủy đơn hàng thất bại. Vui lòng thử lại.');
+      }
+
       setConfirmingCancel(false);
       onCancelSuccess();
     } catch (err: any) {
@@ -103,6 +117,8 @@ function OrderCard({
   };
 
   const displayStatus = isExpired ? 'cancelled' : order.status;
+  const isPaidOrder = ['pending_delivery', 'processing'].includes(order.status);
+  const canCancel = ['pending_payment', 'pending_delivery', 'processing'].includes(order.status) && !isExpired;
 
   return (
     <div className="rounded-2xl border border-slate-100 p-4 hover:shadow-xs transition">
@@ -134,47 +150,60 @@ function OrderCard({
         </div>
       )}
 
-      {/* Pay now + Cancel triggers if pending_payment */}
-      {order.status === 'pending_payment' && !isExpired && (
+      {/* Pay now + Cancel triggers */}
+      {canCancel && (
         <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between border-t border-slate-50 pt-3">
-          <span className="text-xs font-bold text-amber-600 animate-pulse">
-            {timeLeft}
-          </span>
+          {order.status === 'pending_payment' ? (
+            <span className="text-xs font-bold text-amber-600 animate-pulse">
+              {timeLeft}
+            </span>
+          ) : (
+            <span className="text-xs font-semibold text-blue-600 flex items-center gap-1">
+              ℹ️ Đơn đã thanh toán — Bạn có thể hủy để nhận lại 100% tiền vào ví.
+            </span>
+          )}
           <div className="flex items-center gap-2.5 justify-end">
             <button
               type="button"
               onClick={() => { setCancelError(null); setConfirmingCancel(true); }}
-              className="rounded-full border border-slate-200 bg-white hover:bg-slate-50 px-4 py-1.5 text-xs font-bold text-slate-500 transition"
+              className="rounded-full border border-slate-200 bg-white hover:bg-slate-50 px-4 py-1.5 text-xs font-bold text-slate-600 hover:text-rose-600 transition"
             >
               ❌ Hủy đơn hàng
             </button>
-            <button
-              type="button"
-              onClick={() => onPay(order)}
-              className="rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-4.5 py-1.5 text-xs font-bold text-white shadow-xs hover:scale-102 transition"
-            >
-              💳 Thanh toán ngay (Quét QR)
-            </button>
+            {order.status === 'pending_payment' && (
+              <button
+                type="button"
+                onClick={() => onPay(order)}
+                className="rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-4.5 py-1.5 text-xs font-bold text-white shadow-xs hover:scale-102 transition"
+              >
+                💳 Thanh toán ngay (Quét QR)
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* Modal xác nhận hủy đơn (thay cho window.confirm) */}
-      {confirmingCancel && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+      {/* Modal xác nhận hủy đơn (PORTAL) */}
+      {confirmingCancel && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs"
+            className="fixed inset-0 bg-slate-950/75 backdrop-blur-md transition-opacity"
             onClick={() => !cancelling && setConfirmingCancel(false)}
           />
-          <div className="relative w-full max-w-sm transform overflow-hidden rounded-[24px] border border-slate-100 bg-white p-6 shadow-2xl animate-fade-up text-center space-y-4">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-500 border border-rose-100 text-2xl">
+          <div className="relative z-[100000] w-full max-w-sm overflow-hidden rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#18243E] p-6 shadow-2xl text-center space-y-4">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-500 border border-rose-100 dark:border-rose-900/50 text-2xl">
               ⚠️
             </div>
             <div>
-              <h3 className="text-base font-black text-[#0F172A]">Hủy đơn hàng?</h3>
-              <p className="mt-1.5 text-xs font-medium text-slate-500 leading-relaxed">
-                Bạn có chắc chắn muốn hủy đơn <strong className="text-[#0F172A]">{order.product_name}</strong> (Mã: {order.payment_code})? Hành động này không thể hoàn tác.
+              <h3 className="text-base font-black text-[#0F172A] dark:text-white">Xác nhận Hủy đơn hàng?</h3>
+              <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-300 leading-relaxed">
+                Bạn có chắc chắn muốn hủy đơn <strong className="text-[#0F172A] dark:text-white">{order.product_name}</strong> (Mã: {order.payment_code})?
               </p>
+              {isPaidOrder && (
+                <p className="mt-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                  💰 Số tiền {order.price.toLocaleString('vi-VN')}đ sẽ được HOÀN TỰ ĐỘNG VỀ VÍ SỐ DƯ của bạn ngay lập tức!
+                </p>
+              )}
             </div>
 
             {cancelError && (
@@ -188,7 +217,7 @@ function OrderCard({
                 type="button"
                 onClick={() => setConfirmingCancel(false)}
                 disabled={cancelling}
-                className="flex-1 rounded-full border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50 disabled:opacity-60 transition"
+                className="flex-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-60 transition"
               >
                 Giữ lại đơn
               </button>
@@ -196,13 +225,14 @@ function OrderCard({
                 type="button"
                 onClick={handleCancel}
                 disabled={cancelling}
-                className="flex-1 rounded-full bg-rose-500 py-2.5 text-xs font-bold text-white hover:bg-rose-600 disabled:opacity-60 transition"
+                className="flex-1 rounded-full bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 py-2.5 text-xs font-bold text-white shadow-md disabled:opacity-60 transition"
               >
-                {cancelling ? 'Đang hủy...' : 'Xác nhận hủy'}
+                {cancelling ? 'Đang hủy...' : isPaidOrder ? 'Hủy & Hoàn tiền' : 'Xác nhận hủy'}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -225,12 +255,58 @@ export default function Dashboard() {
   // Deposit State
   const [depositAmount, setDepositAmount] = useState<number>(50000);
   const [depositCode, setDepositCode] = useState('');
+  const [depositOrderId, setDepositOrderId] = useState<string | null>(null);
+  const [creatingDeposit, setCreatingDeposit] = useState(false);
   const [showDepositQr, setShowDepositQr] = useState(false);
+  const [depositSuccess, setDepositSuccess] = useState(false);
+  const depositInputRef = useRef<HTMLInputElement>(null);
 
   // Profile Edit State
   const [fullName, setFullName] = useState(session?.user?.user_metadata?.full_name || '');
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const toast = useToast();
+
+  // Realtime & polling listener for wallet deposit order
+  useEffect(() => {
+    if (!showDepositQr || !depositOrderId) return;
+
+    let cancelled = false;
+    const settleIfPaid = (status?: string | null) => {
+      if (!cancelled && status === 'completed') {
+        setDepositSuccess(true);
+        toast.success('Nạp tiền vào ví thành công!');
+        refreshBalance();
+        fetchOrders();
+      }
+    };
+
+    const checkOnce = async () => {
+      const { data } = await (supabase
+        .from('orders')
+        .select('status')
+        .eq('id', depositOrderId)
+        .maybeSingle() as any);
+      settleIfPaid(data?.status);
+    };
+    checkOnce();
+
+    const channel = supabase
+      .channel(`deposit-${depositOrderId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${depositOrderId}` },
+        (payload) => settleIfPaid((payload.new as { status?: string })?.status),
+      )
+      .subscribe();
+
+    const poll = setInterval(checkOnce, 4000);
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
+  }, [showDepositQr, depositOrderId]);
 
   // Chỉ redirect khi auth đã load xong VÀ thực sự chưa đăng nhập.
   // Không redirect trong lúc auth đang loading -> tránh F5 bị đá ra /login.
@@ -296,10 +372,72 @@ export default function Dashboard() {
     }
   };
 
-  const handleCreateDeposit = () => {
-    const shortId = session.user.id.slice(-5).toUpperCase();
-    setDepositCode(`NAP${shortId}`);
-    setShowDepositQr(true);
+  const handleCreateDeposit = async () => {
+    if (!session?.user?.id) return;
+    if (depositAmount < 10000) {
+      toast.error('Số tiền nạp tối thiểu là 10.000đ.');
+      return;
+    }
+
+    setCreatingDeposit(true);
+    setDepositSuccess(false);
+    try {
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      const code = `BOWN${Date.now().toString().slice(-5)}${rand}`;
+
+      const { data: inserted, error: insErr } = await (supabase.from('orders') as any)
+        .insert({
+          user_id: session.user.id,
+          product_name: 'Nạp tiền vào ví',
+          plan_label: 'Nạp số dư ví',
+          price: depositAmount,
+          status: 'pending_payment',
+          payment_code: code,
+          notes: 'Giao dịch nạp số dư ví tự động qua VietQR/SePay',
+        })
+        .select('id')
+        .single();
+
+      if (insErr) throw insErr;
+
+      setDepositCode(code);
+      setDepositOrderId(inserted?.id ?? null);
+      setShowDepositQr(true);
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi tạo đơn nạp tiền.');
+    } finally {
+      setCreatingDeposit(false);
+    }
+  };
+
+  const [cancellingDeposit, setCancellingDeposit] = useState(false);
+
+  const handleCancelDeposit = async () => {
+    if (!depositOrderId) {
+      setShowDepositQr(false);
+      setDepositCode('');
+      return;
+    }
+
+    setCancellingDeposit(true);
+    try {
+      const { error } = await (supabase.from('orders') as any)
+        .update({ status: 'cancelled' })
+        .eq('id', depositOrderId);
+
+      if (error) throw error;
+
+      setShowDepositQr(false);
+      setDepositCode('');
+      setDepositOrderId(null);
+      toast.success('Đã hủy giao dịch nạp tiền.');
+      fetchOrders();
+    } catch (err: any) {
+      toast.error(err?.message || 'Lỗi khi hủy giao dịch nạp.');
+    } finally {
+      setCancellingDeposit(false);
+    }
   };
 
   return (
@@ -334,11 +472,10 @@ export default function Dashboard() {
                   key={t.id}
                   type="button"
                   onClick={() => setSearchParams({ tab: t.id })}
-                  className={`flex w-full items-center rounded-2xl px-4 py-3 text-xs font-bold transition-all duration-200 ${
-                    activeTab === t.id
-                      ? 'bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                  }`}
+                  className={`flex w-full items-center rounded-2xl px-4 py-3 text-xs font-bold transition-all duration-200 ${activeTab === t.id
+                    ? 'bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-xs'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                    }`}
                 >
                   {t.label}
                 </button>
@@ -432,41 +569,77 @@ export default function Dashboard() {
 
                 <div className="mt-4 space-y-4">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                      Nhập số tiền cần nạp
-                    </label>
-                    <div className="flex gap-3 max-w-sm">
-                      <input
-                        type="number"
-                        min={10000}
-                        step={10000}
-                        value={depositAmount}
-                        onChange={(e) => setDepositAmount(Number(e.target.value))}
-                        className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-bold outline-none transition focus:border-[#2563EB] text-[#0F172A]"
-                      />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Nhập số tiền cần nạp (VNĐ)
+                      </label>
+                      {depositAmount > 0 && (
+                        <span className="text-xs font-black text-[#2563EB] bg-blue-50 dark:bg-blue-950/40 px-2.5 py-0.5 rounded-full border border-blue-100 dark:border-blue-900/50">
+                          {depositAmount.toLocaleString('vi-VN')} VNĐ
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-3 max-w-md">
+                      <div className="relative flex-1">
+                        <input
+                          ref={depositInputRef}
+                          type="number"
+                          min={10000}
+                          step={10000}
+                          value={depositAmount || ''}
+                          onChange={(e) => setDepositAmount(Math.max(0, Number(e.target.value)))}
+                          placeholder="Nhập số tiền nạp bất kỳ (Tối thiểu 10.000đ)"
+                          className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 pr-10 text-sm font-extrabold outline-none transition focus:border-[#2563EB] text-[#0F172A]"
+                        />
+                        <span className="absolute right-3.5 top-3 text-xs font-bold text-slate-400">
+                          đ
+                        </span>
+                      </div>
                       <button
                         onClick={handleCreateDeposit}
-                        className="rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] px-5 text-xs font-bold text-white shadow-xs"
+                        disabled={creatingDeposit}
+                        className="rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 px-5 text-xs font-bold text-white shadow-xs transition shrink-0"
                       >
-                        Tạo QR
+                        {creatingDeposit ? 'Đang tạo...' : 'Tạo QR'}
                       </button>
                     </div>
                   </div>
 
-                  {/* Suggest buttons */}
-                  <div className="flex flex-wrap gap-2.5">
-                    {[20000, 50000, 100000, 200000, 500000].map((amt) => (
+                  {/* Suggest buttons + Số khác button */}
+                  <div>
+                    <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-2">Gợi ý chọn nhanh mệnh giá:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {[20000, 50000, 100000, 200000, 500000].map((amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setDepositAmount(amt)}
+                          className={`rounded-full border px-4 py-1 text-xs font-bold transition ${depositAmount === amt
+                            ? 'border-[#2563EB] bg-blue-50 text-[#2563EB] shadow-xs'
+                            : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                            }`}
+                        >
+                          {amt.toLocaleString('vi-VN')}đ
+                        </button>
+                      ))}
+
+                      {/* Nút Số Khác */}
                       <button
-                        key={amt}
-                        onClick={() => setDepositAmount(amt)}
-                        className={`rounded-full border px-4 py-1 text-xs font-bold transition ${depositAmount === amt
-                          ? 'border-[#2563EB] bg-blue-50 text-[#2563EB]'
+                        type="button"
+                        onClick={() => {
+                          if ([20000, 50000, 100000, 200000, 500000].includes(depositAmount)) {
+                            setDepositAmount(0);
+                          }
+                          depositInputRef.current?.focus();
+                        }}
+                        className={`rounded-full border px-4 py-1 text-xs font-bold transition ${![20000, 50000, 100000, 200000, 500000].includes(depositAmount)
+                          ? 'border-[#2563EB] bg-blue-50 text-[#2563EB] shadow-xs'
                           : 'border-slate-200 hover:border-slate-300 text-slate-600'
                           }`}
                       >
-                        {amt.toLocaleString('vi-VN')}đ
+                        ✏️ Số khác
                       </button>
-                    ))}
+                    </div>
                   </div>
 
                   {/* Deposit instructions and QR */}
@@ -480,9 +653,22 @@ export default function Dashboard() {
                         />
                       </div>
                       <div className="flex-1 space-y-2 text-xs text-slate-700 leading-relaxed w-full">
-                        <div className="rounded-xl bg-amber-50 border border-amber-100 p-3.5 text-amber-800 font-semibold mb-3">
-                          ⚠️ Nhập chính xác Nội dung chuyển khoản để hệ thống đối soát và cộng tiền ví tự động trong 30 giây!
-                        </div>
+                        {depositSuccess ? (
+                          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-emerald-800 font-bold mb-3 flex items-center gap-2.5 animate-bounce">
+                            <span className="text-xl">🎉</span>
+                            <div>
+                              <p className="text-sm font-black text-emerald-900">Nạp tiền thành công!</p>
+                              <p className="text-xs font-medium text-emerald-700 mt-0.5">
+                                Số tiền {depositAmount.toLocaleString('vi-VN')}đ đã được tự động cộng vào ví của bạn.
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-xl bg-amber-50 border border-amber-100 p-3.5 text-amber-800 font-semibold mb-3 flex items-center gap-2">
+                            <span className="animate-spin text-sm">⏱️</span>
+                            <span>Nhập chính xác Nội dung chuyển khoản để hệ thống đối soát và cộng tiền ví tự động trong 30 giây!</span>
+                          </div>
+                        )}
                         <p><strong>Ngân hàng:</strong> MB Bank</p>
                         <p><strong>Số tài khoản:</strong> {BANK_CONFIG.accountNo}</p>
                         <p><strong>Chủ tài khoản:</strong> {BANK_CONFIG.accountName}</p>
@@ -491,6 +677,19 @@ export default function Dashboard() {
                           <strong>Nội dung nạp:</strong>
                           <span className="font-black text-sm bg-blue-100 text-[#2563EB] px-2 py-0.5 rounded-md">{depositCode}</span>
                         </p>
+
+                        {!depositSuccess && (
+                          <div className="pt-3">
+                            <button
+                              type="button"
+                              onClick={handleCancelDeposit}
+                              disabled={cancellingDeposit}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:border-rose-900/50 px-4 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 transition shadow-xs disabled:opacity-50"
+                            >
+                              {cancellingDeposit ? 'Đang hủy...' : '❌ Hủy giao dịch nạp này'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

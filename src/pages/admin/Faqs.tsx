@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listFaqs, createFaq, updateFaq, deleteFaq, type FaqRow } from '../../data/admin';
 import { SearchIcon } from '../../components/icons';
+import { useToast } from '../../components/Toast';
+import { ConfirmModal } from '../../components/ConfirmModal';
 
 export default function AdminFaqs() {
   const [rows, setRows] = useState<FaqRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
   
   // Search & Form States
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,14 +52,34 @@ export default function AdminFaqs() {
     }
   };
 
-  const onDelete = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa FAQ này không?')) return;
-    try {
-      await deleteFaq(id);
-      setRows((r) => r.filter((x) => x.id !== id));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Xóa thất bại');
-    }
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: async () => {},
+  });
+
+  const onDelete = (id: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Xóa câu hỏi FAQ',
+      message: 'Bạn có chắc chắn muốn xóa câu hỏi thường gặp này không?',
+      onConfirm: async () => {
+        try {
+          await deleteFaq(id);
+          setRows((r) => r.filter((x) => x.id !== id));
+          toast.success('Xóa FAQ thành công!');
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+        } catch (e: any) {
+          setErr(e instanceof Error ? e.message : 'Xóa thất bại');
+        }
+      },
+    });
   };
 
   const saveEdit = async (id: string, patch: Partial<FaqRow>) => {
@@ -155,6 +178,16 @@ export default function AdminFaqs() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmText="Xóa FAQ"
+        variant="danger"
+        onConfirm={confirmConfig.onConfirm}
+        onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
@@ -176,44 +209,33 @@ function FaqItem({
 
   if (editing) {
     return (
-      <div className={`space-y-4 p-4 rounded-2xl border border-blue-100 dark:border-[#1E2A4A] bg-[#F8FBFF]/60 dark:bg-slate-850/40 ${!isFirst ? 'pt-6' : ''}`}>
-        <div>
-          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Câu hỏi</label>
-          <input
-            type="text"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="h-10 w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] px-3.5 text-xs font-bold outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Nội dung trả lời</label>
-          <textarea
-            value={a}
-            onChange={(e) => setA(e.target.value)}
-            rows={3}
-            className="w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3 text-xs font-bold outline-none"
-          />
-        </div>
-        <div className="flex gap-2">
+      <div className={`space-y-3 ${isFirst ? '' : 'pt-4'}`}>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="h-10 w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] px-3.5 text-xs font-bold outline-none"
+        />
+        <textarea
+          value={a}
+          onChange={(e) => setA(e.target.value)}
+          rows={3}
+          className="w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3.5 text-xs font-bold outline-none"
+        />
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => setEditing(false)}
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-500"
+          >
+            Hủy
+          </button>
           <button
             onClick={() => {
               onSave(row.id, { question: q.trim(), answer: a.trim() });
               setEditing(false);
             }}
-            className="rounded-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-4.5 py-2 text-[10px] font-bold text-white shadow-xs"
+            className="rounded-lg bg-[#2563EB] px-3.5 py-1.5 text-xs font-bold text-white shadow-xs"
           >
-            Lưu thay đổi
-          </button>
-          <button
-            onClick={() => {
-              setQ(row.question);
-              setA(row.answer);
-              setEditing(false);
-            }}
-            className="rounded-full border border-slate-200 dark:border-slate-850 bg-white dark:bg-[#131C32] hover:bg-slate-50 px-4.5 py-2 text-[10px] font-bold text-slate-500"
-          >
-            Hủy
+            Lưu
           </button>
         </div>
       </div>
@@ -221,13 +243,12 @@ function FaqItem({
   }
 
   return (
-    <div className={`flex items-start gap-4 justify-between transition ${!isFirst ? 'pt-4' : ''}`}>
-      <div className="space-y-1.5">
-        <h4 className="text-xs font-extrabold text-slate-900 dark:text-white leading-snug">❓ {row.question}</h4>
-        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold pl-5">{row.answer}</p>
+    <div className={`flex items-start justify-between gap-4 ${isFirst ? '' : 'pt-4'}`}>
+      <div className="space-y-1 min-w-0 flex-1">
+        <h4 className="text-xs font-black text-slate-900 dark:text-white">{row.question}</h4>
+        <p className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed whitespace-pre-wrap">{row.answer}</p>
       </div>
-
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex items-center gap-1.5 shrink-0">
         <button
           onClick={() => setEditing(true)}
           className="grid h-8.5 w-8.5 place-items-center rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] text-slate-400 hover:text-[#2563EB] transition shadow-xs"

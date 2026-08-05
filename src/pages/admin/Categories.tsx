@@ -8,6 +8,8 @@ import {
 } from '../../data/admin';
 import type { ProductType } from '../../lib/database.types';
 import { SearchIcon } from '../../components/icons';
+import { useToast } from '../../components/Toast';
+import { ConfirmModal } from '../../components/ConfirmModal';
 
 const slugify = (s: string) =>
   s
@@ -22,6 +24,7 @@ export default function AdminCategories() {
   const [rows, setRows] = useState<CategoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
   
   // Filters & Searches State
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,14 +109,34 @@ export default function AdminCategories() {
     }
   };
 
-  const onDelete = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa danh mục này?')) return;
-    try {
-      await deleteCategory(id);
-      setRows((r) => r.filter((x) => x.id !== id));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Xóa thất bại');
-    }
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: async () => {},
+  });
+
+  const onDelete = (id: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Xóa danh mục',
+      message: 'Bạn có chắc chắn muốn xóa danh mục này không? Các sản phẩm thuộc danh mục có thể bị ảnh hưởng.',
+      onConfirm: async () => {
+        try {
+          await deleteCategory(id);
+          setRows((r) => r.filter((x) => x.id !== id));
+          toast.success('Xóa danh mục thành công!');
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+        } catch (e: any) {
+          setErr(e instanceof Error ? e.message : 'Xóa thất bại');
+        }
+      },
+    });
   };
 
   // Stats Counters
@@ -364,6 +387,16 @@ export default function AdminCategories() {
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmText="Xóa danh mục"
+        variant="danger"
+        onConfirm={confirmConfig.onConfirm}
+        onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { formatVND } from '../../data/catalog';
 import type { ProductType } from '../../lib/database.types';
 import { SearchIcon } from '../../components/icons';
 import { useToast } from '../../components/Toast';
+import { ConfirmModal } from '../../components/ConfirmModal';
 
 type Filter = 'all' | ProductType;
 
@@ -41,14 +42,34 @@ export default function AdminProducts() {
     return () => clearTimeout(t);
   }, [load]);
 
-  const onDelete = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này không?')) return;
-    try {
-      await deleteProduct(id);
-      setRows((r) => r.filter((x) => x.id !== id));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Xóa thất bại');
-    }
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: async () => {},
+  });
+
+  const onDelete = (id: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Xóa sản phẩm',
+      message: 'Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này không thể hoàn tác.',
+      onConfirm: async () => {
+        try {
+          await deleteProduct(id);
+          setRows((r) => r.filter((x) => x.id !== id));
+          toast.success('Xóa sản phẩm thành công!');
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+        } catch (e: any) {
+          setErr(e instanceof Error ? e.message : 'Xóa thất bại');
+        }
+      },
+    });
   };
 
   const toggleFeatured = async (row: ProductRow) => {
@@ -228,6 +249,16 @@ export default function AdminProducts() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmText="Xóa sản phẩm"
+        variant="danger"
+        onConfirm={confirmConfig.onConfirm}
+        onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

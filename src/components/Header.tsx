@@ -14,7 +14,7 @@ export default function Header() {
 
   // Theme State
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('admin-theme') || 'light';
+    return localStorage.getItem('site-theme') || 'light';
   });
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export default function Header() {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('admin-theme', theme);
+    localStorage.setItem('site-theme', theme);
   }, [theme]);
 
   // Scroll listener for sticky header resize

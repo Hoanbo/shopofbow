@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { SearchIcon } from '../../components/icons';
 import { useToast } from '../../components/Toast';
+import { ConfirmModal } from '../../components/ConfirmModal';
 
 type Order = {
   id: string;
@@ -48,6 +50,22 @@ export default function AdminOrders() {
   const [deliveryOrder, setDeliveryOrder] = useState<Order | null>(null);
   const [deliveryDetails, setDeliveryDetails] = useState('');
   const [submittingDelivery, setSubmittingDelivery] = useState(false);
+
+  // Confirm Modal State
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    variant?: 'danger' | 'warning' | 'primary' | 'success';
+    loading?: boolean;
+    onConfirm: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: async () => {},
+  });
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -96,17 +114,29 @@ export default function AdminOrders() {
     fetchOrders();
   }, []);
 
-  const handleUpdateStatus = async (orderId: string, status: Order['status']) => {
-    if (!window.confirm(`Xác nhận cập nhật trạng thái đơn hàng sang "${status}"?`)) return;
-    try {
-      const { error } = await (supabase.from('orders') as any)
-        .update({ status })
-        .eq('id', orderId);
-      if (error) throw error;
-      fetchOrders();
-    } catch (err: any) {
-      toast.error(err.message || 'Lỗi khi cập nhật trạng thái.');
-    }
+  const handleUpdateStatus = (orderId: string, status: Order['status']) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Xác nhận cập nhật',
+      message: `Xác nhận cập nhật trạng thái đơn hàng sang "${status}"?`,
+      confirmText: 'Xác nhận',
+      variant: 'primary',
+      onConfirm: async () => {
+        setConfirmConfig((prev) => ({ ...prev, loading: true }));
+        try {
+          const { error } = await (supabase.from('orders') as any)
+            .update({ status })
+            .eq('id', orderId);
+          if (error) throw error;
+          fetchOrders();
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          toast.error(err.message || 'Lỗi khi cập nhật trạng thái.');
+        } finally {
+          setConfirmConfig((prev) => ({ ...prev, loading: false }));
+        }
+      },
+    });
   };
 
   const handleDeliver = async (e: React.FormEvent) => {
@@ -132,22 +162,36 @@ export default function AdminOrders() {
     }
   };
 
-  const handleRefund = async (orderId: string) => {
-    if (!window.confirm('Xác nhận HOÀN TIỀN đơn hàng này về ví số dư của khách hàng?')) return;
-    try {
-      const { data, error } = await (supabase as any).rpc('refund_order', {
-        p_order_id: orderId
-      });
-      if (error) throw error;
-      if (data === 'success') {
-        toast.success('Hoàn tiền về ví thành công!');
-        fetchOrders();
-      } else {
-        throw new Error('Giao dịch hoàn tiền thất bại.');
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Lỗi hoàn tiền.');
-    }
+  const handleRefund = (orderId: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Hoàn tiền đơn hàng',
+      message: 'Xác nhận HOÀN TIỀN đơn hàng này về ví số dư của khách hàng?',
+      confirmText: 'Hoàn tiền',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmConfig((prev) => ({ ...prev, loading: true }));
+        try {
+          const { data, error } = await (supabase as any).rpc('refund_order', {
+            p_order_id: orderId
+          });
+          if (error) throw error;
+          if (data === 'success') {
+            toast.success('Hoàn tiền về ví thành công!');
+            fetchOrders();
+            setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          } else if (data === 'unauthorized') {
+            throw new Error('Thao tác không được phép (Chỉ Admin mới có quyền hoàn tiền).');
+          } else {
+            throw new Error('Giao dịch hoàn tiền thất bại.');
+          }
+        } catch (err: any) {
+          toast.error(err.message || 'Lỗi hoàn tiền.');
+        } finally {
+          setConfirmConfig((prev) => ({ ...prev, loading: false }));
+        }
+      },
+    });
   };
 
   // Filter and search logic
@@ -288,8 +332,8 @@ export default function AdminOrders() {
                   </button>
                 )}
                 
-                {/* Allow refund for completed or pending_delivery */}
-                {(o.status === 'completed' || o.status === 'pending_delivery' || o.status === 'processing') && (
+                {/* Allow refund ONLY for pending_delivery or processing (before completed) */}
+                {(o.status === 'pending_delivery' || o.status === 'processing') && (
                   <button
                     onClick={() => handleRefund(o.id)}
                     className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] px-4.5 py-2 text-xs font-bold text-slate-500 hover:text-[#2563EB] transition shadow-xs"
@@ -313,19 +357,23 @@ export default function AdminOrders() {
         </div>
       )}
 
-      {/* RENDER MODAL BÀN GIAO ĐƠN HÀNG */}
-      {deliveryOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setDeliveryOrder(null)} />
+      {/* RENDER MODAL BÀN GIAO ĐƠN HÀNG (PORTAL) */}
+      {deliveryOrder && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => setDeliveryOrder(null)} />
           
-          <form onSubmit={handleDeliver} className="relative w-full max-w-md transform overflow-hidden rounded-[24px] border border-slate-100 bg-white dark:bg-[#131C32] p-6 sm:p-8 shadow-2xl transition-all text-left space-y-4">
+          <form onSubmit={handleDeliver} className="relative z-[100000] w-full max-w-md transform overflow-hidden rounded-[28px] border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#18243E] p-6 sm:p-8 shadow-2xl transition-all text-left space-y-4">
             <div>
-              <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">🚀 Bàn giao dịch vụ</h3>
-              <p className="text-xs text-slate-400 font-bold mt-1">Đơn hàng: {deliveryOrder.product_name} ({deliveryOrder.plan_label})</p>
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span>🚀</span> Bàn giao dịch vụ
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-300 font-semibold mt-1">
+                Đơn hàng: <strong className="text-slate-900 dark:text-white">{deliveryOrder.product_name}</strong> ({deliveryOrder.plan_label})
+              </p>
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
                 Thông tin tài khoản / Mã kích hoạt bàn giao
               </label>
               <textarea
@@ -334,29 +382,42 @@ export default function AdminOrders() {
                 onChange={(e) => setDeliveryDetails(e.target.value)}
                 placeholder="Nhập thông tin tài khoản, mật khẩu hoặc link kích hoạt để gửi khách hàng..."
                 rows={4}
-                className="w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3.5 text-xs font-bold outline-none transition focus:border-[#2563EB]"
+                className="w-full rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-900/60 p-3.5 text-xs font-bold outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] text-slate-900 dark:text-white"
               />
             </div>
 
-            <div className="flex gap-3 pt-3 border-t border-slate-50 dark:border-slate-800 mt-4">
+            <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 mt-4">
               <button
                 type="button"
                 onClick={() => setDeliveryOrder(null)}
-                className="flex-1 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 py-3 text-xs font-bold text-slate-500 transition"
+                className="flex-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 transition"
               >
-                Hủy
+                Hủy bỏ
               </button>
               <button
                 type="submit"
                 disabled={submittingDelivery}
-                className="flex-1 rounded-xl bg-gradient-to-r from-[#19A7FF] to-[#2563EB] py-3 text-xs font-bold text-white shadow-md disabled:opacity-60 transition"
+                className="flex-1 rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] hover:from-sky-500 hover:to-blue-700 py-3 text-xs font-bold text-white shadow-md disabled:opacity-60 transition"
               >
                 {submittingDelivery ? 'Đang gửi...' : '🚀 Bàn giao ngay'}
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmText={confirmConfig.confirmText}
+        variant={confirmConfig.variant}
+        loading={confirmConfig.loading}
+        onConfirm={confirmConfig.onConfirm}
+        onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

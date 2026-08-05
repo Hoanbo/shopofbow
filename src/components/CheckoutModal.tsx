@@ -100,7 +100,8 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
         p_plan_label: plan.label,
         p_price: plan.price,
         p_payment_code: paymentCode,
-        p_notes: notes.trim()
+        p_notes: notes.trim(),
+        p_product_id: item.id.length === 36 ? item.id : undefined,
       });
 
       if (rpcErr) throw rpcErr;
@@ -112,6 +113,8 @@ export default function CheckoutModal({ isOpen, onClose, item, plan }: Props) {
         setStep('success');
       } else if (data === 'insufficient_balance') {
         throw new Error('Số dư ví không đủ. Vui lòng nạp thêm.');
+      } else if (data === 'unauthorized') {
+        throw new Error('Thao tác không được phép (Unauthorized).');
       } else {
         throw new Error('Giao dịch thất bại. Vui lòng thử lại.');
       }
