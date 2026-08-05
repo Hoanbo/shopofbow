@@ -121,9 +121,10 @@ export default function Dashboard() {
         .select('id, created_at') as any);
       const allProducts: ProductRow[] = productsData || [];
 
-      // Sum completed revenue
-      const completedOrders = allOrders.filter((o) => o.status === 'completed');
-      const totalRev = completedOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
+      // Sum paid revenue (gồm đơn đã bàn giao 'completed', 'pending_delivery' và 'processing')
+      // Loại bỏ đơn đã bị hủy 'cancelled', hoàn tiền 'refunded', hoặc chưa thanh toán 'pending_payment'
+      const paidOrders = allOrders.filter((o) => ['pending_delivery', 'processing', 'completed'].includes(o.status));
+      const totalRev = paidOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
 
       setStats({
         totalProducts: allProducts.length || base.totalProducts || 0,
@@ -136,10 +137,10 @@ export default function Dashboard() {
       const now = Date.now();
       const dayMs = 24 * 60 * 60 * 1000;
 
-      const revCurr = completedOrders
+      const revCurr = paidOrders
         .filter((o) => now - new Date(o.created_at).getTime() <= 30 * dayMs)
         .reduce((sum, o) => sum + Number(o.price || 0), 0);
-      const revPrev = completedOrders
+      const revPrev = paidOrders
         .filter((o) => {
           const diff = now - new Date(o.created_at).getTime();
           return diff > 30 * dayMs && diff <= 60 * dayMs;
@@ -219,11 +220,13 @@ export default function Dashboard() {
       const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59).getTime();
       days7.push({ label: `${dayName} ${d.getDate()}/${d.getMonth() + 1}`, start, end });
     }
+    const isPaid = (status: string) => ['pending_delivery', 'processing', 'completed'].includes(status);
+
     const val7d = days7.map((day) =>
       orders
         .filter((o) => {
           const t = new Date(o.created_at).getTime();
-          return t >= day.start && t <= day.end && o.status === 'completed';
+          return t >= day.start && t <= day.end && isPaid(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
     );
@@ -240,7 +243,7 @@ export default function Dashboard() {
       orders
         .filter((o) => {
           const t = new Date(o.created_at).getTime();
-          return t >= w.start && t < w.end && o.status === 'completed';
+          return t >= w.start && t < w.end && isPaid(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
     );
@@ -259,7 +262,7 @@ export default function Dashboard() {
       orders
         .filter((o) => {
           const d = new Date(o.created_at);
-          return d.getFullYear() === m.year && d.getMonth() === m.month && o.status === 'completed';
+          return d.getFullYear() === m.year && d.getMonth() === m.month && isPaid(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
     );

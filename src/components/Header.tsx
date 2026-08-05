@@ -1,16 +1,30 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import SearchBar from './SearchBar';
 import { SearchIcon, AppIcon, HeadsetIcon } from './icons';
 import newLogo from '../assets/new-logover2.png';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
+
+interface HeaderNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  order_id?: string;
+  is_read: boolean;
+  created_at: string;
+}
 
 export default function Header() {
   const { session, loading, balance, signOut, isAdmin } = useAuth();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const [notifications, setNotifications] = useState<HeaderNotification[]>([]);
   const [scrolled, setScrolled] = useState(false);
   const loc = useLocation();
+  const nav = useNavigate();
 
   // Theme State
   const [theme, setTheme] = useState(() => {
@@ -37,23 +51,121 @@ export default function Header() {
   }, []);
 
   // Close dropdown on route changes
-  useEffect(() => setShowMobileSearch(false), [loc.pathname]);
-  useEffect(() => setShowUserMenu(false), [loc.pathname]);
-
-  // Outside click listener to close dropdown
   useEffect(() => {
-    if (!showUserMenu) return;
+    setShowMobileSearch(false);
+    setShowUserMenu(false);
+    setShowNotifMenu(false);
+  }, [loc.pathname]);
+
+  // Fetch & Subscribe notifications
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setNotifications([]);
+      return;
+    }
+
+    const userId = session.user.id;
+
+    // Load initial notifications from DB
+    const fetchNotifs = async () => {
+      try {
+        let query = (supabase.from('notifications') as any)
+          .select('id, type, title, message, order_id, is_read, created_at')
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (isAdmin) {
+          query = query.eq('is_admin', true);
+        } else {
+          query = query.eq('user_id', userId).eq('is_admin', false);
+        }
+
+        const { data, error } = await query;
+        if (!error && data) {
+          setNotifications(data as HeaderNotification[]);
+        }
+      } catch (err) {
+        console.error('Error loading header notifications:', err);
+      }
+    };
+
+    fetchNotifs();
+
+    // Subscribe to Realtime inserts & updates
+    const channel = supabase
+      .channel(`header-notifs-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+        },
+        () => {
+          fetchNotifs();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id, isAdmin]);
+
+  // Outside click listener for user menu & notification menu
+  useEffect(() => {
+    if (!showUserMenu && !showNotifMenu) return;
 
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.user-menu-container')) {
         setShowUserMenu(false);
       }
+      if (!target.closest('.notif-menu-container')) {
+        setShowNotifMenu(false);
+      }
     };
 
     document.addEventListener('click', handleOutsideClick);
     return () => document.removeEventListener('click', handleOutsideClick);
-  }, [showUserMenu]);
+  }, [showUserMenu, showNotifMenu]);
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  const handleMarkAsRead = async (notif: HeaderNotification) => {
+    if (!notif.is_read) {
+      try {
+        await (supabase.from('notifications') as any)
+          .update({ is_read: true })
+          .eq('id', notif.id);
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n)),
+        );
+      } catch (err) {
+        console.error('Failed to mark notification read:', err);
+      }
+    }
+    setShowNotifMenu(false);
+    if (isAdmin) {
+      nav('/admin/orders');
+    } else {
+      nav('/dashboard?tab=orders');
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      const unreadIds = notifications.filter((n) => !n.is_read).map((n) => n.id);
+      if (unreadIds.length > 0) {
+        await (supabase.from('notifications') as any)
+          .update({ is_read: true })
+          .in('id', unreadIds);
+        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      }
+    } catch (err) {
+      console.error('Failed to mark all read:', err);
+    }
+  };
 
   // Vietnamese first word of name extraction (e.g. Nguyễn Văn Hoàn -> Nguyễn)
   const displayName = session?.user?.user_metadata?.full_name
@@ -168,17 +280,101 @@ export default function Header() {
                 )}
               </button>
 
-              {/* Notification Bell — hidden on mobile, only visible sm+ */}
-              <div className="relative hidden sm:block">
+              {/* Notification Bell Dropdown */}
+              <div className="relative notif-menu-container">
                 <button
-                  onClick={() => {}}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-700/80 bg-sky-50/20 dark:bg-slate-800/60 text-slate-400 hover:text-[#00A3FF] dark:hover:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
+                  onClick={() => setShowNotifMenu((v) => !v)}
+                  className="relative flex h-8 w-8 items-center justify-center rounded-full border border-sky-100 dark:border-slate-700/80 bg-sky-50/20 dark:bg-slate-800/60 text-slate-500 dark:text-slate-300 hover:text-[#00A3FF] dark:hover:text-[#35A8FF] shadow-xs transition hover:bg-sky-50 dark:hover:bg-slate-800/60 hover:scale-105"
                   title="Thông báo"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                   </svg>
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white ring-2 ring-white dark:ring-slate-900 animate-pulse">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </button>
+
+                {/* Notifications Dropdown Panel */}
+                {showNotifMenu && (
+                  <div className="absolute right-0 top-[calc(100%+12px)] z-50 w-80 sm:w-96 rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-3 shadow-2xl text-left animate-fade-up">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 px-2 pb-2.5 pt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-[#0F172A] dark:text-white">Thông báo</span>
+                        {unreadCount > 0 && (
+                          <span className="rounded-full bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 text-[10px] font-extrabold text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/50">
+                            {unreadCount} chưa đọc
+                          </span>
+                        )}
+                      </div>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={handleMarkAllRead}
+                          className="text-[10px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline"
+                        >
+                          Đánh dấu tất cả đã đọc
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800/50 py-1">
+                      {notifications.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                          Chưa có thông báo nào.
+                        </div>
+                      ) : (
+                        notifications.map((notif) => (
+                          <div
+                            key={notif.id}
+                            onClick={() => handleMarkAsRead(notif)}
+                            className={`group flex items-start gap-3 rounded-xl p-2.5 transition cursor-pointer ${
+                              notif.is_read
+                                ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50 opacity-75'
+                                : 'bg-blue-50/40 dark:bg-blue-950/30 hover:bg-blue-50 dark:hover:bg-blue-950/50'
+                            }`}
+                          >
+                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100/60 dark:bg-blue-900/40 text-xs">
+                              {notif.type === 'order_completed' ? '🎉' : notif.type === 'order_refunded' ? '💸' : notif.type === 'order_cancelled' ? '❌' : '🔔'}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-1">
+                                <h5 className={`text-xs font-bold truncate ${notif.is_read ? 'text-slate-700 dark:text-slate-300' : 'text-[#0F172A] dark:text-white'}`}>
+                                  {notif.title}
+                                </h5>
+                                {!notif.is_read && (
+                                  <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                                {notif.message}
+                              </p>
+                              <span className="mt-1 block text-[9px] font-semibold text-slate-400 dark:text-slate-500">
+                                {new Date(notif.created_at).toLocaleString('vi-VN', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="border-t border-slate-100 dark:border-slate-800/80 pt-2 text-center">
+                      <Link
+                        to={isAdmin ? '/admin/orders' : '/dashboard?tab=orders'}
+                        onClick={() => setShowNotifMenu(false)}
+                        className="block text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline"
+                      >
+                        Xem tất cả đơn hàng →
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* User Profile / Login */}

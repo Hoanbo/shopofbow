@@ -30,6 +30,12 @@ export default function AdminCategories() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'sort_order' | 'name'>('sort_order');
+  const [currentPage, setCurrentPage] = useState(1);
+  const CATEGORIES_PER_PAGE = 6;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterType]);
 
   // Modal States
   const [showModal, setShowModal] = useState(false);

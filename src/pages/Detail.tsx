@@ -47,6 +47,8 @@ export default function Detail({ category, base, crumb }: Props) {
   const [plan, setPlan] = useState(0);
   const { session } = useAuth();
   const [showCheckout, setShowCheckout] = useState(false);
+  // Thông tin đơn hàng sau khi thanh toán ví thành công
+  const [walletOrder, setWalletOrder] = useState<{ code: string; amount: number; qty: number } | null>(null);
   const nav = useNavigate();
   const loc = useLocation();
 
@@ -310,7 +312,43 @@ export default function Detail({ category, base, crumb }: Props) {
           onClose={() => setShowCheckout(false)}
           item={item}
           plan={active}
+          onWalletSuccess={(order) => {
+            console.log('6. onWalletSuccess received in Detail.tsx:', order);
+            setShowCheckout(false);
+            setWalletOrder(order);
+          }}
         />
+      )}
+
+      {/* Wallet Payment Success Modal — Đơn giản & đồng bộ 100% với SePay (Ảnh 2) */}
+      {walletOrder && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" onClick={() => setWalletOrder(null)} />
+          {/* Modal Container */}
+          <div className="relative w-full max-w-lg transform rounded-[28px] border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-6 text-center shadow-2xl transition-all sm:p-8 animate-fade-up text-slate-900 dark:text-white">
+            <div className="space-y-5 py-3">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50">
+                <CheckIcon className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-[#0F172A] dark:text-white">Đặt hàng thành công!</h3>
+                <p className="text-xs font-semibold text-slate-400 dark:text-slate-400 mt-1">Mã đơn hàng: {walletOrder.code}</p>
+                <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-300 leading-relaxed max-w-sm mx-auto">
+                  Cảm ơn bạn đã tin tưởng BOW. Đơn hàng đã được chuyển sang trạng thái <strong>Chờ bàn giao</strong>. Admin sẽ thiết lập tài khoản và gửi thông tin qua email/mục đơn hàng của bạn trong vòng 5 - 15 phút.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setWalletOrder(null)}
+                className="w-full rounded-full bg-[#0F172A] dark:bg-blue-600 py-3 text-sm font-bold text-white hover:bg-black dark:hover:bg-blue-700 transition"
+              >
+                Đóng và tiếp tục mua sắm
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

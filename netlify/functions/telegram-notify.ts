@@ -28,7 +28,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
-type OrderEvent = 'new_order' | 'order_cancelled';
+type OrderEvent = 'new_order' | 'order_paid' | 'order_completed' | 'order_cancelled' | 'order_refunded';
 
 export const handler: Handler = async (event) => {
   // 1. Chỉ chấp nhận POST
@@ -68,7 +68,8 @@ export const handler: Handler = async (event) => {
   if (typeof orderId !== 'string' || !UUID_RE.test(orderId)) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing or invalid order_id' }) };
   }
-  if (evt !== 'new_order' && evt !== 'order_cancelled') {
+  const validEvents = ['new_order', 'order_paid', 'order_completed', 'order_cancelled', 'order_refunded'];
+  if (typeof evt !== 'string' || !validEvents.includes(evt)) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Missing or invalid event' }) };
   }
   const orderEvent = evt as OrderEvent;
@@ -125,11 +126,11 @@ export const handler: Handler = async (event) => {
 🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}
 📋 <b>Gói:</b> ${escapeHtml((order as any).plan_label || 'N/A')}
 💰 <b>Giá trị:</b> ${vnd((order as any).price)}
-💳 <b>Thanh toán:</b> ${isQrPending ? '⏳ Chuyển khoản ngân hàng (chờ xác nhận)' : '✅ Đã thanh toán'}
+💳 <b>Thanh toán:</b> ${isQrPending ? '⏳ Chuyển khoản ngân hàng (chờ xác nhận)' : '✅ Đã trừ tiền từ Ví'}
 📝 <b>Ghi chú:</b> ${(order as any).notes ? escapeHtml((order as any).notes) : '—'}
 🕐 <b>Thời gian:</b> ${dateStr}
 
-${isQrPending ? '👉 SePay sẽ tự xác nhận khi tiền vào. Nếu cần, bấm nút bên dưới để duyệt thủ công.' : '👉 Vào <b>Admin Dashboard</b> để xử lý đơn hàng.'}`;
+${isQrPending ? '👉 SePay sẽ tự xác nhận khi tiền vào. Nếu cần, bấm nút bên dưới để duyệt thủ công.' : '👉 Vào <b>Admin Dashboard</b> để bàn giao tài khoản.'}`;
 
     if (isQrPending) {
       replyMarkup = {
@@ -141,13 +142,40 @@ ${isQrPending ? '👉 SePay sẽ tự xác nhận khi tiền vào. Nếu cần, 
         ],
       };
     }
+  } else if (orderEvent === 'order_paid') {
+    text = `🟢 <b>XÁC NHẬN ĐÃ NHẬN TIỀN</b>
+
+📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>
+👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}
+🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}
+💰 <b>Giá trị:</b> ${vnd((order as any).price)}
+💳 <b>Trạng thái:</b> ✅ Đã nhận thanh toán từ Ngân hàng (SePay)
+
+👉 Đơn hàng đang ở trạng thái <b>Chờ bàn giao</b>. Vui lòng vào Admin Dashboard để bàn giao tài khoản.`;
+  } else if (orderEvent === 'order_completed') {
+    text = `🎉 <b>ĐƠN HÀNG ĐÃ BÀN GIAO HOÀN TẤT</b>
+
+📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>
+👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}
+🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}
+💰 <b>Giá trị:</b> ${vnd((order as any).price)}
+✅ <b>Trạng thái:</b> Đã bàn giao tài khoản thành công cho khách hàng!`;
+  } else if (orderEvent === 'order_refunded') {
+    text = `💸 <b>ĐÃ HOÀN TIỀN ĐƠN HÀNG VỀ VÍ</b>
+
+📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>
+👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}
+🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}
+💰 <b>Số tiền hoàn:</b> ${vnd((order as any).price)}
+🔄 <b>Trạng thái:</b> Đã cộng lại tiền vào Số dư ví khách hàng.`;
   } else {
     // order_cancelled
     text = `❌ <b>ĐƠN HÀNG BỊ HỦY</b>
 
 📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>
 🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}
-👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}`;
+👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}
+💰 <b>Giá trị:</b> ${vnd((order as any).price)}`;
   }
 
   // 7. Gửi Telegram

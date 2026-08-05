@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 /** Danh sách email admin — nguồn duy nhất, dùng chung cho toàn app. */
-export const ADMIN_EMAILS = ['hoankb4@gmail.com', 'admin@shopofbow.com'];
+export const ADMIN_EMAILS = ['hoankb4@gmail.com'];
 
 interface AuthValue {
   session: Session | null;

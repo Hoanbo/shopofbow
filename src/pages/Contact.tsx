@@ -1,6 +1,5 @@
-import { ContactButtons, buildChannels } from '../components/ContactButtons';
 import { ShieldIcon, BoltIcon, HeadsetIcon } from '../components/icons';
-import { useContact } from '../context/ContactContext';
+import MyCard from '../components/MyCard';
 import { fetchFaqs } from '../data/api';
 import { useAsync } from '../hooks/useAsync';
 import { useSeo } from '../hooks/useSeo';
@@ -16,90 +15,66 @@ export default function Contact() {
     title: 'Liên hệ',
     description: 'Liên hệ BOW qua Facebook Messenger, Zalo, hotline hoặc email — tư vấn nhanh, hỗ trợ 24/7.',
   });
-  const contact = useContact();
-  const channels = buildChannels(contact);
   const { data: faqs = [] } = useAsync(() => fetchFaqs(), []);
 
   return (
-    <div className="container-bow py-4 sm:py-6 space-y-6">
-      {/* Hero Banner Header */}
-      <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-r from-[#00A3FF] via-[#0088FF] to-[#2563EB] px-6 py-8 text-white shadow-lg sm:px-10 sm:py-10">
-        <div className="relative max-w-2xl">
-          <h1 className="text-2xl font-black sm:text-4xl tracking-tight">Liên hệ BOW</h1>
-          <p className="mt-2 text-xs sm:text-base font-medium text-sky-100/90 leading-relaxed">
-            Chọn kênh liên hệ thuận tiện nhất — đội ngũ hỗ trợ kỹ thuật BOW luôn sẵn sàng phục vụ quý khách.
-          </p>
-          <div className="mt-6">
-            <ContactButtons />
-          </div>
+    <div className="container-bow py-4 sm:py-8">
+      {/* 
+        Responsive Layout:
+        - Mobile & Tablet: Xếp dọc 1 cột (Thẻ Card -> Perks -> FAQs).
+        - Desktop (lg:): Chia đôi 2 cột cân bằng (Cột Trái 5/12: Thẻ Danh thiếp MyCard, Cột Phải 7/12: Perks & FAQs).
+      */}
+      <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
+        {/* CỘT TRÁI: Thẻ Danh Thiếp Điện Tử (Sticky trên Desktop) */}
+        <div className="lg:col-span-5 flex justify-center lg:sticky lg:top-24 animate-fade-up">
+          <MyCard />
         </div>
-      </div>
 
-      {/* Perks Badges Grid */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {perks.map(({ Icon, title, desc }) => (
-          <div
-            key={title}
-            className="flex items-start gap-4 rounded-[24px] border border-[#E7EEF8] bg-white p-5 shadow-xs transition-all duration-300 hover:shadow-md hover:border-blue-200"
-          >
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-[#2563EB]">
-              <Icon className="h-6 w-6" />
-            </span>
-            <div>
-              <h3 className="text-sm font-extrabold text-[#0F172A] sm:text-base">{title}</h3>
-              <p className="mt-1 text-xs text-slate-500 font-medium leading-relaxed">{desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Channels List & FAQs Section */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Direct Channels List */}
-        <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-6 sm:p-8 shadow-xs">
-          <h2 className="text-xl font-extrabold text-[#0F172A]">Kênh liên hệ trực tiếp</h2>
-          <div className="mt-4 space-y-3">
-            {channels.map(({ key, label, handle, href, Icon, color }) => (
-              <a
-                key={key}
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-3.5 rounded-[20px] border border-[#E7EEF8] p-3.5 transition-all duration-300 hover:border-blue-300 hover:bg-blue-50/50 hover:scale-[1.01]"
+        {/* CỘT PHẢI: Perks Grid & Câu hỏi thường gặp */}
+        <div className="lg:col-span-7 space-y-6 animate-fade-up">
+          {/* Perks Badges Grid — Cân bằng kích thước, chống vỡ chữ */}
+          <div className="grid gap-3.5 grid-cols-1 sm:grid-cols-3 lg:grid-cols-1">
+            {perks.map(({ Icon, title, desc }) => (
+              <div
+                key={title}
+                className="flex items-center gap-4 rounded-[24px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-[#131C32] p-4 sm:p-5 shadow-xs transition-all duration-300 hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800"
               >
-                <span
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-md"
-                  style={{ backgroundColor: color }}
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#38bdf8]">
+                  <Icon className="h-6 w-6" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white sm:text-base">
+                    {title}
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                    {desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Global FAQs Section */}
+          <div className="rounded-[28px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 sm:p-8 shadow-xs">
+            <h2 className="text-xl font-extrabold text-[#0F172A] dark:text-white">Câu hỏi thường gặp</h2>
+            <div className="mt-4 space-y-3">
+              {faqs.map((f, i) => (
+                <details
+                  key={i}
+                  className="group rounded-[20px] border border-[#E7EEF8] dark:border-slate-800 p-4 transition-all duration-300 hover:border-blue-300 dark:hover:border-blue-700"
                 >
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-extrabold text-[#0F172A]">{label}</span>
-                  <span className="block truncate text-xs text-slate-500 font-medium">{handle}</span>
-                </span>
-              </a>
-            ))}
-          </div>
-        </div>
-
-        {/* Global FAQs Section */}
-        <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-6 sm:p-8 shadow-xs">
-          <h2 className="text-xl font-extrabold text-[#0F172A]">Câu hỏi thường gặp</h2>
-          <div className="mt-4 space-y-3">
-            {faqs.map((f, i) => (
-              <details
-                key={i}
-                className="group rounded-[20px] border border-[#E7EEF8] p-4 transition-all duration-300 hover:border-blue-300"
-              >
-                <summary className="flex cursor-pointer items-center justify-between text-sm font-bold text-[#0F172A]">
-                  {f.question}
-                  <span className="ml-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#2563EB] font-bold text-base transition-transform duration-300 group-open:rotate-45">
-                    +
-                  </span>
-                </summary>
-                <p className="mt-2 text-xs leading-relaxed text-slate-500 font-medium">{f.answer}</p>
-              </details>
-            ))}
+                  <summary className="flex cursor-pointer items-center justify-between text-sm font-bold text-[#0F172A] dark:text-slate-200">
+                    {f.question}
+                    <span className="ml-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#38bdf8] font-bold text-base transition-transform duration-300 group-open:rotate-45">
+                      +
+                    </span>
+                  </summary>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400 font-medium">
+                    {f.answer}
+                  </p>
+                </details>
+              ))}
+            </div>
           </div>
         </div>
       </div>

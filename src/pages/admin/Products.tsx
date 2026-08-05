@@ -22,7 +22,13 @@ export default function AdminProducts() {
   const [err, setErr] = useState<string | null>(null);
   const [type, setType] = useState<Filter>('all');
   const [q, setQ] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PRODUCTS_PER_PAGE = 6;
   const toast = useToast();
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [type, q]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -150,102 +156,6 @@ export default function AdminProducts() {
         ) : rows.length === 0 ? (
           <div className="py-20 text-center text-slate-400 font-semibold text-xs">
             Chưa có sản phẩm nào. Hãy tạo sản phẩm đầu tiên của bạn.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] text-left text-xs">
-              <thead className="border-b border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-[#F8FBFF] dark:bg-slate-850/40 text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-400 font-black">
-                <tr>
-                  <th className="px-6 py-4">Sản phẩm</th>
-                  <th className="px-6 py-4">Phân loại</th>
-                  <th className="px-6 py-4">Đơn giá</th>
-                  <th className="px-6 py-4 text-center">Nổi bật</th>
-                  <th className="px-6 py-4 text-center">Kích hoạt</th>
-                  <th className="px-6 py-4 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E8F1FF] dark:divide-[#1E2A4A]/30">
-                {rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#F5FAFF]/50 dark:hover:bg-slate-800/10 transition-colors duration-150">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3.5">
-                        <img
-                          src={row.logo_url ?? '/assets/bowLogo.jpeg'}
-                          alt=""
-                          className="h-10 w-10 rounded-xl object-contain border border-slate-100 dark:border-slate-800 bg-white"
-                        />
-                        <div className="min-w-0">
-                          <p className="truncate font-extrabold text-slate-900 dark:text-white text-xs leading-tight">{row.name}</p>
-                          <p className="truncate text-[10px] text-slate-400 font-semibold mt-1">/{row.slug}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-bold text-slate-500 dark:text-slate-400">
-                      {row.type === 'ai-tool' && <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">AI Tool</span>}
-                      {row.type === 'premium-app' && <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-[9px] font-bold text-blue-700 dark:bg-blue-950/20 dark:text-blue-400">Premium App</span>}
-                      {row.type === 'product' && <span className="inline-flex items-center rounded-full bg-purple-50 px-2.5 py-0.5 text-[9px] font-bold text-purple-700 dark:bg-purple-950/20 dark:text-purple-400">Product</span>}
-                    </td>
-                    <td className="px-6 py-4 font-black text-[#2563EB] text-xs">
-                      {formatVND(Number(row.base_price ?? 0))}
-                    </td>
-                    
-                    {/* Switch toggles instead of raw buttons */}
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => toggleFeatured(row)}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          row.is_featured ? 'bg-[#22C55E]' : 'bg-slate-200 dark:bg-slate-800'
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                            row.is_featured ? 'translate-x-4' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => toggleActive(row)}
-                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          row.is_active ? 'bg-[#22C55E]' : 'bg-slate-200 dark:bg-slate-800'
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
-                            row.is_active ? 'translate-x-4' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </td>
-                    
-                    {/* SVG Action outline icons */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2.5">
-                        <Link
-                          to={`/admin/products/${row.id}`}
-                          className="grid h-8.5 w-8.5 place-items-center rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] text-slate-500 hover:text-[#2563EB] transition shadow-xs"
-                          title="Sửa sản phẩm"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </Link>
-                        <button
-                          onClick={() => onDelete(row.id)}
-                          className="grid h-8.5 w-8.5 place-items-center rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-red-50 text-slate-500 hover:text-red-500 transition shadow-xs"
-                          title="Xóa sản phẩm"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
       </div>

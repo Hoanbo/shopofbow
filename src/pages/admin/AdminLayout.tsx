@@ -14,10 +14,17 @@ import {
   BoltIcon
 } from '../../components/icons';
 
+const UserIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+  </svg>
+);
+
 // Sidebar navigation links
 const links = [
   { to: '/admin', label: 'Tổng quan', Icon: HomeIcon, end: true },
   { to: '/admin/orders', label: 'Đơn hàng', Icon: CheckIcon },
+  { to: '/admin/users', label: 'Người dùng', Icon: UserIcon },
   { to: '/admin/products', label: 'Sản phẩm', Icon: BagIcon },
   { to: '/admin/categories', label: 'Danh mục', Icon: AppIcon },
   { to: '/admin/faqs', label: 'FAQ chung', Icon: SparkIcon },

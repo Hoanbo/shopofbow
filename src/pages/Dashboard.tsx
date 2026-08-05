@@ -246,11 +246,13 @@ export default function Dashboard() {
   // Tab State
   const activeTab = searchParams.get('tab') || 'orders';
 
-  // Orders State
+  // Orders State & Pagination
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [errorOrders, setErrorOrders] = useState<string | null>(null);
   const [selectedPayOrder, setSelectedPayOrder] = useState<Order | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ORDERS_PER_PAGE = 5;
 
   // Deposit State
   const [depositAmount, setDepositAmount] = useState<number>(50000);
@@ -259,6 +261,7 @@ export default function Dashboard() {
   const [creatingDeposit, setCreatingDeposit] = useState(false);
   const [showDepositQr, setShowDepositQr] = useState(false);
   const [depositSuccess, setDepositSuccess] = useState(false);
+  const [cancellingDeposit, setCancellingDeposit] = useState(false);
   const depositInputRef = useRef<HTMLInputElement>(null);
 
   // Profile Edit State
@@ -266,13 +269,37 @@ export default function Dashboard() {
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const toast = useToast();
 
+  // Fetch Orders (Chỉ lấy đơn hàng của chính tài khoản đang đăng nhập)
+  const fetchOrders = useCallback(async () => {
+    if (!session?.user?.id) return;
+    setLoadingOrders(true);
+    setErrorOrders(null);
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setOrders((data || []) as Order[]);
+      setCurrentPage(1);
+    } catch (err: any) {
+      console.error('Error fetching orders:', err);
+      setErrorOrders('Không thể tải lịch sử đơn hàng. Vui lòng thử lại.');
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, [session?.user?.id]);
+
   // Realtime & polling listener for wallet deposit order
   useEffect(() => {
-    if (!showDepositQr || !depositOrderId) return;
+    if (!showDepositQr || !depositOrderId || depositSuccess) return;
 
     let cancelled = false;
     const settleIfPaid = (status?: string | null) => {
       if (!cancelled && status === 'completed') {
+        cancelled = true;
         setDepositSuccess(true);
         toast.success('Nạp tiền vào ví thành công!');
         refreshBalance();
@@ -281,6 +308,7 @@ export default function Dashboard() {
     };
 
     const checkOnce = async () => {
+      if (cancelled) return;
       const { data } = await (supabase
         .from('orders')
         .select('status')
@@ -306,7 +334,7 @@ export default function Dashboard() {
       supabase.removeChannel(channel);
       clearInterval(poll);
     };
-  }, [showDepositQr, depositOrderId]);
+  }, [showDepositQr, depositOrderId, depositSuccess, refreshBalance, fetchOrders, toast]);
 
   // Chỉ redirect khi auth đã load xong VÀ thực sự chưa đăng nhập.
   // Không redirect trong lúc auth đang loading -> tránh F5 bị đá ra /login.
@@ -315,27 +343,6 @@ export default function Dashboard() {
       nav('/login', { replace: true });
     }
   }, [authLoading, session, nav]);
-
-  // Fetch Orders
-  const fetchOrders = useCallback(async () => {
-    if (!session?.user?.id) return;
-    setLoadingOrders(true);
-    setErrorOrders(null);
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOrders((data || []) as Order[]);
-    } catch (err: any) {
-      console.error('Error fetching orders:', err);
-      setErrorOrders('Không thể tải lịch sử đơn hàng. Vui lòng thử lại.');
-    } finally {
-      setLoadingOrders(false);
-    }
-  }, [session?.user?.id]);
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -410,8 +417,6 @@ export default function Dashboard() {
       setCreatingDeposit(false);
     }
   };
-
-  const [cancellingDeposit, setCancellingDeposit] = useState(false);
 
   const handleCancelDeposit = async () => {
     if (!depositOrderId) {
@@ -529,18 +534,66 @@ export default function Dashboard() {
                     Khám phá sản phẩm
                   </Link>
                 </div>
-              ) : (
-                <div className="mt-5 space-y-4 animate-fade-in">
-                  {orders.map((o) => (
-                    <OrderCard
-                      key={o.id}
-                      order={o}
-                      onPay={(payOrder) => setSelectedPayOrder(payOrder)}
-                      onCancelSuccess={fetchOrders}
-                    />
-                  ))}
-                </div>
-              )}
+              ) : (() => {
+                const totalPages = Math.ceil(orders.length / ORDERS_PER_PAGE);
+                const paginatedOrders = orders.slice((currentPage - 1) * ORDERS_PER_PAGE, currentPage * ORDERS_PER_PAGE);
+
+                return (
+                  <div className="mt-5 space-y-4 animate-fade-in">
+                    {paginatedOrders.map((o) => (
+                      <OrderCard
+                        key={o.id}
+                        order={o}
+                        onPay={(payOrder) => setSelectedPayOrder(payOrder)}
+                        onCancelSuccess={fetchOrders}
+                      />
+                    ))}
+
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800 pt-4">
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          Hiển thị {((currentPage - 1) * ORDERS_PER_PAGE) + 1} - {Math.min(currentPage * ORDERS_PER_PAGE, orders.length)} / {orders.length} đơn hàng
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                          >
+                            ‹ Trở lại
+                          </button>
+
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                            <button
+                              key={pageNum}
+                              type="button"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className={`h-7 w-7 rounded-xl text-xs font-extrabold transition ${
+                                currentPage === pageNum
+                                  ? 'bg-[#2563EB] text-white shadow-xs'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                          >
+                            Tiếp ›
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

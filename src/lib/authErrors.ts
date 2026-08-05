@@ -56,7 +56,11 @@ const RULES: MatchRule[] = [
     test: /otp|token has expired|invalid.*token|expired.*token|token is invalid/i,
     message: 'Mã OTP không đúng hoặc đã hết hạn. Vui lòng thử lại.',
   },
-  // Mật khẩu quá yếu / quá ngắn
+  // Mật khẩu quá yếu / quá ngắn / thiếu độ phức tạp
+  {
+    test: /password should contain at least one character of each/i,
+    message: 'Mật khẩu phải chứa ít nhất: 1 chữ thường (a-z), 1 chữ hoa (A-Z), 1 chữ số (0-9) và 1 ký tự đặc biệt (!@#...).',
+  },
   {
     test: /password should be at least|password.*at least \d+|weak password|password is too short/i,
     message: 'Mật khẩu quá yếu. Vui lòng dùng mật khẩu tối thiểu 6 ký tự.',

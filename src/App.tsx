@@ -20,6 +20,7 @@ const AdminCategories = lazy(() => import('./pages/admin/Categories'));
 const AdminFaqs = lazy(() => import('./pages/admin/Faqs'));
 const AdminContact = lazy(() => import('./pages/admin/Contact'));
 const AdminOrders = lazy(() => import('./pages/admin/Orders'));
+const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 
 const adminSpinner = (
@@ -74,6 +75,7 @@ const router = createBrowserRouter([
           { path: 'faqs', element: lazyAdmin(<AdminFaqs />) },
           { path: 'contact', element: lazyAdmin(<AdminContact />) },
           { path: 'orders', element: lazyAdmin(<AdminOrders />) },
+          { path: 'users', element: lazyAdmin(<AdminUsers />) },
           { path: 'settings', element: lazyAdmin(<AdminSettings />) },
         ],
       },
