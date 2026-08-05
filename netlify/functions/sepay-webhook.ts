@@ -72,11 +72,11 @@ export const handler: Handler = async (event) => {
   // Lấy số tiền vào (SePay: transferAmount)
   const amount = Number(payload.transferAmount ?? payload.amount ?? 0);
 
-  // Tìm mã đơn BOWN... hoặc BOW... trong nội dung chuyển khoản
+  // Tìm mã đơn BOWNAP..., BOWN... hoặc BOW... trong nội dung chuyển khoản
   const rawContent = [payload.content, payload.description, payload.code]
     .filter(Boolean)
     .join(' ');
-  const match = rawContent.match(/(BOWN[A-Z0-9]+|BOW[A-Z0-9]+)/i);
+  const match = rawContent.match(/(BOWNAP[A-Z0-9]+|BOWN[A-Z0-9]+|BOW[A-Z0-9]+)/i);
   if (!match) {
     console.warn('[sepay-webhook] Không tìm thấy mã đơn trong nội dung:', rawContent);
     return ok('Không tìm thấy mã đơn trong nội dung chuyển khoản');
@@ -104,8 +104,9 @@ export const handler: Handler = async (event) => {
     return ok('Đơn đã được xử lý trước đó', { paymentCode, status: order.status });
   }
 
-  // Phân biệt: Nạp ví (BOWN...) vs Đơn mua sản phẩm (BOW...)
+  // Phân biệt: Nạp ví (BOWNAP... hoặc BOWN... hoặc product_name = 'Nạp tiền vào ví') vs Đơn mua sản phẩm
   const isTopup =
+    paymentCode.startsWith('BOWNAP') ||
     paymentCode.startsWith('BOWN') ||
     order.product_name === 'Nạp tiền vào ví';
 
