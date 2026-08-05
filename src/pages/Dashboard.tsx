@@ -383,7 +383,7 @@ export default function Dashboard() {
     setDepositSuccess(false);
     try {
       const rand = Math.floor(1000 + Math.random() * 9000);
-      const code = `BOWNAP${Date.now().toString().slice(-5)}${rand}`;
+      const code = `BOWN${Date.now().toString().slice(-5)}${rand}`;
 
       const { data: inserted, error: insErr } = await (supabase.from('orders') as any)
         .insert({
