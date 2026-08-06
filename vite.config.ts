@@ -9,10 +9,13 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
-        name: 'netlify-functions-dev-proxy',
+        name: 'functions-dev-proxy',
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
-            if ((req.url === '/.netlify/functions/email-notify' || req.url === '/.netlify/functions/telegram-notify') && req.method === 'POST') {
+            const isEmail = req.url === '/api/email-notify' || req.url === '/.netlify/functions/email-notify';
+            const isTg = req.url === '/api/telegram-notify' || req.url === '/.netlify/functions/telegram-notify';
+
+            if ((isEmail || isTg) && req.method === 'POST') {
               let bodyStr = '';
               req.on('data', (chunk) => {
                 bodyStr += chunk;
@@ -27,7 +30,6 @@ export default defineConfig(({ mode }) => {
                   process.env.SMTP_USER = process.env.SMTP_USER || env.SMTP_USER || 'hoankb4@gmail.com';
                   process.env.SMTP_PASS = process.env.SMTP_PASS || env.SMTP_PASS || env.GMAIL_APP_PASSWORD;
 
-                  const isTg = req.url === '/.netlify/functions/telegram-notify';
                   const func = isTg ? await import('./netlify/functions/telegram-notify') : await import('./netlify/functions/email-notify');
                   const result = await func.handler(
                     {

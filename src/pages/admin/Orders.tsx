@@ -166,7 +166,7 @@ export default function AdminOrders() {
         return { email_sent: false, message: 'No auth session token' };
       }
 
-      const response = await fetch('/.netlify/functions/email-notify', {
+      let response = await fetch('/api/email-notify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -174,6 +174,17 @@ export default function AdminOrders() {
         },
         body: JSON.stringify({ order_id: orderId, type }),
       });
+
+      if (response.status === 404) {
+        response = await fetch('/.netlify/functions/email-notify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ order_id: orderId, type }),
+        });
+      }
 
       if (!response.ok) {
         const errText = await response.text();

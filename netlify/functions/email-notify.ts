@@ -15,7 +15,7 @@ import nodemailer from 'nodemailer';
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SITE_URL = process.env.URL || 'https://shopofbow.netlify.app/';
+const SITE_URL = process.env.SITE_URL || process.env.URL || 'https://shopofbow.vercel.app';
 
 // Cấu hình Telegram Bot
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
