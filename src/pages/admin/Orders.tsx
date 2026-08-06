@@ -112,6 +112,26 @@ export default function AdminOrders() {
 
   useEffect(() => {
     fetchOrders();
+
+    // Supabase Realtime Subscription for Admin Orders Auto-Reload
+    const adminOrdersChannel = supabase
+      .channel('admin-orders-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+        },
+        () => {
+          fetchOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(adminOrdersChannel);
+    };
   }, []);
 
   const handleUpdateStatus = (orderId: string, status: Order['status']) => {
@@ -195,6 +215,8 @@ export default function AdminOrders() {
       // Step 4: Return success notification
       if (emailRes.email_sent) {
         toast.success(`🎉 Bàn giao đơn #${deliveryOrder.payment_code} và đã gửi email thông báo!`);
+      } else if (emailRes.message === 'logged_no_smtp_pass') {
+        toast.success(`🎉 Bàn giao đơn #${deliveryOrder.payment_code} thành công! (Cần thêm SMTP_PASS vào .env để gửi email thực tế)`);
       } else {
         toast.success(`🎉 Bàn giao đơn #${deliveryOrder.payment_code} thành công!`);
         console.log(`[DeliverOrder] Email attempt finished with status: ${emailRes.message}`);
@@ -229,6 +251,8 @@ export default function AdminOrders() {
             const emailRes = await sendOrderEmail(orderId, 'refunded');
             if (emailRes.email_sent) {
               toast.success('Hoàn tiền về ví thành công và đã gửi email thông báo!');
+            } else if (emailRes.message === 'logged_no_smtp_pass') {
+              toast.success('Hoàn tiền về ví thành công! (Cần thêm SMTP_PASS vào .env để gửi email thực tế)');
             } else {
               toast.success('Hoàn tiền về ví thành công!');
               console.log(`[RefundOrder] Email attempt finished with status: ${emailRes.message}`);
@@ -364,10 +388,10 @@ export default function AdminOrders() {
                   </p>
                 )}
                 {o.account_details && (
-                  <p className="sm:col-span-2 bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-100 dark:border-emerald-950/30 text-emerald-800 dark:text-emerald-400">
+                  <div className="sm:col-span-2 bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-100 dark:border-emerald-950/30 text-emerald-800 dark:text-emerald-400">
                     🎁 <strong>Thông tin đã bàn giao:</strong>
                     <pre className="font-mono whitespace-pre-wrap mt-1 leading-snug">{o.account_details}</pre>
-                  </p>
+                  </div>
                 )}
               </div>
 

@@ -1,11 +1,11 @@
 // netlify/functions/email-notify.ts
 // ============================================================
-// Gửi Email thông báo Bàn giao đơn hàng & Hoàn tiền về ví cho Khách hàng.
+// Gửi Email thông báo + Thông báo Telegram Bot khi Admin Bàn giao / Hoàn tiền.
 //
 // BẢO MẬT:
 //   • KHÔNG CẦN RESEND BÊN THỨ 3! Tận dụng hạ tầng SMTP sẵn có.
 //   • Hỗ trợ 2 loại email: BÀN GIAO THÀNH CÔNG (completed) và HOÀN TIỀN VỀ VÍ (refunded).
-//   • KHÔNG bao giờ chứa mật khẩu thô trong nội dung email để bảo vệ tài khoản.
+//   • Tự động gửi thông báo báo trạng thái về Telegram Bot Admin.
 // ============================================================
 
 import type { Handler } from '@netlify/functions';
@@ -16,6 +16,10 @@ const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SITE_URL = process.env.URL || 'https://shopofbow.net';
+
+// Cấu hình Telegram Bot
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // Cấu hình SMTP hạ tầng có sẵn (Gmail SMTP hoặc Custom SMTP)
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -104,6 +108,31 @@ export const handler: Handler = async (event) => {
     const formattedPrice = Number(order.price || 0).toLocaleString('vi-VN') + 'đ';
     const emailType = payload.type || (order.status === 'refunded' ? 'refunded' : 'completed');
 
+    // 4. Send Telegram Bot Notification to Admin
+    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+      try {
+        let tgText = '';
+        if (emailType === 'refunded') {
+          tgText = `💸 <b>ĐÃ HOÀN TIỀN ĐƠN HÀNG VỀ VÍ</b>\n\n📦 <b>Mã đơn:</b> <code>#${order.payment_code}</code>\n👤 <b>Khách hàng:</b> ${userEmail}\n🛍 <b>Sản phẩm:</b> ${order.product_name} (${order.plan_label})\n💰 <b>Số tiền hoàn:</b> ${formattedPrice}\n🔄 <b>Trạng thái:</b> Đã hoàn tiền về ví cho khách hàng!`;
+        } else {
+          tgText = `🎉 <b>ĐƠN HÀNG ĐÃ BÀN GIAO HOÀN TẤT</b>\n\n📦 <b>Mã đơn:</b> <code>#${order.payment_code}</code>\n👤 <b>Khách hàng:</b> ${userEmail}\n🛍 <b>Sản phẩm:</b> ${order.product_name} (${order.plan_label})\n💰 <b>Giá trị:</b> ${formattedPrice}\n✅ <b>Trạng thái:</b> Đã bàn giao tài khoản thành công cho khách!`;
+        }
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: TELEGRAM_CHAT_ID,
+            text: tgText,
+            parse_mode: 'HTML',
+          }),
+        });
+        console.log(`[email-notify] Telegram notification sent to Chat ID ${TELEGRAM_CHAT_ID}`);
+      } catch (tgErr) {
+        console.warn('[email-notify] Telegram send error:', tgErr);
+      }
+    }
+
+    // 5. Render Secure Email HTML Body
     let emailSubject = '';
     let badgeText = '';
     let badgeColor = '';
@@ -130,7 +159,6 @@ export const handler: Handler = async (event) => {
       btnUrl = `${SITE_URL}/dashboard?tab=orders`;
     }
 
-    // 4. Render Secure Email HTML Body
     const emailHtml = `
       <!DOCTYPE html>
       <html lang="vi">
@@ -192,7 +220,7 @@ export const handler: Handler = async (event) => {
       </html>
     `;
 
-    // 5. Send via standard Nodemailer SMTP
+    // 6. Send via standard Nodemailer SMTP
     if (SMTP_PASS) {
       const transporter = nodemailer.createTransport({
         host: SMTP_HOST,

@@ -358,7 +358,7 @@ export default function Dashboard() {
         .on(
           'postgres_changes',
           {
-            event: 'UPDATE',
+            event: '*',
             schema: 'public',
             table: 'orders',
             filter: `user_id=eq.${session.user.id}`,
@@ -372,7 +372,7 @@ export default function Dashboard() {
             refreshBalance();
 
             // Detect if order status changed to 'completed' (bàn giao)
-            if (newOrder.status === 'completed' && oldStatus !== 'completed') {
+            if (newOrder?.status === 'completed' && oldStatus !== 'completed') {
               setDeliveredOrderModal(newOrder);
             }
           }
