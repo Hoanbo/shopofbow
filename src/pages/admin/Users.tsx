@@ -50,10 +50,11 @@ export default function AdminUsers() {
     try {
       const { data, error } = await (supabase as any).rpc('admin_get_users_list');
       if (error) {
-        console.warn('[AdminUsers] rpc admin_get_users_list error:', error);
+        console.error('[AdminUsers] rpc admin_get_users_list failed:', error);
+        toast.error(`RPC Error: ${error.message || error.details || 'Vui lòng chạy lại file SQL 0014'}`);
         // Fallback if migration 0013 / 0014 has not been run in Supabase yet
         const { data: profs, error: profErr } = await (supabase.from('profiles') as any)
-          .select('id, full_name, avatar_url, balance, created_at')
+          .select('id, full_name, avatar_url, balance, created_at, phone')
           .order('created_at', { ascending: false });
 
         if (profErr) throw profErr;
@@ -73,7 +74,7 @@ export default function AdminUsers() {
           (profs || []).map((p: any) => ({
             ...p,
             phone: p.phone || '',
-            email: 'Cần chạy SQL 0013 để hiện Email',
+            email: p.email || 'N/A',
             total_orders: orderCounts[p.id] || 0,
             is_admin_user: false,
           })) as UserRow[],
@@ -184,9 +185,6 @@ export default function AdminUsers() {
     );
   });
 
-  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
-  const paginatedUsers = filteredUsers.slice((currentPage - 1) * USERS_PER_PAGE, currentPage * USERS_PER_PAGE);
-
   const totalBalance = users.reduce((sum, u) => sum + Number(u.balance || 0), 0);
 
   return (
@@ -209,19 +207,19 @@ export default function AdminUsers() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Tổng thành viên</span>
-          <p className="mt-1 text-2xl font-black text-[#0F172A] dark:text-white">{users.length}</p>
+        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 shadow-xs">
+          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Tổng thành viên</span>
+          <p className="mt-1 text-3xl font-black text-[#0F172A] dark:text-white">{users.length}</p>
         </div>
-        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-500">Tổng số dư ví hệ thống</span>
-          <p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">
+        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 shadow-xs">
+          <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">Tổng số dư ví hệ thống</span>
+          <p className="mt-1 text-3xl font-black text-emerald-600 dark:text-emerald-400">
             {totalBalance.toLocaleString('vi-VN')}đ
           </p>
         </div>
-        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-500">Đơn hàng đã đặt</span>
-          <p className="mt-1 text-2xl font-black text-[#2563EB] dark:text-[#35A8FF]">
+        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 shadow-xs">
+          <span className="text-xs font-extrabold uppercase tracking-wider text-blue-500">Đơn hàng đã đặt</span>
+          <p className="mt-1 text-3xl font-black text-[#2563EB] dark:text-[#35A8FF]">
             {users.reduce((sum, u) => sum + Number(u.total_orders || 0), 0)}
           </p>
         </div>
@@ -234,8 +232,8 @@ export default function AdminUsers() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tìm kiếm theo Tên, Email, SĐT hoặc User ID..."
-            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-4 py-2.5 text-xs font-semibold outline-none focus:border-[#2563EB] dark:focus:border-[#35A8FF] text-slate-900 dark:text-white placeholder:text-slate-400"
+            placeholder="Search theo Tên, Email, SĐT hoặc User ID..."
+            className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-4 py-3 text-sm font-semibold outline-none focus:border-[#2563EB] dark:focus:border-[#35A8FF] text-slate-900 dark:text-white placeholder:text-slate-400"
           />
         </div>
       </div>
@@ -245,79 +243,100 @@ export default function AdminUsers() {
         {loading ? (
           <div className="p-12 text-center">
             <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-100 dark:border-slate-800 border-t-[#2563EB]" />
-            <p className="mt-3 text-xs font-semibold text-slate-400">Đang tải danh sách người dùng...</p>
+            <p className="mt-3 text-sm font-semibold text-slate-400">Đang tải danh sách người dùng...</p>
           </div>
         ) : filteredUsers.length === 0 ? (
-          <div className="p-12 text-center text-xs font-semibold text-slate-400">
+          <div className="p-12 text-center text-sm font-semibold text-slate-400">
             Không tìm thấy người dùng phù hợp.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-[#E8F1FF] dark:border-slate-800 bg-[#F8FBFF] dark:bg-slate-800/50 text-[10px] uppercase tracking-wider text-slate-400 font-black">
+            <table className="w-full text-left text-xs table-auto">
+              <thead className="border-b border-[#E8F1FF] dark:border-slate-800 bg-[#F8FBFF] dark:bg-slate-800/50 text-[11px] uppercase tracking-wider text-slate-400 font-black">
                 <tr>
-                  <th className="px-6 py-4">Khách hàng</th>
-                  <th className="px-6 py-4">Email / SĐT</th>
-                  <th className="px-6 py-4">Số dư ví</th>
-                  <th className="px-6 py-4">Đơn đã đặt</th>
-                  <th className="px-6 py-4">Ngày tham gia</th>
-                  <th className="px-6 py-4 text-right">Thao tác</th>
+                  <th className="px-4 py-3.5">Khách hàng</th>
+                  <th className="px-4 py-3.5">Email / SĐT</th>
+                  <th className="px-4 py-3.5">Số dư ví</th>
+                  <th className="px-4 py-3.5">Đơn đã đặt</th>
+                  <th className="px-4 py-3.5">Ngày tham gia</th>
+                  <th className="px-4 py-3.5 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8F1FF] dark:divide-slate-800">
-                {paginatedUsers.map((u) => (
+                {filteredUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#00A3FF] to-[#2563EB] text-xs font-black text-white shadow-xs shrink-0">
+                    {/* KHÁCH HÀNG */}
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#00A3FF] to-[#2563EB] text-xs font-black text-white shadow-xs shrink-0">
                           {(u.full_name || 'U').charAt(0).toUpperCase()}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-extrabold text-slate-900 dark:text-white">{u.full_name || 'Thành viên'}</p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-extrabold text-xs text-slate-900 dark:text-white truncate max-w-[130px] lg:max-w-[160px]" title={u.full_name || 'Thành viên'}>
+                              {u.full_name || 'Thành viên'}
+                            </span>
                             {u.is_admin_user && (
-                              <span className="rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 px-2 py-0.5 text-[9px] font-black text-amber-600 dark:text-amber-400">
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-black shrink-0">
                                 👑 Admin
                               </span>
                             )}
                           </div>
-                          <p className="text-[10px] font-mono text-slate-400 truncate max-w-[140px]">{u.id}</p>
+                          <span className="block text-[10px] font-mono text-slate-400 dark:text-slate-500 truncate max-w-[120px] mt-0.5">
+                            {u.id}
+                          </span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-300">
-                      <div>{u.email}</div>
-                      {u.phone && <div className="text-[10px] text-slate-400 font-normal mt-0.5">{u.phone}</div>}
+
+                    {/* EMAIL / SĐT */}
+                    <td className="px-4 py-3.5">
+                      <div className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate max-w-[150px] lg:max-w-[190px]" title={u.email}>
+                        {u.email}
+                      </div>
+                      {u.phone && (
+                        <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                          📞 {u.phone}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-6 py-4 font-black text-emerald-600 dark:text-emerald-400 text-sm">
+
+                    {/* SỐ DƯ VÍ */}
+                    <td className="px-4 py-3.5 font-black text-emerald-600 dark:text-emerald-400 text-xs whitespace-nowrap">
                       {Number(u.balance || 0).toLocaleString('vi-VN')}đ
                     </td>
-                    <td className="px-6 py-4 font-extrabold text-slate-700 dark:text-slate-300">
+
+                    {/* ĐƠN ĐÃ ĐẶT */}
+                    <td className="px-4 py-3.5 font-extrabold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                       <button
                         onClick={() => handleOpenUserOrders(u)}
-                        className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-3 py-1 text-xs font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline"
+                        className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-100 transition"
                       >
-                        {u.total_orders || 0} đơn hàng
+                        {u.total_orders || 0} đơn
                       </button>
                     </td>
-                    <td className="px-6 py-4 font-medium text-slate-400">
+
+                    {/* NGÀY THAM GIA */}
+                    <td className="px-4 py-3.5 font-medium text-[11px] text-slate-400 whitespace-nowrap">
                       {new Date(u.created_at).toLocaleDateString('vi-VN')}
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
+
+                    {/* THAO TÁC */}
+                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => {
                             setEditUser(u);
                             setEditFullName(u.full_name || '');
                             setEditPhone(u.phone || '');
                           }}
-                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 px-3 py-1.5 text-xs font-bold text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-100 transition shadow-xs"
+                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-100 transition shadow-xs"
                         >
                           ✏️ Sửa
                         </button>
                         {u.is_admin_user ? (
                           <span
-                            className="inline-flex items-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-[10px] font-bold text-slate-400 cursor-not-allowed"
+                            className="inline-flex items-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-400 cursor-not-allowed"
                             title="Tài khoản Admin không thể xóa"
                           >
                             🔒 Admin
@@ -325,7 +344,7 @@ export default function AdminUsers() {
                         ) : (
                           <button
                             onClick={() => setDeleteUser(u)}
-                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100 transition shadow-xs"
+                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100 transition shadow-xs"
                           >
                             🗑️ Ban
                           </button>
@@ -337,49 +356,6 @@ export default function AdminUsers() {
               </tbody>
             </table>
           </div>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800 pt-4 px-2">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                Hiển thị {((currentPage - 1) * USERS_PER_PAGE) + 1} - {Math.min(currentPage * USERS_PER_PAGE, filteredUsers.length)} / {filteredUsers.length} người dùng
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-                >
-                  ‹ Trở lại
-                </button>
-
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                  <button
-                    key={pageNum}
-                    type="button"
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`h-7 w-7 rounded-xl text-xs font-extrabold transition ${
-                      currentPage === pageNum
-                        ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-                >
-                  Tiếp ›
-                </button>
-              </div>
-            </div>
-          )}
         )}
       </div>
 

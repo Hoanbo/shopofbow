@@ -1,4 +1,18 @@
+import { useContact } from '../context/ContactContext';
+
 export default function MyCard() {
+  const contact = useContact();
+
+  const fbUrl = contact.facebookUrl || 'https://www.facebook.com/Bobowcon';
+  const instaUrl = contact.instagramUrl || 'https://www.instagram.com/bobowcon';
+  const zaloUrl = contact.zaloUrl || 'https://zalo.me/0966821315';
+  const tiktokUrl = contact.tiktokUrl || 'https://www.tiktok.com/@bobowcon';
+  const discordUrl = contact.discordUrl || 'https://discord.gg/tT2aSRXv';
+  const locketUrl = contact.locketUrl || 'https://locket.cam/bowcon';
+  const emailVal = contact.supportEmail || 'hoankb4@gmail.com';
+  const phoneVal = contact.supportPhone || '+84 966 821 315';
+  const phoneHref = `tel:${phoneVal.replace(/\s+/g, '')}`;
+
   return (
     <div className="w-full flex justify-center py-2">
       {/* Main Digital Card Wrapper */}
@@ -37,7 +51,7 @@ export default function MyCard() {
           <div className="flex items-center justify-center gap-3">
             {/* Facebook */}
             <a
-              href="https://www.facebook.com/Bobowcon"
+              href={fbUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Facebook"
@@ -50,7 +64,7 @@ export default function MyCard() {
 
             {/* Instagram */}
             <a
-              href="https://www.instagram.com/bobowcon"
+              href={instaUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Instagram"
@@ -65,7 +79,7 @@ export default function MyCard() {
 
             {/* Zalo */}
             <a
-              href="https://zalo.me/0966821315"
+              href={zaloUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Zalo"
@@ -76,7 +90,7 @@ export default function MyCard() {
 
             {/* TikTok */}
             <a
-              href="https://www.tiktok.com/@bobowcon"
+              href={tiktokUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="TikTok"
@@ -91,7 +105,7 @@ export default function MyCard() {
 
             {/* Discord */}
             <a
-              href="https://discord.gg/tT2aSRXv"
+              href={discordUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Discord"
@@ -105,7 +119,7 @@ export default function MyCard() {
 
           {/* Locket Pill */}
           <a
-            href="https://locket.cam/bowcon"
+            href={locketUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#60A5FA] to-[#3B82F6] px-6 py-2 text-sm font-bold text-white shadow-md transition-all duration-300 hover:scale-105 hover:shadow-lg"
@@ -124,7 +138,7 @@ export default function MyCard() {
         <div className="relative z-10 space-y-3">
           {/* Email */}
           <a
-            href="mailto:hoankb4@gmail.com"
+            href={`mailto:${emailVal}`}
             className="flex items-center gap-3.5 rounded-2xl border border-amber-100/80 dark:border-slate-700/60 bg-gradient-to-r from-slate-50/80 to-white dark:from-slate-800/80 dark:to-slate-800 p-3.5 shadow-xs transition-all duration-300 hover:border-blue-300 dark:hover:border-blue-500 hover:scale-[1.01]"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#00A3FF] dark:bg-blue-950/60 dark:text-[#38bdf8]">
@@ -133,13 +147,13 @@ export default function MyCard() {
               </svg>
             </span>
             <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">
-              hoankb4@gmail.com
+              {emailVal}
             </span>
           </a>
 
           {/* Phone */}
           <a
-            href="tel:+84966821315"
+            href={phoneHref}
             className="flex items-center gap-3.5 rounded-2xl border border-amber-100/80 dark:border-slate-700/60 bg-gradient-to-r from-slate-50/80 to-white dark:from-slate-800/80 dark:to-slate-800 p-3.5 shadow-xs transition-all duration-300 hover:border-blue-300 dark:hover:border-blue-500 hover:scale-[1.01]"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#00A3FF] dark:bg-blue-950/60 dark:text-[#38bdf8]">
@@ -148,7 +162,7 @@ export default function MyCard() {
               </svg>
             </span>
             <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
-              +84 966 821 315
+              {phoneVal}
             </span>
           </a>
         </div>
@@ -156,3 +170,4 @@ export default function MyCard() {
     </div>
   );
 }
+

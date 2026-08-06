@@ -139,11 +139,45 @@ export default function AdminOrders() {
     });
   };
 
+  const sendOrderEmail = async (orderId: string, type: 'completed' | 'refunded'): Promise<{ email_sent: boolean; message?: string }> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        return { email_sent: false, message: 'No auth session token' };
+      }
+
+      const response = await fetch('/.netlify/functions/email-notify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ order_id: orderId, type }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.warn('[sendOrderEmail] Response not OK:', response.status, errText);
+        return { email_sent: false, message: `Server error ${response.status}` };
+      }
+
+      const resData = await response.json();
+      return {
+        email_sent: resData.status === 'sent',
+        message: resData.status,
+      };
+    } catch (err: any) {
+      console.warn('[sendOrderEmail] Error sending email:', err?.message || err);
+      return { email_sent: false, message: err?.message || 'Network error' };
+    }
+  };
+
   const handleDeliver = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deliveryOrder) return;
     setSubmittingDelivery(true);
     try {
+      // Step 1: Save delivery information to Database
       const { error } = await (supabase.from('orders') as any)
         .update({
           status: 'completed',
@@ -152,6 +186,20 @@ export default function AdminOrders() {
         .eq('id', deliveryOrder.id);
 
       if (error) throw error;
+
+      // Step 2: In-App Notification is created automatically via DB Trigger (tg_notify_order)
+
+      // Step 3: Send delivery email & wait for attempt to finish
+      const emailRes = await sendOrderEmail(deliveryOrder.id, 'completed');
+
+      // Step 4: Return success notification
+      if (emailRes.email_sent) {
+        toast.success(`🎉 Bàn giao đơn #${deliveryOrder.payment_code} và đã gửi email thông báo!`);
+      } else {
+        toast.success(`🎉 Bàn giao đơn #${deliveryOrder.payment_code} thành công!`);
+        console.log(`[DeliverOrder] Email attempt finished with status: ${emailRes.message}`);
+      }
+
       setDeliveryOrder(null);
       setDeliveryDetails('');
       fetchOrders();
@@ -177,7 +225,14 @@ export default function AdminOrders() {
           });
           if (error) throw error;
           if (data === 'success') {
-            toast.success('Hoàn tiền về ví thành công!');
+            // Trigger refund notification email to user
+            const emailRes = await sendOrderEmail(orderId, 'refunded');
+            if (emailRes.email_sent) {
+              toast.success('Hoàn tiền về ví thành công và đã gửi email thông báo!');
+            } else {
+              toast.success('Hoàn tiền về ví thành công!');
+              console.log(`[RefundOrder] Email attempt finished with status: ${emailRes.message}`);
+            }
             fetchOrders();
             setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
           } else if (data === 'unauthorized') {

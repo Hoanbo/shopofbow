@@ -69,18 +69,12 @@ export default function Header() {
     // Load initial notifications from DB
     const fetchNotifs = async () => {
       try {
-        let query = (supabase.from('notifications') as any)
+        const { data, error } = await (supabase.from('notifications') as any)
           .select('id, type, title, message, order_id, is_read, created_at')
+          .eq('user_id', userId)
+          .eq('is_admin', false)
           .order('created_at', { ascending: false })
           .limit(10);
-
-        if (isAdmin) {
-          query = query.eq('is_admin', true);
-        } else {
-          query = query.eq('user_id', userId).eq('is_admin', false);
-        }
-
-        const { data, error } = await query;
         if (!error && data) {
           setNotifications(data as HeaderNotification[]);
         }
@@ -366,7 +360,7 @@ export default function Header() {
 
                     <div className="border-t border-slate-100 dark:border-slate-800/80 pt-2 text-center">
                       <Link
-                        to={isAdmin ? '/admin/orders' : '/dashboard?tab=orders'}
+                        to="/dashboard?tab=orders"
                         onClick={() => setShowNotifMenu(false)}
                         className="block text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline"
                       >

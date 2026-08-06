@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { CloseIcon } from '../components/icons';
 import { useToast } from '../components/Toast';
+import OrderDeliveredModal from '../components/OrderDeliveredModal';
 
 const BANK_CONFIG = {
   bankId: 'MB', // MB Bank (mã VietQR)
@@ -344,10 +345,43 @@ export default function Dashboard() {
     }
   }, [authLoading, session, nav]);
 
+  const [deliveredOrderModal, setDeliveredOrderModal] = useState<Order | null>(null);
+
   useEffect(() => {
     if (session?.user?.id) {
       fetchOrders();
       refreshBalance();
+
+      // Supabase Realtime Subscription for User Orders Auto-Update & Celebration Popup
+      const userOrdersChannel = supabase
+        .channel(`user-orders-realtime-${session.user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'orders',
+            filter: `user_id=eq.${session.user.id}`,
+          },
+          (payload) => {
+            const oldStatus = (payload.old as any)?.status;
+            const newOrder = payload.new as Order;
+
+            // Auto-refresh orders & balance state without requiring F5 reload
+            fetchOrders();
+            refreshBalance();
+
+            // Detect if order status changed to 'completed' (bàn giao)
+            if (newOrder.status === 'completed' && oldStatus !== 'completed') {
+              setDeliveredOrderModal(newOrder);
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(userOrdersChannel);
+      };
     }
   }, [session?.user?.id, activeTab]);
 
@@ -570,11 +604,10 @@ export default function Dashboard() {
                               key={pageNum}
                               type="button"
                               onClick={() => setCurrentPage(pageNum)}
-                              className={`h-7 w-7 rounded-xl text-xs font-extrabold transition ${
-                                currentPage === pageNum
-                                  ? 'bg-[#2563EB] text-white shadow-xs'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                              }`}
+                              className={`h-7 w-7 rounded-xl text-xs font-extrabold transition ${currentPage === pageNum
+                                ? 'bg-[#2563EB] text-white shadow-xs'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                                }`}
                             >
                               {pageNum}
                             </button>
@@ -882,6 +915,15 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Order Delivered Celebration Modal (Realtime 🎉) */}
+      <OrderDeliveredModal
+        order={deliveredOrderModal}
+        onClose={() => setDeliveredOrderModal(null)}
+        onViewDetails={() => {
+          setSearchParams({ tab: 'orders' });
+        }}
+      />
     </div>
   );
 }

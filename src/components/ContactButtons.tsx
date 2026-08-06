@@ -1,3 +1,4 @@
+import { useLocation } from 'react-router-dom';
 import { MessengerIcon, ZaloIcon, PhoneIcon, MailIcon } from './icons';
 import { useContact } from '../context/ContactContext';
 import type { ContactSettings } from '../data/api';
@@ -93,26 +94,55 @@ export function ContactButtons({ variant = 'grid' }: { variant?: 'grid' | 'row' 
   );
 }
 
-/** Floating quick-contact FAB stack, bottom-right on desktop. */
+/** Floating quick-contact FAB stack, bottom-right on desktop & mobile. */
 export function ContactFab() {
   const contact = useContact();
-  const channels = buildChannels(contact).slice(0, 3);
-  if (channels.length === 0) return null;
+  const location = useLocation();
+
+  // Hide floating contact column on /contact page
+  if (location.pathname === '/contact') return null;
+
+  const fbUrl = contact.facebookUrl && contact.facebookUrl !== '#' ? contact.facebookUrl : 'https://www.facebook.com/Bobowcon';
+  const zaloUrl = contact.zaloUrl && contact.zaloUrl !== '#' ? contact.zaloUrl : 'https://zalo.me/0966821315';
+  const phoneRaw = contact.supportPhone || '0966821315';
+  const phoneUrl = `tel:${phoneRaw.replace(/\s+/g, '')}`;
+
   return (
-    <div className="fixed bottom-24 right-4 z-40 hidden flex-col gap-2.5 md:bottom-6 md:flex">
-      {channels.map(({ key, label, href, Icon, color }) => (
-        <a
-          key={key}
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={label}
-          className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg ring-2 ring-white/60 transition hover:scale-110"
-          style={{ backgroundColor: color }}
-        >
-          <Icon className="h-6 w-6" />
-        </a>
-      ))}
+    <div className="fixed bottom-24 right-4 z-40 flex flex-col gap-3 md:bottom-6">
+      {/* Facebook Button matching my-card style */}
+      <a
+        href={fbUrl}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Facebook"
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1877F2] text-white shadow-lg ring-2 ring-white/60 transition-all duration-300 hover:scale-110 hover:shadow-xl"
+      >
+        <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24">
+          <path d="M13.5 21v-7h2.3l.4-2.7h-2.7V9.6c0-.8.2-1.3 1.4-1.3H16V5.9c-.2 0-.9-.1-1.8-.1-1.8 0-3.1 1.1-3.1 3.2v2.3H9v2.7h2.1v7h2.4Z" />
+        </svg>
+      </a>
+
+      {/* Zalo Button matching my-card style */}
+      <a
+        href={zaloUrl}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Zalo"
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-white p-2 border border-sky-100 shadow-lg ring-2 ring-white/60 transition-all duration-300 hover:scale-110 hover:shadow-xl"
+      >
+        <img src="/my-card/asset/Icon_of_Zalo.svg" alt="Zalo" className="h-6 w-6 object-contain" />
+      </a>
+
+      {/* Phone / Hotline Call Button */}
+      <a
+        href={phoneUrl}
+        aria-label={`Hotline: ${phoneRaw}`}
+        className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-tr from-[#06b6d4] to-[#00A3FF] text-white shadow-lg ring-2 ring-white/60 transition-all duration-300 hover:scale-110 hover:shadow-xl"
+      >
+        <PhoneIcon className="h-5 w-5" />
+      </a>
     </div>
   );
 }
+
+

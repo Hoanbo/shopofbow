@@ -116,6 +116,10 @@ export interface Database {
           id: string;
           facebook_url: string | null;
           zalo_url: string | null;
+          instagram_url: string | null;
+          tiktok_url: string | null;
+          discord_url: string | null;
+          locket_url: string | null;
           support_phone: string | null;
           support_email: string | null;
           updated_at: string;

@@ -264,6 +264,15 @@ export default function AdminLayout() {
                         </div>
                       ))}
                     </div>
+                    <div className="border-t border-slate-100 dark:border-slate-800 p-2.5 text-center bg-slate-50/50 dark:bg-slate-900/50">
+                      <Link
+                        to="/admin/orders"
+                        onClick={() => setShowNotifications(false)}
+                        className="text-[11px] font-extrabold text-[#2563EB] dark:text-[#38bdf8] hover:underline"
+                      >
+                        Quản lý tất cả đơn hàng →
+                      </Link>
+                    </div>
                   </div>
                 </>
               )}

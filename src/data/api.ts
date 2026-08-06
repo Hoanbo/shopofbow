@@ -48,6 +48,10 @@ type ContactRow = Database['public']['Tables']['contact_settings']['Row'];
 export interface ContactSettings {
   facebookUrl: string;
   zaloUrl: string;
+  instagramUrl: string;
+  tiktokUrl: string;
+  discordUrl: string;
+  locketUrl: string;
   supportPhone: string;
   supportEmail: string;
 }
@@ -464,10 +468,14 @@ export async function fetchFaqs(productId?: string): Promise<Faq[]> {
 }
 
 const CONTACT_FALLBACK: ContactSettings = {
-  facebookUrl: '#',
-  zaloUrl: '#',
-  supportPhone: '',
-  supportEmail: '',
+  facebookUrl: 'https://www.facebook.com/Bobowcon',
+  zaloUrl: 'https://zalo.me/0966821315',
+  instagramUrl: 'https://www.instagram.com/bobowcon',
+  tiktokUrl: 'https://www.tiktok.com/@bobowcon',
+  discordUrl: 'https://discord.gg/tT2aSRXv',
+  locketUrl: 'https://locket.cam/bowcon',
+  supportPhone: '+84 966 821 315',
+  supportEmail: 'hoankb4@gmail.com',
 };
 
 /** Contact settings (single row). Falls back to safe defaults. */
@@ -475,17 +483,21 @@ export function fetchContactSettings(): Promise<ContactSettings> {
   return withCache('contact_settings', 300_000, async () => {
     const { data, error } = await supabase
       .from('contact_settings')
-      .select('facebook_url, zalo_url, support_phone, support_email')
+      .select('facebook_url, zalo_url, instagram_url, tiktok_url, discord_url, locket_url, support_phone, support_email')
       .limit(1)
       .maybeSingle();
     if (error) throw error;
     const row = data as ContactRow | null;
     if (!row) return CONTACT_FALLBACK;
     return {
-      facebookUrl: row.facebook_url ?? '#',
-      zaloUrl: row.zalo_url ?? '#',
-      supportPhone: row.support_phone ?? '',
-      supportEmail: row.support_email ?? '',
+      facebookUrl: row.facebook_url || CONTACT_FALLBACK.facebookUrl,
+      zaloUrl: row.zalo_url || CONTACT_FALLBACK.zaloUrl,
+      instagramUrl: row.instagram_url || CONTACT_FALLBACK.instagramUrl,
+      tiktokUrl: row.tiktok_url || CONTACT_FALLBACK.tiktokUrl,
+      discordUrl: row.discord_url || CONTACT_FALLBACK.discordUrl,
+      locketUrl: row.locket_url || CONTACT_FALLBACK.locketUrl,
+      supportPhone: row.support_phone || CONTACT_FALLBACK.supportPhone,
+      supportEmail: row.support_email || CONTACT_FALLBACK.supportEmail,
     };
   });
 }
