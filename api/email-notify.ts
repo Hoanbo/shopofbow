@@ -235,19 +235,20 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
   }
 }
 
-// Vercel Serverless Function handler
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    return res.status(200).json({ status: 'ok', message: 'Email Notify Endpoint Ready' });
+  }
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(200).json({ status: 'ignored' });
   }
   const result = await processEmailNotify(req.headers, req.body);
   return res.status(result.statusCode).json(result.body);
 }
 
-// Netlify Function compatibility handler
 export const netlifyHandler = async (event: any) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  if (event.httpMethod === 'GET' || event.httpMethod === 'HEAD' || event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, body: JSON.stringify({ status: 'ok', message: 'Email Notify Endpoint Ready' }) };
   }
   const result = await processEmailNotify(event.headers, event.body);
   return { statusCode: result.statusCode, body: JSON.stringify(result.body) };

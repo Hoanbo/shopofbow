@@ -168,16 +168,22 @@ async function processSepayWebhook(headers: Record<string, string | string[] | u
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  // Support GET / HEAD / OPTIONS for SePay health check & ping requests
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    return res.status(200).json({ status: 'ok', message: 'SePay Webhook Endpoint Ready' });
   }
+
+  if (req.method !== 'POST') {
+    return res.status(200).json({ status: 'ignored', message: 'Method ignored' });
+  }
+
   const result = await processSepayWebhook(req.headers, req.body);
   return res.status(result.statusCode).json(result.body);
 }
 
 export const netlifyHandler = async (event: any) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  if (event.httpMethod === 'GET' || event.httpMethod === 'HEAD' || event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, body: JSON.stringify({ status: 'ok', message: 'SePay Webhook Endpoint Ready' }) };
   }
   const result = await processSepayWebhook(event.headers, event.body);
   return { statusCode: result.statusCode, body: JSON.stringify(result.body) };
