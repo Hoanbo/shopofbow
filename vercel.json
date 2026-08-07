@@ -3,6 +3,6 @@
     { "source": "/.netlify/functions/email-notify", "destination": "/api/email-notify" },
     { "source": "/.netlify/functions/telegram-notify", "destination": "/api/telegram-notify" },
     { "source": "/.netlify/functions/sepay-webhook", "destination": "/api/sepay-webhook" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
