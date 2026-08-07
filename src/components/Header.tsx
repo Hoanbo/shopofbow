@@ -140,11 +140,7 @@ export default function Header() {
       }
     }
     setShowNotifMenu(false);
-    if (isAdmin) {
-      nav('/admin/orders');
-    } else {
-      nav('/dashboard?tab=orders');
-    }
+    nav('/dashboard?tab=orders');
   };
 
   const handleMarkAllRead = async () => {

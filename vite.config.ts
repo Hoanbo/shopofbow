@@ -1,6 +1,10 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+
+const nodeRequire = createRequire(import.meta.url);
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -11,8 +15,15 @@ export default defineConfig(({ mode }) => {
       {
         name: 'netlify-functions-dev-proxy',
         configureServer(server) {
-          server.middlewares.use(async (req, res, next) => {
-            if ((req.url === '/.netlify/functions/email-notify' || req.url === '/.netlify/functions/telegram-notify') && req.method === 'POST') {
+          server.middlewares.use((req, res, next) => {
+            const url = req.url || '';
+            if (
+              (url.startsWith('/.netlify/functions/email-notify') ||
+                url.startsWith('/api/email-notify') ||
+                url.startsWith('/.netlify/functions/telegram-notify') ||
+                url.startsWith('/api/telegram-notify')) &&
+              req.method === 'POST'
+            ) {
               let bodyStr = '';
               req.on('data', (chunk) => {
                 bodyStr += chunk;
@@ -27,15 +38,32 @@ export default defineConfig(({ mode }) => {
                   process.env.SMTP_USER = process.env.SMTP_USER || env.SMTP_USER || 'hoankb4@gmail.com';
                   process.env.SMTP_PASS = process.env.SMTP_PASS || env.SMTP_PASS || env.GMAIL_APP_PASSWORD;
 
-                  const isTg = req.url === '/.netlify/functions/telegram-notify';
-                  const func = isTg ? await import('./netlify/functions/telegram-notify') : await import('./netlify/functions/email-notify');
-                  const result = await func.handler(
+                  const isTg = url.includes('telegram-notify');
+                  const funcPath = isTg
+                    ? path.resolve(__dirname, './api/telegram-notify.ts')
+                    : path.resolve(__dirname, './api/email-notify.ts');
+
+                  const { transformSync } = await import('esbuild');
+                  const fileCode = fs.readFileSync(funcPath, 'utf8');
+                  const compiled = transformSync(fileCode, { loader: 'ts', format: 'cjs' });
+
+                  // Execute CJS in isolated module wrapper
+                  const mod: { exports: { handler?: any } } = { exports: {} };
+                  const wrapper = Function('module', 'exports', 'require', 'process', compiled.code);
+                  wrapper(mod, mod.exports, nodeRequire, process);
+
+                  const handler = mod.exports.handler;
+                  if (typeof handler !== 'function') {
+                    throw new Error('Handler function not exported');
+                  }
+
+                  const result = await handler(
                     {
                       httpMethod: 'POST',
                       headers: req.headers as Record<string, string>,
                       body: bodyStr,
-                    } as any,
-                    {} as any
+                    },
+                    {}
                   );
 
                   res.statusCode = result?.statusCode || 200;
@@ -45,7 +73,7 @@ export default defineConfig(({ mode }) => {
                   console.error('[Dev Proxy Error]:', err);
                   res.statusCode = 500;
                   res.setHeader('Content-Type', 'application/json');
-                  res.end(JSON.stringify({ error: err.message }));
+                  res.end(JSON.stringify({ error: err.message || 'Internal proxy error' }));
                 }
               });
               return;

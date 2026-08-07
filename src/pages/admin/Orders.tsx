@@ -166,7 +166,7 @@ export default function AdminOrders() {
         return { email_sent: false, message: 'No auth session token' };
       }
 
-      const response = await fetch('/.netlify/functions/email-notify', {
+      const response = await fetch('/api/email-notify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

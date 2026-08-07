@@ -1,46 +1,31 @@
-// netlify/functions/email-notify.ts
-// ============================================================
-// Gửi Email thông báo + Thông báo Telegram Bot khi Admin Bàn giao / Hoàn tiền.
-//
-// BẢO MẬT:
-//   • KHÔNG CẦN RESEND BÊN THỨ 3! Tận dụng hạ tầng SMTP sẵn có.
-//   • Hỗ trợ 2 loại email: BÀN GIAO THÀNH CÔNG (completed) và HOÀN TIỀN VỀ VÍ (refunded).
-//   • Tự động gửi thông báo báo trạng thái về Telegram Bot Admin.
-// ============================================================
-
-import type { Handler } from '@netlify/functions';
+// api/email-notify.ts — Vercel Serverless Function & Netlify Function Compatibility
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
-const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const SITE_URL = process.env.URL || 'https://shopofbow.vercel.app';
+const SITE_URL = process.env.VITE_APP_URL || 'https://shopofbow.vercel.app';
 
-// Cấu hình Telegram Bot
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// Cấu hình SMTP hạ tầng có sẵn (Gmail SMTP hoặc Custom SMTP)
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
 const SMTP_USER = process.env.SMTP_USER || 'hoankb4@gmail.com';
 const SMTP_PASS = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
-  }
-
+async function processEmailNotify(headers: Record<string, string | string[] | undefined>, body: any) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error('[email-notify] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-    return { statusCode: 500, body: JSON.stringify({ error: 'Supabase not configured' }) };
+    return { statusCode: 500, body: { error: 'Supabase not configured' } };
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // 1. Authenticate Request (Server-to-Server Apikey OR Admin Bearer Token)
-  const authHeader = event.headers['authorization'] || event.headers['Authorization'] || '';
+  const authHeaderRaw = headers['authorization'] || headers['Authorization'] || '';
+  const authHeader = Array.isArray(authHeaderRaw) ? authHeaderRaw[0] : authHeaderRaw;
   let isAuthorized = false;
 
   if (INTERNAL_API_KEY && authHeader === `Apikey ${INTERNAL_API_KEY}`) {
@@ -64,23 +49,26 @@ export const handler: Handler = async (event) => {
 
   if (!isAuthorized) {
     console.error('[email-notify] Unauthorized request header:', authHeader);
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    return { statusCode: 401, body: { error: 'Unauthorized' } };
   }
 
-  let payload: { order_id?: string; type?: 'completed' | 'refunded' };
-  try {
-    payload = JSON.parse(event.body || '{}');
-  } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON payload' }) };
+  let payload: { order_id?: string; type?: 'completed' | 'refunded' } = {};
+  if (typeof body === 'string') {
+    try {
+      payload = JSON.parse(body || '{}');
+    } catch {
+      return { statusCode: 400, body: { error: 'Invalid JSON payload' } };
+    }
+  } else if (typeof body === 'object' && body !== null) {
+    payload = body;
   }
 
   const { order_id } = payload;
   if (!order_id) {
-    return { statusCode: 400, body: JSON.stringify({ error: 'order_id is required' }) };
+    return { statusCode: 400, body: { error: 'order_id is required' } };
   }
 
   try {
-    // 2. Fetch order details from Database
     const { data: order, error: orderErr } = await supabase
       .from('orders')
       .select('id, user_id, product_name, plan_label, price, payment_code, status')
@@ -89,26 +77,24 @@ export const handler: Handler = async (event) => {
 
     if (orderErr || !order) {
       console.error('[email-notify] Order not found:', orderErr);
-      return { statusCode: 404, body: JSON.stringify({ error: 'Order not found' }) };
+      return { statusCode: 404, body: { error: 'Order not found' } };
     }
 
     if (!order.user_id) {
       console.log('[email-notify] Guest order without user_id, skipping email.');
-      return { statusCode: 200, body: JSON.stringify({ status: 'skipped_no_user' }) };
+      return { statusCode: 200, body: { status: 'skipped_no_user' } };
     }
 
-    // 3. Fetch user email from auth.users
     const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(order.user_id);
     if (userErr || !userData.user?.email) {
       console.error('[email-notify] Cannot fetch user email:', userErr);
-      return { statusCode: 404, body: JSON.stringify({ error: 'User email not found' }) };
+      return { statusCode: 404, body: { error: 'User email not found' } };
     }
 
     const userEmail = userData.user.email;
     const formattedPrice = Number(order.price || 0).toLocaleString('vi-VN') + 'đ';
     const emailType = payload.type || (order.status === 'refunded' ? 'refunded' : 'completed');
 
-    // 4. Send Telegram Bot Notification to Admin
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
       try {
         let tgText = '';
@@ -132,7 +118,6 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    // 5. Render Secure Email HTML Body
     let emailSubject = '';
     let badgeText = '';
     let badgeColor = '';
@@ -220,7 +205,6 @@ export const handler: Handler = async (event) => {
       </html>
     `;
 
-    // 6. Send via standard Nodemailer SMTP
     if (SMTP_PASS) {
       const transporter = nodemailer.createTransport({
         host: SMTP_HOST,
@@ -240,13 +224,31 @@ export const handler: Handler = async (event) => {
       });
 
       console.log(`[email-notify] Email (${emailType}) sent via SMTP to ${userEmail}, messageId: ${info.messageId}`);
-      return { statusCode: 200, body: JSON.stringify({ status: 'sent', type: emailType, messageId: info.messageId }) };
+      return { statusCode: 200, body: { status: 'sent', type: emailType, messageId: info.messageId } };
     }
 
     console.log(`[email-notify] SMTP_PASS not set, logged email intent for ${userEmail} (${emailType})`);
-    return { statusCode: 200, body: JSON.stringify({ status: 'logged_no_smtp_pass', email: userEmail }) };
+    return { statusCode: 200, body: { status: 'logged_no_smtp_pass', email: userEmail } };
   } catch (err: any) {
     console.error('[email-notify] Unexpected error:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: err.message || 'Internal server error' }) };
+    return { statusCode: 500, body: { error: err.message || 'Internal server error' } };
   }
+}
+
+// Vercel Serverless Function handler
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+  const result = await processEmailNotify(req.headers, req.body);
+  return res.status(result.statusCode).json(result.body);
+}
+
+// Netlify Function compatibility handler
+export const netlifyHandler = async (event: any) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+  const result = await processEmailNotify(event.headers, event.body);
+  return { statusCode: result.statusCode, body: JSON.stringify(result.body) };
 };
