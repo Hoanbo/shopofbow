@@ -316,30 +316,30 @@ export default function Detail({ category, base, crumb }: Props) {
       </div>
 
       {/* Full Description Section */}
-      <div className="mt-8 rounded-[28px] border border-[#E7EEF8] bg-white p-6 sm:p-8 shadow-xs">
-        <h2 className="text-xl font-extrabold text-[#0F172A] sm:text-2xl">Giới thiệu sản phẩm</h2>
-        <p className="mt-3 text-sm sm:text-base leading-relaxed text-slate-600 font-medium">
+      <div className="mt-8 rounded-[28px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-xs">
+        <h2 className="text-xl font-extrabold text-[#0F172A] dark:text-white sm:text-2xl">Giới thiệu sản phẩm</h2>
+        <div className="mt-3 text-sm sm:text-base leading-relaxed text-slate-600 dark:text-slate-300 font-medium whitespace-pre-line">
           {item.longDescription}
-        </p>
+        </div>
       </div>
 
       {/* Product FAQs */}
       {faqs.length > 0 && (
-        <div className="mt-6 rounded-[28px] border border-[#E7EEF8] bg-white p-6 sm:p-8 shadow-xs">
-          <h2 className="text-xl font-extrabold text-[#0F172A] sm:text-2xl">Câu hỏi thường gặp</h2>
+        <div className="mt-6 rounded-[28px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-xs">
+          <h2 className="text-xl font-extrabold text-[#0F172A] dark:text-white sm:text-2xl">Câu hỏi thường gặp</h2>
           <div className="mt-4 space-y-3">
             {faqs.map((f, i) => (
               <details
                 key={i}
-                className="group rounded-[20px] border border-[#E7EEF8] p-4 transition-all duration-300 hover:border-blue-300"
+                className="group rounded-[20px] border border-[#E7EEF8] dark:border-slate-800 p-4 transition-all duration-300 hover:border-blue-300"
               >
-                <summary className="flex cursor-pointer items-center justify-between font-bold text-[#0F172A] text-sm sm:text-base">
+                <summary className="flex cursor-pointer items-center justify-between font-bold text-[#0F172A] dark:text-white text-sm sm:text-base">
                   {f.question}
-                  <span className="ml-3 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-50 text-[#2563EB] font-bold text-lg transition-transform duration-300 group-open:rotate-45">
+                  <span className="ml-3 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#35A8FF] font-bold text-lg transition-transform duration-300 group-open:rotate-45">
                     +
                   </span>
                 </summary>
-                <p className="mt-2.5 text-xs sm:text-sm leading-relaxed text-slate-600 font-medium">{f.answer}</p>
+                <p className="mt-2.5 text-xs sm:text-sm leading-relaxed text-slate-600 dark:text-slate-300 font-medium whitespace-pre-line">{f.answer}</p>
               </details>
             ))}
           </div>
