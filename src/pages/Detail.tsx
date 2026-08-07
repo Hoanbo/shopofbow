@@ -164,44 +164,122 @@ export default function Detail({ category, base, crumb }: Props) {
             {item.plans.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">Chọn gói nâng cấp:</h3>
-                <div className="mt-2.5 grid grid-cols-3 gap-3">
-                  {item.plans.map((p, i) => (
-                    <button
-                      key={`${p.label}-${i}`}
-                      onClick={() => setPlan(i)}
-                      className={`relative rounded-[20px] border p-3.5 text-center transition-all duration-300 ${plan === i
-                        ? 'border-[#2563EB] bg-[#EEF6FF] dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-md ring-2 ring-blue-500/20'
-                        : 'border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-blue-300'
+                <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {item.plans.map((p, i) => {
+                    const isSelected = plan === i;
+                    const badgeText = p.badge || (p.highlight ? 'Tốt nhất' : null);
+                    return (
+                      <button
+                        key={`${p.label}-${i}`}
+                        onClick={() => setPlan(i)}
+                        className={`relative rounded-[20px] border p-3.5 text-center transition-all duration-300 ${
+                          isSelected
+                            ? 'border-[#2563EB] bg-[#EEF6FF] dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-md ring-2 ring-blue-500/20'
+                            : 'border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-blue-300'
                         }`}
-                    >
-                      {p.highlight && (
-                        <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-2.5 py-0.5 text-[10px] font-bold text-white shadow-xs">
-                          Tốt nhất
+                      >
+                        {badgeText && (
+                          <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-xs whitespace-nowrap">
+                            {badgeText}
+                          </span>
+                        )}
+                        <span className={`block text-sm font-extrabold ${isSelected ? 'text-[#2563EB] dark:text-[#35A8FF]' : 'text-[#0F172A] dark:text-slate-200'}`}>
+                          {p.label}
+                        </span>
+                        {p.duration && (
+                          <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500 mt-0.5">
+                            {p.duration}
+                          </span>
+                        )}
+                        <span className={`mt-1.5 block text-sm font-black ${isSelected ? 'text-[#2563EB] dark:text-[#35A8FF]' : 'text-[#2563EB] dark:text-blue-400'}`}>
+                          {formatVND(p.price)}
+                        </span>
+
+                        {/* Optional Meta Chips (Only rendered if data exists) */}
+                        {(p.usageType || p.memberCount != null || p.profileType) && (
+                          <div className="mt-2 flex flex-wrap items-center justify-center gap-1 pt-1 border-t border-slate-100 dark:border-slate-800">
+                            {p.usageType && (
+                              <span className="inline-block rounded-md bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                {p.usageType}
+                              </span>
+                            )}
+                            {p.memberCount != null && (
+                              <span className="inline-block rounded-md bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                {p.memberCount} người
+                              </span>
+                            )}
+                            {p.profileType && (
+                              <span className="inline-block rounded-md bg-purple-50 dark:bg-purple-950/60 px-1.5 py-0.5 text-[10px] font-bold text-purple-600 dark:text-purple-400">
+                                {p.profileType}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Plan Information & Features Box */}
+                {active && (
+                  <div className="mt-4 rounded-[24px] border border-blue-100 dark:border-blue-900/40 bg-blue-50/40 dark:bg-blue-950/20 p-5 shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 dark:border-blue-900/30 pb-3">
+                      <h3 className="text-sm font-black text-[#0F172A] dark:text-white flex items-center gap-2">
+                        <span className="text-blue-600 dark:text-blue-400">ℹ️</span>
+                        <span>
+                          Thông tin chi tiết gói: <span className="text-[#2563EB] dark:text-[#35A8FF]">{active.label}</span>
+                        </span>
+                      </h3>
+                      {active.duration && (
+                        <span className="rounded-full bg-blue-100 dark:bg-blue-900/50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700 dark:text-blue-300">
+                          {active.duration}
                         </span>
                       )}
-                      <span className={`block text-sm font-extrabold ${plan === i ? 'text-[#2563EB] dark:text-[#35A8FF]' : 'text-[#0F172A] dark:text-slate-200'}`}>{p.label}</span>
-                      <span className="block text-xs font-medium text-slate-400 dark:text-slate-500">{p.duration}</span>
-                      <span className={`mt-1 block text-sm font-extrabold ${plan === i ? 'text-[#2563EB] dark:text-[#35A8FF]' : 'text-[#2563EB] dark:text-blue-400'}`}>
-                        {formatVND(p.price)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+                    </div>
 
-            {/* Key Features List */}
-            {item.features.length > 0 && (
-              <div className="mt-6 rounded-[24px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
-                <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">Tính năng nổi bật:</h3>
-                <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                  {item.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
-                      <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#2563EB] dark:text-[#35A8FF]" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
+                    {/* Render Features of the CURRENTLY SELECTED PLAN */}
+                    {((active.features && active.features.length > 0) || item.features.length > 0) && (
+                      <ul className="mt-3.5 grid gap-2.5 sm:grid-cols-2">
+                        {((active.features && active.features.length > 0) ? active.features : item.features).map((feat, idx) => (
+                          <li key={`${feat}-${idx}`} className="flex items-start gap-2.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#2563EB] dark:text-[#35A8FF]" />
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {/* Additional meta details if present */}
+                    {(active.usageType || active.memberCount != null || active.profileType) && (
+                      <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-blue-100 dark:border-blue-900/30 text-xs">
+                        {active.usageType && (
+                          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                            <span className="font-medium text-slate-400">Hình thức:</span>
+                            <span className="font-bold text-blue-600 dark:text-blue-400">{active.usageType}</span>
+                          </div>
+                        )}
+                        {active.memberCount != null && (
+                          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                            <span className="font-medium text-slate-400">Số thành viên:</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">{active.memberCount} người</span>
+                          </div>
+                        )}
+                        {active.profileType && (
+                          <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                            <span className="font-medium text-slate-400">Loại profile:</span>
+                            <span className="font-bold text-purple-600 dark:text-purple-400">{active.profileType}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {active.notes && (
+                      <div className="mt-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-900/50 p-2.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                        ⚠️ <strong>Lưu ý:</strong> {active.notes}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

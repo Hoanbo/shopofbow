@@ -69,6 +69,13 @@ export interface Database {
           is_highlight: boolean;
           sort_order: number;
           is_active: boolean;
+          badge?: string | null;
+          usage_type?: string | null;
+          member_count?: number | null;
+          profile_type?: string | null;
+          short_description?: string | null;
+          features?: string[] | null;
+          notes?: string | null;
         };
         Insert: Partial<Database['public']['Tables']['product_plans']['Row']>;
         Update: Partial<Database['public']['Tables']['product_plans']['Row']>;

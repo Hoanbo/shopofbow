@@ -166,13 +166,13 @@ export default function Header() {
 
   return (
     <header
-      className={`sticky top-0 z-50 border-b transition-all duration-300 backdrop-blur-md ${
+      className={`fixed top-0 left-0 right-0 w-full z-50 border-b transition-all duration-300 backdrop-blur-md ${
         scrolled
-          ? 'h-16 bg-white/85 dark:bg-slate-900/85 border-slate-200/80 dark:border-slate-800/80 shadow-xs'
-          : 'h-20 bg-white/95 dark:bg-slate-900/95 border-slate-100 dark:border-slate-800/40'
+          ? 'h-16 bg-white/90 dark:bg-[#0F172A]/90 border-slate-200/80 dark:border-slate-800/80 shadow-md'
+          : 'h-20 bg-white/95 dark:bg-[#0F172A]/95 border-slate-100 dark:border-slate-800/40'
       }`}
     >
-      <div className="container-bow h-full flex items-center justify-between gap-4 px-6">
+      <div className="container-bow h-full flex items-center justify-between gap-4">
         
         {/* APPLE-STYLE MOBILE SEARCH INPUT: Replaces logo & buttons when active */}
         {showMobileSearch ? (

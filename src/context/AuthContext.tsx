@@ -77,12 +77,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
 
     // Phục hồi session từ storage khi app khởi động.
-    // .finally() đảm bảo loading LUÔN kết thúc, kể cả khi getSession() lỗi
-    // (mạng/token hỏng) — tránh spinner loading vô hạn.
+    const cleanUrlHash = () => {
+      if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('error'))) {
+        setTimeout(() => {
+          if (window.location.hash) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+          }
+        }, 500);
+      }
+    };
+
     supabase.auth
       .getSession()
       .then(({ data }) => {
-        if (alive) setSession(data.session);
+        if (alive) {
+          setSession(data.session);
+          cleanUrlHash();
+        }
       })
       .catch((err) => {
         console.error('[Auth] getSession failed:', err);
@@ -97,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (alive) {
         setSession(s);
         setLoading(false);
+        cleanUrlHash();
       }
     });
 

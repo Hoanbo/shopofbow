@@ -7,8 +7,8 @@ export function Field({
   ...props
 }: { label: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-ink">{label}</span>
+    <label className="flex flex-col justify-end h-full">
+      <span className="mb-1.5 block text-xs sm:text-sm font-semibold text-ink leading-tight">{label}</span>
       <input
         {...props}
         className="h-11 w-full rounded-xl border border-brand-100 bg-white px-3 text-sm text-ink outline-none transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100 disabled:bg-brand-50/50"

@@ -72,11 +72,19 @@ const PRODUCT_COLS =
 
 function mapPlan(p: PlanRow): PlanTier {
   return {
+    id: p.id,
     label: p.name,
     duration: p.duration ?? '',
     price: Number(p.price ?? 0),
     originalPrice: p.original_price != null ? Number(p.original_price) : undefined,
     highlight: p.is_highlight || undefined,
+    badge: p.badge || undefined,
+    usageType: p.usage_type || undefined,
+    memberCount: p.member_count != null ? Number(p.member_count) : undefined,
+    profileType: p.profile_type || undefined,
+    shortDescription: p.short_description || undefined,
+    features: p.features && p.features.length > 0 ? p.features : undefined,
+    notes: p.notes || undefined,
   };
 }
 
