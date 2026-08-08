@@ -31,11 +31,11 @@ const adminSpinner = (
 const lazyAdmin = (el: ReactNode) => <Suspense fallback={adminSpinner}>{el}</Suspense>;
 
 const router = createBrowserRouter([
+  { path: '/login', element: <Auth /> },
   {
     element: <Layout />,
     children: [
       { path: '/', element: <Home /> },
-      { path: '/login', element: <Auth /> },
       { path: '/dashboard', element: <ClientDashboard /> },
       { path: '/ai-tools', element: <Navigate to="/products" replace /> },
       { path: '/ai-tools/:slug', element: <Detail category="ai-tool" base="/products" crumb="Sản phẩm" /> },

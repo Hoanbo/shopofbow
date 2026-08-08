@@ -1,9 +1,10 @@
 import { useState, type FormEvent, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { CheckIcon } from '../components/icons';
 import { mapAuthError } from '../lib/authErrors';
+import newLogo from '../assets/new-logover2.png';
 
 type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'forgot_otp' | 'update_password';
 
@@ -26,7 +27,7 @@ export default function Auth() {
     if (loading || !session) return;
     if (mode === 'forgot' || mode === 'forgot_otp' || mode === 'update_password') return;
 
-    const dest = loc.state?.from ?? (isAdmin ? '/admin' : '/dashboard');
+    const dest = loc.state?.from ?? (isAdmin ? '/admin' : '/');
     nav(dest, { replace: true });
   }, [session, loading, isAdmin, nav, loc.state?.from, mode]);
 
@@ -183,21 +184,40 @@ export default function Auth() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center bg-[#F5F9FF] dark:bg-[#0F172A]">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-100 border-t-[#2563EB]" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-200px)] items-center justify-center p-4">
+    <div className="relative flex min-h-dvh flex-col items-center justify-center bg-[#F5F9FF] dark:bg-[#0F172A] p-4 sm:p-6 transition-colors duration-300">
+      {/* Top Left Navigation Back to Home Button */}
+      <Link
+        to="/"
+        className="fixed top-4 left-4 sm:top-6 sm:left-6 z-50 inline-flex items-center gap-2 rounded-full border border-slate-200/80 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 shadow-md backdrop-blur-md hover:bg-slate-50 dark:hover:bg-slate-800 transition-all hover:scale-105 active:scale-95"
+      >
+        <span className="text-blue-600 dark:text-blue-400 text-sm">←</span>
+        <span>Quay lại trang chủ</span>
+      </Link>
+
       {/* Auth Card */}
-      <div className="w-full max-w-md transform rounded-[28px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 shadow-xl sm:p-8 animate-fade-up">
+      <div className="w-full max-w-md transform rounded-[28px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 shadow-2xl sm:p-8 animate-fade-up my-auto">
         {/* Header */}
         <div className="text-center">
-          <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] font-black text-xl shadow-xs">
-            B
-          </span>
+          <Link to="/" className="inline-flex items-center justify-center gap-2 mb-1">
+            <img
+              src={newLogo}
+              alt="BOW Logo"
+              className="h-10 sm:h-12 w-auto object-contain filter contrast-[1.12] drop-shadow-md"
+            />
+            <div className="flex flex-col text-left leading-none">
+              <span className="text-2xl font-black tracking-tight text-[#00A3FF]">BOW</span>
+              <span className="text-[8px] font-black uppercase tracking-widest text-[#FFB703]">
+                Let's Connect
+              </span>
+            </div>
+          </Link>
           <h1 className="mt-4 text-2xl font-black tracking-tight text-[#0F172A] dark:text-white">
             {mode === 'signin' && 'Chào mừng trở lại'}
             {mode === 'signup' && 'Tạo tài khoản mới'}

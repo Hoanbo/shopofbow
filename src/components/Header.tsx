@@ -505,6 +505,7 @@ export default function Header() {
               ) : (
                 <Link
                   to="/login"
+                  state={{ from: loc.pathname }}
                   className="shrink-0 inline-flex h-9 items-center justify-center whitespace-nowrap rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-3.5 sm:px-6 text-[11px] sm:text-xs font-black uppercase tracking-wide text-white shadow-[0_4px_12px_rgba(37,99,235,0.18)] hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-102 hover:shadow-[0_6px_16px_rgba(37,99,235,0.28)] transition-all duration-300"
                 >
                   Đăng nhập
