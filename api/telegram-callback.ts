@@ -1,4 +1,4 @@
-// netlify/functions/telegram-callback.ts
+// api/telegram-callback.ts — Vercel Serverless Function (+ Netlify-compatible export)
 // Nhận callback khi admin bấm nút inline trong Telegram (Hướng A).
 //   callback_data: "confirm:<order_id>"  -> pending_payment => pending_delivery
 //   callback_data: "cancel:<order_id>"   -> pending_payment => cancelled
@@ -7,50 +7,52 @@
 // Telegram gửi kèm header "X-Telegram-Bot-Api-Secret-Token" = TELEGRAM_WEBHOOK_SECRET
 // (thiết lập lúc setWebhook).
 //
-// Env (Netlify): TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET,
-//                SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// Env: TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET,
+//      SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
-import type { Handler } from '@netlify/functions';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
-const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET!;
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const TG = (method: string) => `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
 
-export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
-  }
-
+async function processTelegramCallback(
+  headers: Record<string, string | string[] | undefined>,
+  body: any,
+) {
   // ── Xác thực secret token của Telegram ────────────────────
-  const secret =
-    event.headers['x-telegram-bot-api-secret-token'] ||
-    event.headers['X-Telegram-Bot-Api-Secret-Token'] ||
-    '';
+  const secretRaw =
+    headers['x-telegram-bot-api-secret-token'] || headers['X-Telegram-Bot-Api-Secret-Token'] || '';
+  const secret = Array.isArray(secretRaw) ? secretRaw[0] : secretRaw;
   if (!TELEGRAM_WEBHOOK_SECRET || secret !== TELEGRAM_WEBHOOK_SECRET) {
     console.error('[telegram-callback] Unauthorized — sai secret token');
-    return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+    return { statusCode: 401, body: { error: 'Unauthorized' } };
   }
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error('[telegram-callback] Thiếu SUPABASE env');
-    return { statusCode: 500, body: JSON.stringify({ error: 'Supabase not configured' }) };
+    return { statusCode: 500, body: { error: 'Supabase not configured' } };
   }
 
-  let update: any;
-  try {
-    update = JSON.parse(event.body || '{}');
-  } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
+  let update: any = {};
+  if (typeof body === 'string') {
+    try {
+      update = JSON.parse(body || '{}');
+    } catch {
+      return { statusCode: 400, body: { error: 'Invalid JSON body' } };
+    }
+  } else if (typeof body === 'object' && body !== null) {
+    update = body;
   }
 
   const cb = update.callback_query;
   // Chỉ xử lý sự kiện bấm nút inline. Update khác -> bỏ qua (trả 200).
   if (!cb || !cb.data) {
-    return { statusCode: 200, body: JSON.stringify({ ok: true, ignored: true }) };
+    return { statusCode: 200, body: { ok: true, ignored: true } };
   }
 
   const callbackId = cb.id;
@@ -60,7 +62,7 @@ export const handler: Handler = async (event) => {
 
   if (!orderId || (action !== 'confirm' && action !== 'cancel')) {
     await answerCallback(callbackId, 'Yêu cầu không hợp lệ.');
-    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+    return { statusCode: 200, body: { ok: true } };
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -76,7 +78,7 @@ export const handler: Handler = async (event) => {
 
   if (findErr || !order) {
     await answerCallback(callbackId, 'Không tìm thấy đơn hàng.');
-    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+    return { statusCode: 200, body: { ok: true } };
   }
 
   // ── Idempotency guard: chỉ xử lý khi đơn còn pending_payment ──
@@ -86,7 +88,7 @@ export const handler: Handler = async (event) => {
     await answerCallback(callbackId, `Đơn đã được xử lý trước đó (${statusLabel(order.status)}).`);
     // Cập nhật lại nút cho khớp trạng thái thực tế (gỡ nút)
     await editMarkupResolved(chatId, messageId, order, order.status);
-    return { statusCode: 200, body: JSON.stringify({ ok: true, already: order.status }) };
+    return { statusCode: 200, body: { ok: true, already: order.status } };
   }
 
   const nextStatus = action === 'confirm' ? 'pending_delivery' : 'cancelled';
@@ -100,21 +102,11 @@ export const handler: Handler = async (event) => {
   if (updErr) {
     console.error('[telegram-callback] Lỗi cập nhật đơn:', updErr);
     await answerCallback(callbackId, 'Lỗi cập nhật đơn hàng, thử lại sau.');
-    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+    return { statusCode: 200, body: { ok: true } };
   }
 
-  // Tạo thông báo admin trong DB (để chuông web cũng thấy)
-  await supabase.from('notifications').insert({
-    type: action === 'confirm' ? 'order_confirmed' : 'order_cancelled',
-    title: action === 'confirm' ? 'Đã duyệt thủ công (Telegram)' : 'Đã hủy đơn (Telegram)',
-    message:
-      action === 'confirm'
-        ? `Đơn ${order.payment_code} — ${order.product_name} đã được xác nhận thanh toán thủ công.`
-        : `Đơn ${order.payment_code} — ${order.product_name} đã bị hủy qua Telegram.`,
-    order_id: order.id,
-    is_admin: true,
-    is_read: false,
-  });
+  // Ghi chú: KHÔNG insert notification thủ công ở đây — trigger tg_notify_order()
+  // trên bảng orders sẽ tự tạo thông báo (user + admin) + gửi Telegram khi status đổi.
 
   await answerCallback(
     callbackId,
@@ -122,7 +114,23 @@ export const handler: Handler = async (event) => {
   );
   await editMarkupResolved(chatId, messageId, order, nextStatus, 'manual');
 
-  return { statusCode: 200, body: JSON.stringify({ ok: true, status: nextStatus }) };
+  return { statusCode: 200, body: { ok: true, status: nextStatus } };
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+  const result = await processTelegramCallback(req.headers, req.body);
+  return res.status(result.statusCode).json(result.body);
+}
+
+export const netlifyHandler = async (event: any) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+  const result = await processTelegramCallback(event.headers, event.body);
+  return { statusCode: result.statusCode, body: JSON.stringify(result.body) };
 };
 
 // Trả lời popup nhỏ trên Telegram cho admin

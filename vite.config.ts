@@ -48,11 +48,14 @@ export default defineConfig(({ mode }) => {
                   const compiled = transformSync(fileCode, { loader: 'ts', format: 'cjs' });
 
                   // Execute CJS in isolated module wrapper
-                  const mod: { exports: { handler?: any } } = { exports: {} };
+                  const mod: { exports: { netlifyHandler?: any; handler?: any; default?: any } } = { exports: {} };
                   const wrapper = Function('module', 'exports', 'require', 'process', compiled.code);
                   wrapper(mod, mod.exports, nodeRequire, process);
 
-                  const handler = mod.exports.handler;
+                  // Các file api/*.ts export `netlifyHandler` (chữ ký Netlify:
+                  // { httpMethod, headers, body }) bên cạnh `default` (Vercel).
+                  // Ưu tiên netlifyHandler vì proxy gọi theo chữ ký Netlify bên dưới.
+                  const handler = mod.exports.netlifyHandler || mod.exports.handler;
                   if (typeof handler !== 'function') {
                     throw new Error('Handler function not exported');
                   }
