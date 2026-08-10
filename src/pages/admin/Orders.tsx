@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { SearchIcon } from '../../components/icons';
@@ -40,6 +41,8 @@ const getStatusBadge = (status: Order['status']) => {
 };
 
 export default function AdminOrders() {
+  const [searchParams] = useSearchParams();
+  const targetOrderId = searchParams.get('order_id');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -75,12 +78,21 @@ export default function AdminOrders() {
         .select('*, profiles!orders_user_profile_fk(email, full_name)') as any)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      if (data) {
+      // Keep the order list usable even if the embedded profiles relationship
+      // is temporarily stale in PostgREST. The order itself is the source of truth.
+      let orderData = data;
+      if (error) {
+        const fallback = await (supabase.from('orders') as any)
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (fallback.error) throw error;
+        orderData = fallback.data;
+      }
+      if (orderData) {
         // Find expired pending_payment orders (older than 15 minutes)
         const now = Date.now();
         const expiredIds: string[] = [];
-        const processedData = data.map((o: any) => {
+        const processedData = orderData.map((o: any) => {
           if (o.status === 'pending_payment') {
             const expiresAt = new Date(o.created_at).getTime() + 15 * 60 * 1000;
             if (expiresAt < now) {
@@ -281,6 +293,20 @@ export default function AdminOrders() {
     setCurrentPage(1);
   }, [filterStatus, searchQuery]);
 
+  // A notification links to the exact order. Clear stale filters/pagination
+  // and bring that order into view instead of leaving the admin on a hidden page.
+  useEffect(() => {
+    // Do not report a missing order during the initial empty/loading state.
+    if (!targetOrderId || loading || orders.length === 0) return;
+    const index = orders.findIndex((o) => o.id === targetOrderId);
+    setFilterStatus('all');
+    setSearchQuery('');
+    setCurrentPage(index >= 0 ? Math.floor(index / ORDERS_PER_PAGE) + 1 : 1);
+    if (index >= 0) {
+      window.setTimeout(() => document.getElementById(`admin-order-${targetOrderId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+    }
+  }, [targetOrderId, loading, orders]);
+
   // Filter and search logic
   const filteredOrders = orders.filter((o) => {
     const matchesStatus = filterStatus === 'all' || o.status === filterStatus;
@@ -361,7 +387,7 @@ export default function AdminOrders() {
       ) : (
         <div className="space-y-4 animate-fade-in">
           {paginatedOrders.map((o) => (
-            <div key={o.id} className="rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-6 shadow-xs flex flex-col gap-4">
+            <div id={`admin-order-${o.id}`} key={o.id} className={`rounded-[24px] border ${o.id === targetOrderId ? 'border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900/60' : 'border-[#E8F1FF] dark:border-[#1E2A4A]/50'} bg-white dark:bg-[#131C32] p-6 shadow-xs flex flex-col gap-4`}>
               {/* Header info */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-50 dark:border-slate-800/60 pb-4">
                 <div>

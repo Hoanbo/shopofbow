@@ -162,7 +162,9 @@ async function processSepayWebhook(headers: Record<string, string | string[] | u
       is_read: false,
     });
 
-    await notifyTelegram(paymentCode, order, amount, false);
+    // Telegram cho đơn mua hàng thường được gửi duy nhất bởi trigger
+    // tg_notify_order() khi status chuyển sang pending_delivery.
+    // Chỉ đơn nạp ví ở nhánh trên mới gửi trực tiếp vì trigger cố ý bỏ qua topup.
     return { statusCode: 200, body: { success: true, message: 'Đã xác nhận thanh toán đơn hàng', paymentCode, status: 'pending_delivery' } };
   }
 }

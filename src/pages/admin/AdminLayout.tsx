@@ -65,7 +65,7 @@ export default function AdminLayout() {
   };
 
   // ── Real Notifications from DB ──────────────────────────────
-  type Notif = { id: string; title: string; message: string; is_read: boolean; created_at: string };
+  type Notif = { id: string; title: string; message: string; order_id?: string | null; is_read: boolean; created_at: string };
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -75,7 +75,7 @@ export default function AdminLayout() {
   const fetchNotifs = async () => {
     const { data } = await (supabase
       .from('notifications')
-      .select('id, title, message, is_read, created_at')
+      .select('id, title, message, order_id, is_read, created_at')
       .eq('is_admin', true)
       .order('created_at', { ascending: false })
       .limit(30) as any);
@@ -89,6 +89,19 @@ export default function AdminLayout() {
       .eq('is_admin', true)
       .eq('is_read', false);
     setNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
+  };
+
+  const openOrderFromNotification = async (notification: Notif) => {
+    if (!notification.is_read) {
+      await (supabase.from('notifications') as any)
+        .update({ is_read: true })
+        .eq('id', notification.id);
+      setNotifs((prev) => prev.map((n) => n.id === notification.id ? { ...n, is_read: true } : n));
+    }
+    setShowNotifications(false);
+    nav(notification.order_id
+      ? `/admin/orders?order_id=${encodeURIComponent(notification.order_id)}`
+      : '/admin/orders');
   };
 
   // Format relative time
@@ -257,11 +270,11 @@ export default function AdminLayout() {
                       {notifs.length === 0 ? (
                         <div className="py-8 text-center text-xs text-slate-400 font-medium">Chưa có thông báo nào</div>
                       ) : notifs.map((n) => (
-                        <div key={n.id} className={`px-4 py-3 space-y-0.5 transition-colors ${ !n.is_read ? 'bg-blue-50/60 dark:bg-blue-950/20' : '' }`}>
+                        <button type="button" key={n.id} onClick={() => openOrderFromNotification(n)} className={`block w-full px-4 py-3 text-left space-y-0.5 transition-colors hover:bg-blue-50 dark:hover:bg-blue-950/20 ${ !n.is_read ? 'bg-blue-50/60 dark:bg-blue-950/20' : '' }`}>
                           <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug">{n.title}</p>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">{n.message}</p>
                           <span className="text-[10px] text-slate-400 font-medium">{relTime(n.created_at)}</span>
-                        </div>
+                        </button>
                       ))}
                     </div>
                     <div className="border-t border-slate-100 dark:border-slate-800 p-2.5 text-center bg-slate-50/50 dark:bg-slate-900/50">

@@ -8,8 +8,6 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SITE_URL = process.env.VITE_APP_URL || 'https://shopofbow.vercel.app';
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
@@ -94,29 +92,6 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
     const userEmail = userData.user.email;
     const formattedPrice = Number(order.price || 0).toLocaleString('vi-VN') + 'đ';
     const emailType = payload.type || (order.status === 'refunded' ? 'refunded' : 'completed');
-
-    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-      try {
-        let tgText = '';
-        if (emailType === 'refunded') {
-          tgText = `💸 <b>ĐÃ HOÀN TIỀN ĐƠN HÀNG VỀ VÍ</b>\n\n📦 <b>Mã đơn:</b> <code>#${order.payment_code}</code>\n👤 <b>Khách hàng:</b> ${userEmail}\n🛍 <b>Sản phẩm:</b> ${order.product_name} (${order.plan_label})\n💰 <b>Số tiền hoàn:</b> ${formattedPrice}\n🔄 <b>Trạng thái:</b> Đã hoàn tiền về ví cho khách hàng!`;
-        } else {
-          tgText = `🎉 <b>ĐƠN HÀNG ĐÃ BÀN GIAO HOÀN TẤT</b>\n\n📦 <b>Mã đơn:</b> <code>#${order.payment_code}</code>\n👤 <b>Khách hàng:</b> ${userEmail}\n🛍 <b>Sản phẩm:</b> ${order.product_name} (${order.plan_label})\n💰 <b>Giá trị:</b> ${formattedPrice}\n✅ <b>Trạng thái:</b> Đã bàn giao tài khoản thành công cho khách!`;
-        }
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: TELEGRAM_CHAT_ID,
-            text: tgText,
-            parse_mode: 'HTML',
-          }),
-        });
-        console.log(`[email-notify] Telegram notification sent to Chat ID ${TELEGRAM_CHAT_ID}`);
-      } catch (tgErr) {
-        console.warn('[email-notify] Telegram send error:', tgErr);
-      }
-    }
 
     let emailSubject = '';
     let badgeText = '';
