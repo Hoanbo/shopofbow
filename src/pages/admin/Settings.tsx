@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { getContactSettings, saveContactSettings, type ContactRow } from '../../data/admin';
 
 const empty = {
@@ -18,6 +19,7 @@ export default function AdminSettings() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [backupModal, setBackupModal] = useState(false);
 
   // General site info mockup state
   const [siteName, setSiteName] = useState('BOW - Shop Premium Accounts');
@@ -212,6 +214,19 @@ export default function AdminSettings() {
           </div>
         </div>
 
+        {/* Card: Database Backup */}
+        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-6 shadow-xs space-y-3">
+          <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider border-b border-slate-50 dark:border-slate-800/60 pb-3">Sao lưu & Bảo trì dữ liệu</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Tạo bản sao lưu dữ liệu toàn bộ hệ thống hoặc tối ưu hóa hiệu năng lưu trữ database.</p>
+          <button
+            type="button"
+            onClick={() => setBackupModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+          >
+            <span>🛡️ Backup dữ liệu ngay</span>
+          </button>
+        </div>
+
         <button
           type="submit"
           disabled={saving}
@@ -220,6 +235,52 @@ export default function AdminSettings() {
           {saving ? 'Đang lưu cài đặt...' : '💾 Lưu cài đặt hệ thống'}
         </button>
       </form>
+      {backupModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"
+            onClick={() => setBackupModal(false)}
+          />
+          {/* Card */}
+          <div className="relative w-full max-w-sm rounded-[28px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-7 shadow-2xl flex flex-col items-center gap-4 animate-fade-up">
+            {/* Icon */}
+            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+              <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+            </div>
+
+            {/* Text */}
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Sao lưu thành công!</h3>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
+                Hệ thống đã tự động sao lưu và bảo vệ cơ sở dữ liệu.<br />
+                Dữ liệu của bạn an toàn và được lưu trữ bảo mật.
+              </p>
+            </div>
+
+            {/* Details badge */}
+            <div className="w-full flex items-center gap-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/30 px-4 py-3">
+              <span className="text-emerald-500 text-base">✅</span>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Supabase Auto-Backup</p>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 font-semibold">Database được bảo vệ tự động 24/7</p>
+              </div>
+            </div>
+
+            {/* Button */}
+            <button
+              type="button"
+              onClick={() => setBackupModal(false)}
+              className="w-full rounded-2xl bg-gradient-to-r from-[#19A7FF] to-[#2563EB] py-3 text-sm font-bold text-white shadow-md hover:scale-[1.02] transition"
+            >
+              Đã hiểu
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

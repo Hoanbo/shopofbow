@@ -50,7 +50,7 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
     return { statusCode: 401, body: { error: 'Unauthorized' } };
   }
 
-  let payload: { order_id?: string; type?: 'completed' | 'refunded' } = {};
+  let payload: { order_id?: string; type?: 'completed' | 'refunded' | 'processing' } = {};
   if (typeof body === 'string') {
     try {
       payload = JSON.parse(body || '{}');
@@ -91,7 +91,7 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
 
     const userEmail = userData.user.email;
     const formattedPrice = Number(order.price || 0).toLocaleString('vi-VN') + 'đ';
-    const emailType = payload.type || (order.status === 'refunded' ? 'refunded' : 'completed');
+    const emailType = payload.type || (order.status === 'refunded' ? 'refunded' : order.status === 'processing' ? 'processing' : 'completed');
 
     let emailSubject = '';
     let badgeText = '';
@@ -109,6 +109,14 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
       descHtml = `Số tiền <strong style="color: #f59e0b;">${formattedPrice}</strong> của đơn hàng <strong style="color: #ffffff;">${order.product_name}</strong> đã được cộng lại 100% vào số dư ví cá nhân của bạn.`;
       btnText = '💳 KIỂM TRA SỐ DƯ VÍ TRÊN WEB';
       btnUrl = `${SITE_URL}/dashboard?tab=wallet`;
+    } else if (emailType === 'processing') {
+      emailSubject = `⚙️ [BOW] Đơn hàng #${order.payment_code} đang được thiết lập / xử lý!`;
+      badgeText = 'ĐANG THIẾT LẬP';
+      badgeColor = 'background: rgba(99, 102, 241, 0.15); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.3);';
+      titleText = '⚙️ Đơn hàng của bạn đang được xử lý!';
+      descHtml = `Đơn hàng dịch vụ <strong style="color: #ffffff;">${order.product_name}</strong> của bạn đã được tiếp nhận. Nhân viên kỹ thuật BOW đang bắt đầu khởi tạo và thiết lập tài khoản. Vui lòng chờ trong giây lát.`;
+      btnText = '📦 XEM TRẠNG THÁI ĐƠN HÀNG TRÊN WEB';
+      btnUrl = `${SITE_URL}/dashboard?tab=orders`;
     } else {
       emailSubject = `🎉 [BOW] Đơn hàng #${order.payment_code} đã được bàn giao thành công!`;
       badgeText = 'BÀN GIAO THÀNH CÔNG';
@@ -160,7 +168,7 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
             </div>
             <div class="row">
               <span class="label">Trạng thái:</span>
-              <span class="value" style="color: #38bdf8;">${emailType === 'refunded' ? 'Đã hoàn tiền về ví' : 'Đã bàn giao'}</span>
+              <span class="value" style="color: #38bdf8;">${emailType === 'refunded' ? 'Đã hoàn tiền về ví' : emailType === 'processing' ? 'Đang thiết lập' : 'Đã bàn giao'}</span>
             </div>
           </div>
 

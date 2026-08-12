@@ -10,6 +10,11 @@ import type { ProductType } from '../../lib/database.types';
 import { SearchIcon } from '../../components/icons';
 import { useToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { Pagination } from '../../components/admin/Pagination';
+
+const CATEGORIES_PER_PAGE = 6;
+
+
 
 const slugify = (s: string) =>
   s
@@ -26,10 +31,12 @@ export default function AdminCategories() {
   const [err, setErr] = useState<string | null>(null);
   const toast = useToast();
   
-  // Filters & Searches State
+  // Filters, Searches & Pagination State
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'sort_order' | 'name'>('sort_order');
+  const [currentPage, setCurrentPage] = useState(1);
+
 
   // Modal States
   const [showModal, setShowModal] = useState(false);
@@ -159,6 +166,12 @@ export default function AdminCategories() {
       }
     });
 
+  // Reset to page 1 when filter/search changes
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, filterType, sortBy]);
+
+  const totalCatPages = Math.ceil(processedRows.length / CATEGORIES_PER_PAGE) || 1;
+  const paginatedRows = processedRows.slice((currentPage - 1) * CATEGORIES_PER_PAGE, currentPage * CATEGORIES_PER_PAGE);
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -262,7 +275,7 @@ export default function AdminCategories() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8F1FF] dark:divide-[#1E2A4A]/30">
-                {processedRows.map((c) => (
+                {paginatedRows.map((c) => (
                   <tr key={c.id} className="hover:bg-[#F5FAFF]/50 dark:hover:bg-slate-800/10 transition-colors duration-150">
                     <td className="px-6 py-4 font-extrabold text-slate-900 dark:text-white">
                       {c.name}
@@ -387,6 +400,15 @@ export default function AdminCategories() {
           </form>
         </div>
       )}
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalCatPages}
+        totalItems={processedRows.length}
+        itemsPerPage={CATEGORIES_PER_PAGE}
+        itemLabel="danh mục"
+        onPageChange={setCurrentPage}
+      />
 
       <ConfirmModal
         isOpen={confirmConfig.isOpen}

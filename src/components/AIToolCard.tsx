@@ -10,21 +10,21 @@ export default function AIToolCard({ item }: Props) {
   return (
     <Link
       to={`/products/${item.slug}`}
-      className="group flex flex-col items-center justify-between rounded-[28px] border border-[#E7EEF8] bg-white p-5 sm:p-6 shadow-[0_6px_24px_rgba(0,0,0,0.03)] transition-all duration-300 hover:-translate-y-2 hover:scale-[1.03] hover:border-blue-300 hover:shadow-[0_16px_36px_rgba(0,140,255,0.15)] text-center"
+      className="group flex flex-col items-center justify-between h-full rounded-2xl sm:rounded-[28px] border border-[#E7EEF8] dark:border-slate-800/80 bg-white dark:bg-slate-900 p-2 xs:p-2.5 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.02] hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-[0_12px_30px_rgba(0,140,255,0.12)] text-center"
     >
       <div className="flex flex-col items-center w-full min-w-0">
-        {/* App Logo ~80x80 */}
         <AppLogo
           slug={item.slug}
           name={item.name}
           image={item.image}
-          className="h-[70px] w-[70px] sm:h-[80px] sm:w-[80px] transition-transform duration-300 group-hover:scale-105"
+          className="h-13 w-13 xs:h-15 xs:w-15 sm:h-[80px] sm:w-[80px] transition-transform duration-300 group-hover:scale-105"
         />
-        <h3 className="mt-3.5 w-full truncate text-sm font-extrabold text-[#0F172A] sm:mt-4.5 sm:text-base">{item.name}</h3>
+        <h3 className="mt-1.5 w-full truncate text-[10px] xs:text-xs font-extrabold text-[#0F172A] dark:text-white sm:mt-4 sm:text-base leading-tight">
+          {item.name}
+        </h3>
       </div>
 
-      {/* Prominent Gradient Blue Pill Button */}
-      <span className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-2 px-4 text-xs font-bold text-white shadow-md transition-all duration-300 group-hover:from-[#0080E0] group-hover:to-[#1D4ED8] group-hover:shadow-lg sm:mt-5 sm:py-2.5 sm:text-sm">
+      <span className="mt-2 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-1 px-1 text-[8.5px] xs:text-[9.5px] font-bold text-white shadow-xs transition-all duration-300 group-hover:from-[#0080E0] group-hover:to-[#1D4ED8] sm:mt-5 sm:py-2.5 sm:px-4 sm:text-sm">
         Xem chi tiết &gt;
       </span>
     </Link>

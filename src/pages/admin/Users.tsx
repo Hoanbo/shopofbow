@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
+import { Pagination } from '../../components/admin/Pagination';
+
+const USERS_PER_PAGE = 6;
+
+
 
 interface UserRow {
   id: string;
@@ -28,7 +33,9 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const toast = useToast();
+
 
   // Edit User modal state
   const [editUser, setEditUser] = useState<UserRow | null>(null);
@@ -185,7 +192,14 @@ export default function AdminUsers() {
     );
   });
 
+  const totalUserPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE) || 1;
+  const paginatedUsers = filteredUsers.slice((currentPage - 1) * USERS_PER_PAGE, currentPage * USERS_PER_PAGE);
+
+  // Reset page when search changes
+  useEffect(() => { setCurrentPage(1); }, [searchQuery]);
+
   const totalBalance = users.reduce((sum, u) => sum + Number(u.balance || 0), 0);
+
 
   return (
     <div className="space-y-6">
@@ -263,7 +277,7 @@ export default function AdminUsers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8F1FF] dark:divide-slate-800">
-                {filteredUsers.map((u) => (
+                {paginatedUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition">
                     {/* KHÁCH HÀNG */}
                     <td className="px-4 py-3.5">
@@ -358,6 +372,15 @@ export default function AdminUsers() {
           </div>
         )}
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalUserPages}
+        totalItems={filteredUsers.length}
+        itemsPerPage={USERS_PER_PAGE}
+        itemLabel="người dùng"
+        onPageChange={setCurrentPage}
+      />
 
       {/* MODAL EDIT USER */}
       {editUser && (

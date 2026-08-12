@@ -3,6 +3,11 @@ import { listFaqs, createFaq, updateFaq, deleteFaq, type FaqRow } from '../../da
 import { SearchIcon } from '../../components/icons';
 import { useToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { Pagination } from '../../components/admin/Pagination';
+
+const FAQS_PER_PAGE = 6;
+
+
 
 export default function AdminFaqs() {
   const [rows, setRows] = useState<FaqRow[]>([]);
@@ -10,10 +15,12 @@ export default function AdminFaqs() {
   const [err, setErr] = useState<string | null>(null);
   const toast = useToast();
   
-  // Search & Form States
+  // Search, Form & Pagination States
   const [searchQuery, setSearchQuery] = useState('');
   const [draft, setDraft] = useState({ question: '', answer: '' });
   const [busy, setBusy] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,11 +98,16 @@ export default function AdminFaqs() {
     }
   };
 
-  // Filtered rows
+  // Filtered & paginated rows
   const filteredRows = rows.filter((f) =>
     f.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
     f.answer.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const totalPages = Math.ceil(filteredRows.length / FAQS_PER_PAGE) || 1;
+  const paginatedRows = filteredRows.slice((currentPage - 1) * FAQS_PER_PAGE, currentPage * FAQS_PER_PAGE);
+
+  // Reset page when search changes
+  useEffect(() => { setCurrentPage(1); }, [searchQuery]);
 
   return (
     <div className="space-y-6">
@@ -172,12 +184,21 @@ export default function AdminFaqs() {
           </div>
         ) : (
           <div className="space-y-4 divide-y divide-slate-50 dark:divide-slate-800/40">
-            {filteredRows.map((f, idx) => (
+            {paginatedRows.map((f, idx) => (
               <FaqItem key={f.id} row={f} onSave={saveEdit} onDelete={onDelete} isFirst={idx === 0} />
             ))}
           </div>
         )}
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredRows.length}
+        itemsPerPage={FAQS_PER_PAGE}
+        itemLabel="câu hỏi"
+        onPageChange={setCurrentPage}
+      />
 
       <ConfirmModal
         isOpen={confirmConfig.isOpen}

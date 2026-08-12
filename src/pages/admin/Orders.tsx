@@ -146,11 +146,28 @@ export default function AdminOrders() {
     };
   }, []);
 
+  const targetStatus = searchParams.get('status');
+  useEffect(() => {
+    if (targetStatus) {
+      setFilterStatus(targetStatus);
+    }
+  }, [targetStatus]);
+
   const handleUpdateStatus = (orderId: string, status: Order['status']) => {
+    const statusLabelMap: Record<string, string> = {
+      processing: 'Đang thiết lập (Đang xử lý)',
+      cancelled: 'Đã hủy',
+      pending_delivery: 'Chờ bàn giao',
+      pending_payment: 'Chờ thanh toán',
+      completed: 'Đã hoàn thành',
+      refunded: 'Đã hoàn tiền',
+    };
+    const targetLabel = statusLabelMap[status] || status;
+
     setConfirmConfig({
       isOpen: true,
-      title: 'Xác nhận cập nhật',
-      message: `Xác nhận cập nhật trạng thái đơn hàng sang "${status}"?`,
+      title: 'Xác nhận chuyển trạng thái',
+      message: `Xác nhận chuyển đơn hàng sang trạng thái "${targetLabel}"?`,
       confirmText: 'Xác nhận',
       variant: 'primary',
       onConfirm: async () => {
@@ -160,6 +177,20 @@ export default function AdminOrders() {
             .update({ status })
             .eq('id', orderId);
           if (error) throw error;
+
+          if (status === 'processing') {
+            const emailRes = await sendOrderEmail(orderId, 'processing');
+            if (emailRes.email_sent) {
+              toast.success('⚙️ Đã báo đang xử lý đơn và gửi email thông báo cho khách!');
+            } else if (emailRes.message === 'logged_no_smtp_pass') {
+              toast.success('⚙️ Đã chuyển đơn hàng sang đang xử lý! (Cần thêm SMTP_PASS vào .env để gửi email thực tế)');
+            } else {
+              toast.success('⚙️ Đã chuyển đơn hàng sang đang xử lý!');
+            }
+          } else {
+            toast.success(`Đã cập nhật trạng thái đơn sang "${targetLabel}"!`);
+          }
+
           fetchOrders();
           setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
         } catch (err: any) {
@@ -171,7 +202,7 @@ export default function AdminOrders() {
     });
   };
 
-  const sendOrderEmail = async (orderId: string, type: 'completed' | 'refunded'): Promise<{ email_sent: boolean; message?: string }> => {
+  const sendOrderEmail = async (orderId: string, type: 'completed' | 'refunded' | 'processing'): Promise<{ email_sent: boolean; message?: string }> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
@@ -219,7 +250,7 @@ export default function AdminOrders() {
 
       if (error) throw error;
 
-      // Step 2: In-App Notification is created automatically via DB Trigger (tg_notify_order)
+      // Step 2: In-App Notification & Telegram Notification are created automatically via DB Trigger (tg_notify_order)
 
       // Step 3: Send delivery email & wait for attempt to finish
       const emailRes = await sendOrderEmail(deliveryOrder.id, 'completed');
@@ -259,7 +290,6 @@ export default function AdminOrders() {
           });
           if (error) throw error;
           if (data === 'success') {
-            // Trigger refund notification email to user
             const emailRes = await sendOrderEmail(orderId, 'refunded');
             if (emailRes.email_sent) {
               toast.success('Hoàn tiền về ví thành công và đã gửi email thông báo!');

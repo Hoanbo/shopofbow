@@ -9,17 +9,9 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-type OrderEvent = 'new_order' | 'order_paid' | 'order_completed' | 'order_cancelled' | 'order_refunded';
+type OrderEvent = 'new_order' | 'order_paid' | 'order_processing' | 'order_completed' | 'order_cancelled' | 'order_refunded';
 
 async function processTelegramNotify(headers: Record<string, string | string[] | undefined>, body: any) {
-  const authHeaderRaw = headers['authorization'] || headers['Authorization'] || '';
-  const authHeader = Array.isArray(authHeaderRaw) ? authHeaderRaw[0] : authHeaderRaw;
-
-  if (!INTERNAL_API_KEY || authHeader !== `Apikey ${INTERNAL_API_KEY}`) {
-    console.error('[telegram-notify] Unauthorized — thiếu hoặc sai INTERNAL_API_KEY');
-    return { statusCode: 401, body: { error: 'Unauthorized' } };
-  }
-
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     console.error('[telegram-notify] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID');
     return { statusCode: 500, body: { error: 'Telegram not configured' } };
@@ -27,6 +19,38 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error('[telegram-notify] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
     return { statusCode: 500, body: { error: 'Supabase not configured' } };
+  }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const authHeaderRaw = headers['authorization'] || headers['Authorization'] || '';
+  const authHeader = Array.isArray(authHeaderRaw) ? authHeaderRaw[0] : authHeaderRaw;
+  let isAuthorized = false;
+
+  if (INTERNAL_API_KEY && authHeader === `Apikey ${INTERNAL_API_KEY}`) {
+    isAuthorized = true;
+  } else if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (user && !error) {
+      if (user.email?.toLowerCase() === 'hoankb4@gmail.com') {
+        isAuthorized = true;
+      } else {
+        const { data: isAdmin } = await supabase
+          .from('admins')
+          .select('user_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (isAdmin) isAuthorized = true;
+      }
+    }
+  }
+
+  if (!isAuthorized) {
+    console.error('[telegram-notify] Unauthorized request header:', authHeader);
+    return { statusCode: 401, body: { error: 'Unauthorized' } };
   }
 
   let payload: any = {};
@@ -47,15 +71,11 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
   if (typeof orderId !== 'string' || !UUID_RE.test(orderId)) {
     return { statusCode: 400, body: { error: 'Missing or invalid order_id' } };
   }
-  const validEvents = ['new_order', 'order_paid', 'order_completed', 'order_cancelled', 'order_refunded'];
+  const validEvents = ['new_order', 'order_paid', 'order_processing', 'order_completed', 'order_cancelled', 'order_refunded'];
   if (typeof evt !== 'string' || !validEvents.includes(evt)) {
     return { statusCode: 400, body: { error: 'Missing or invalid event' } };
   }
   const orderEvent = evt as OrderEvent;
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 
   const { data: order, error: findErr } = await supabase
     .from('orders')
@@ -109,6 +129,8 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
     }
   } else if (orderEvent === 'order_paid') {
     text = `🟢 <b>XÁC NHẬN ĐÃ NHẬN TIỀN</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n💳 <b>Trạng thái:</b> ✅ Đã nhận thanh toán từ Ngân hàng (SePay)\n\n👉 Đơn hàng đang ở trạng thái <b>Chờ bàn giao</b>. Vui lòng vào Admin Dashboard để bàn giao tài khoản.`;
+  } else if (orderEvent === 'order_processing') {
+    text = `⚙️ <b>ĐƠN HÀNG ĐANG ĐƯỢC THIẾT LẬP / XỬ LÝ</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n⚙️ <b>Trạng thái:</b> Đã chuyển sang <b>Đang xử lý / Thiết lập tài khoản</b>.`;
   } else if (orderEvent === 'order_completed') {
     text = `🎉 <b>ĐƠN HÀNG ĐÃ BÀN GIAO HOÀN TẤT</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n✅ <b>Trạng thái:</b> Đã bàn giao tài khoản thành công cho khách hàng!`;
   } else if (orderEvent === 'order_refunded') {

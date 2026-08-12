@@ -6,6 +6,8 @@ import type { ProductType } from '../../lib/database.types';
 import { SearchIcon } from '../../components/icons';
 import { useToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { Pagination } from '../../components/admin/Pagination';
+
 
 type Filter = 'all' | ProductType;
 
@@ -16,13 +18,18 @@ const filters: { key: Filter; label: string }[] = [
   { key: 'product', label: 'Sản phẩm' },
 ];
 
+const PRODUCTS_PER_PAGE = 6;
+
+
 export default function AdminProducts() {
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [type, setType] = useState<Filter>('all');
   const [q, setQ] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const toast = useToast();
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,6 +48,10 @@ export default function AdminProducts() {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load]);
+
+  // Reset to page 1 when filter/search changes
+  useEffect(() => { setCurrentPage(1); }, [type, q]);
+
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -165,14 +176,17 @@ export default function AdminProducts() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8F1FF] dark:divide-[#1E2A4A]/30">
-                {rows.map((row) => (
+                {rows.slice((currentPage - 1) * PRODUCTS_PER_PAGE, currentPage * PRODUCTS_PER_PAGE).map((row) => (
                   <tr key={row.id} className="hover:bg-[#F5FAFF]/50 dark:hover:bg-slate-800/10 transition-colors duration-150">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3.5">
                         <img
-                          src={row.logo_url ?? '/assets/bowLogo.jpeg'}
+                          src={row.logo_url ?? '/assets/logos/bowLogo.jpeg'}
                           alt=""
                           className="h-10 w-10 rounded-xl object-contain border border-slate-100 dark:border-slate-800 bg-white"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/assets/logos/bowLogo.jpeg';
+                          }}
                         />
                         <div className="min-w-0">
                           <p className="truncate font-extrabold text-slate-900 dark:text-white text-xs leading-tight">{row.name}</p>
@@ -249,6 +263,15 @@ export default function AdminProducts() {
           </div>
         )}
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={Math.ceil(rows.length / PRODUCTS_PER_PAGE) || 1}
+        totalItems={rows.length}
+        itemsPerPage={PRODUCTS_PER_PAGE}
+        itemLabel="sản phẩm"
+        onPageChange={setCurrentPage}
+      />
 
       <ConfirmModal
         isOpen={confirmConfig.isOpen}

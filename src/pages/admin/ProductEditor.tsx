@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
 import {
   getProduct,
+  listProducts,
   createProduct,
   updateProduct,
   listCategories,
@@ -147,6 +149,11 @@ export default function ProductEditor() {
       toast.error('Vui lòng nhập tên sản phẩm');
       return;
     }
+    if (form.base_price != null && Number(form.base_price) < 0) {
+      setErr('Giá bán sản phẩm không được là số âm');
+      toast.error('Giá bán sản phẩm không được là số âm');
+      return;
+    }
     setSaving(true);
     setErr(null);
     setOk(null);
@@ -196,10 +203,35 @@ export default function ProductEditor() {
           }
         }
 
+        (supabase.from('audit_logs') as any).insert([
+          {
+            actor_name: 'Admin',
+            actor_role: 'admin',
+            action: 'create_product',
+            entity_type: 'product',
+            entity_id: newId,
+            description: `Admin đã tạo sản phẩm mới "${form.name}" (Mã #${newId})`,
+            metadata: { product_id: newId, name: form.name, base_price: form.base_price }
+          }
+        ]).then(() => {});
+
         toast.success('🎉 Đã tạo sản phẩm và toàn bộ gói giá, tính năng thành công!');
         nav(`/admin/products/${newId}`, { replace: true });
       } else {
         await updateProduct(id!, buildPayload());
+
+        (supabase.from('audit_logs') as any).insert([
+          {
+            actor_name: 'Admin',
+            actor_role: 'admin',
+            action: 'update_product',
+            entity_type: 'product',
+            entity_id: id!,
+            description: `Admin đã cập nhật thông tin sản phẩm "${form.name}"`,
+            metadata: { product_id: id!, name: form.name, base_price: form.base_price }
+          }
+        ]).then(() => {});
+
         toast.success('Đã lưu thay đổi sản phẩm!');
         setOk('Đã lưu thay đổi.');
       }
@@ -320,23 +352,24 @@ export default function ProductEditor() {
 
           {/* Media */}
           <AdminCard title="Hình ảnh">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <ImageField
-                label="Logo"
+            <div className="space-y-6">
+              <LogoPicker
                 url={form.logo_url}
                 uploading={uploading}
                 onUpload={(f) => onUpload(f, 'logo_url')}
                 onClear={() => set('logo_url', '')}
-                onUrl={(v) => set('logo_url', v)}
+                onSelect={(v) => set('logo_url', v)}
               />
-              <ImageField
-                label="Banner"
-                url={form.banner_url}
-                uploading={uploading}
-                onUpload={(f) => onUpload(f, 'banner_url')}
-                onClear={() => set('banner_url', '')}
-                onUrl={(v) => set('banner_url', v)}
-              />
+              <div className="border-t border-slate-100 dark:border-slate-800/60 pt-4">
+                <ImageField
+                  label="Banner"
+                  url={form.banner_url}
+                  uploading={uploading}
+                  onUpload={(f) => onUpload(f, 'banner_url')}
+                  onClear={() => set('banner_url', '')}
+                  onUrl={(v) => set('banner_url', v)}
+                />
+              </div>
             </div>
           </AdminCard>
 
@@ -384,8 +417,9 @@ export default function ProductEditor() {
               <Field
                 label="Giá bán (₫)"
                 type="number"
+                min="0"
                 value={form.base_price}
-                onChange={(e) => set('base_price', Number(e.target.value))}
+                onChange={(e) => set('base_price', Math.max(0, Number(e.target.value) || 0))}
               />
               <Field
                 label="Đánh giá (0-5)"
@@ -394,13 +428,14 @@ export default function ProductEditor() {
                 min="0"
                 max="5"
                 value={form.rating}
-                onChange={(e) => set('rating', Number(e.target.value))}
+                onChange={(e) => set('rating', Math.min(5, Math.max(0, Number(e.target.value) || 0)))}
               />
               <Field
                 label="Đã bán"
                 type="number"
+                min="0"
                 value={form.sold}
-                onChange={(e) => set('sold', Number(e.target.value))}
+                onChange={(e) => set('sold', Math.max(0, Number(e.target.value) || 0))}
               />
             </div>
           </AdminCard>
@@ -488,6 +523,204 @@ function ImageField({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─────────────── Preset Logos ─────────────── */
+const PRESET_LOGOS: { name: string; url: string }[] = [
+  { name: 'BOW Logo (Mặc định)', url: '/assets/logos/bowLogo.jpeg' },
+  { name: 'Canva Pro', url: '/assets/logos/canva-pro.jpg' },
+  { name: 'CapCut Pro', url: '/assets/logos/capcut-pro.png' },
+  { name: 'ChatGPT Plus', url: '/assets/logos/chatgpt-plus.png' },
+  { name: 'Claude Pro', url: '/assets/logos/claude.jpg' },
+  { name: 'Claude API', url: '/assets/logos/api-claude.png' },
+  { name: 'Codex API', url: '/assets/logos/api-codex.png' },
+  { name: 'Cursor Pro', url: '/assets/logos/cursor-pro.jpg' },
+  { name: 'Gemini Pro', url: '/assets/logos/gemini-pro.jpg' },
+  { name: 'Grok Premium', url: '/assets/logos/grok-premium.png' },
+  { name: 'Kling AI', url: '/assets/logos/kling-ai.jpg' },
+  { name: 'Leonardo AI', url: '/assets/logos/leonardo-ai.png' },
+  { name: 'Locket Gold', url: '/assets/logos/locket-gold.png' },
+  { name: 'Meitu SVIP', url: '/assets/logos/meitu-svip.png' },
+  { name: 'Netflix Premium', url: '/assets/logos/netflix-premium.png' },
+  { name: 'Notion', url: '/assets/logos/notion.png' },
+  { name: 'Perplexity Pro', url: '/assets/logos/perplexity-pro.jpg' },
+  { name: 'Spotify Premium', url: '/assets/logos/spotify-premium.jpg' },
+  { name: 'TV360 Standard', url: '/assets/logos/tv360-standard.png' },
+  { name: 'Veo3', url: '/assets/logos/veo3.png' },
+  { name: 'Youku VIP', url: '/assets/logos/youku-vip.png' },
+  { name: 'YouTube Premium', url: '/assets/logos/youtube-premium.jpg' },
+];
+
+/* ─────────────── Logo Picker Component ─────────────── */
+function LogoPicker({
+  url,
+  uploading,
+  onUpload,
+  onClear,
+  onSelect,
+}: {
+  url: string;
+  uploading: boolean;
+  onUpload: (f: File) => void;
+  onClear: () => void;
+  onSelect: (v: string) => void;
+}) {
+  const [showGallery, setShowGallery] = useState(false);
+  const [search, setSearch] = useState('');
+  const [dbLogos, setDbLogos] = useState<{ name: string; url: string }[]>([]);
+
+  useEffect(() => {
+    listProducts()
+      .then((prods) => {
+        const uniqueMap = new Map<string, string>();
+        for (const p of prods) {
+          if (p.logo_url && !uniqueMap.has(p.logo_url)) {
+            uniqueMap.set(p.logo_url, p.name);
+          }
+        }
+        const extra: { name: string; url: string }[] = [];
+        uniqueMap.forEach((name, u) => {
+          if (!PRESET_LOGOS.some((pr) => pr.url === u)) {
+            extra.push({ name, url: u });
+          }
+        });
+        setDbLogos(extra);
+      })
+      .catch(() => {});
+  }, []);
+
+  const allLogos = [...PRESET_LOGOS, ...dbLogos];
+  const filtered = allLogos.filter(
+    (item) =>
+      item.name.toLowerCase().includes(search.toLowerCase()) ||
+      item.url.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const displayUrl = url || '/assets/logos/bowLogo.jpeg';
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Logo sản phẩm (Dùng chung cho tất cả các gói)
+        </span>
+        <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+          1 Logo / Sản phẩm
+        </span>
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3.5">
+        {/* Logo Preview */}
+        <div className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border-2 border-blue-500/30 bg-slate-50 dark:bg-slate-900/60 p-2 shadow-xs">
+          <img
+            src={displayUrl}
+            alt="Logo Preview"
+            className="h-full w-full object-contain"
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/assets/logos/bowLogo.jpeg';
+            }}
+          />
+        </div>
+
+        {/* Action Controls */}
+        <div className="min-w-0 flex-1 space-y-2 w-full">
+          <input
+            value={url}
+            onChange={(e) => onSelect(e.target.value)}
+            placeholder="/assets/... hoặc https://..."
+            className="h-10 w-full rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] px-3.5 text-xs font-bold outline-none text-slate-800 dark:text-slate-200"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowGallery((v) => !v)}
+              className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 transition hover:bg-blue-100 dark:hover:bg-blue-900/60"
+            >
+              {showGallery ? '📂 Đóng thư viện' : '🖼️ Chọn logo có sẵn'}
+            </button>
+
+            <label className="cursor-pointer rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition hover:bg-slate-200 dark:hover:bg-slate-700">
+              {uploading ? 'Đang tải...' : '📁 Tải ảnh mới'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onUpload(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+
+            {url && (
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-xs font-bold text-rose-500 hover:underline px-2 py-1"
+              >
+                Xóa
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Expandable Gallery Grid with Search */}
+      {showGallery && (
+        <div className="mt-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 p-3.5 space-y-3">
+          <div>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="🔍 Tìm kiếm logo (ví dụ: Netflix, Canva, ChatGPT...)"
+              className="h-9 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs font-medium outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="max-h-52 overflow-y-auto grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-2 pr-1">
+            {filtered.map((item, idx) => {
+              const isSelected = url === item.url || (!url && item.url === '/assets/logos/bowLogo.jpeg');
+              return (
+                <button
+                  type="button"
+                  key={idx}
+                  onClick={() => {
+                    onSelect(item.url);
+                    setShowGallery(false);
+                  }}
+                  className={`group relative flex flex-col items-center justify-center rounded-xl p-2 border transition ${
+                    isSelected
+                      ? 'border-blue-500 bg-blue-50/80 dark:bg-blue-950/60 ring-2 ring-blue-500/30'
+                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:border-blue-400 hover:shadow-xs'
+                  }`}
+                  title={item.name}
+                >
+                  <img
+                    src={item.url}
+                    alt={item.name}
+                    className="h-9 w-9 object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/assets/logos/bowLogo.jpeg';
+                    }}
+                  />
+                  <span className="mt-1 w-full truncate text-[10px] font-semibold text-slate-600 dark:text-slate-400 text-center">
+                    {item.name}
+                  </span>
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="col-span-full py-4 text-center text-xs font-semibold text-slate-400">
+                Không tìm thấy logo phù hợp với từ khóa "{search}"
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -780,7 +1013,14 @@ function PlansEditor({
         <div className="grid gap-3.5 sm:grid-cols-4 items-end">
           <Field label="Tên gói *" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Ví dụ: Netflix Farm, 1 tháng..." />
           <Field label="Thời hạn *" value={draft.duration} onChange={(e) => setDraft((d) => ({ ...d, duration: e.target.value }))} placeholder="Ví dụ: 30 ngày..." />
-          <Field label="Giá (₫) *" type="number" value={draft.price || ''} onChange={(e) => setDraft((d) => ({ ...d, price: Number(e.target.value) }))} placeholder="0" />
+          <Field
+            label="Giá (₫) *"
+            type="number"
+            min="0"
+            value={draft.price || ''}
+            onChange={(e) => setDraft((d) => ({ ...d, price: Math.max(0, Number(e.target.value) || 0) }))}
+            placeholder="0"
+          />
           <Field label="Nhãn / Badge" value={draft.badge} onChange={(e) => setDraft((d) => ({ ...d, badge: e.target.value }))} placeholder="Ví dụ: 5 THÀNH VIÊN, PROFILE RIÊNG..." />
         </div>
 

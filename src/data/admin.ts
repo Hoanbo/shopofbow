@@ -205,6 +205,37 @@ const BUCKET = 'assets';
 
 /** Upload a file to the `assets` bucket; returns public URL. */
 export async function uploadImage(file: File, folder = 'products'): Promise<string> {
+  const reader = new FileReader();
+  const base64Promise = new Promise<string>((resolve, reject) => {
+    reader.onload = () => {
+      const res = reader.result as string;
+      const base64 = res.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  try {
+    const base64Data = await base64Promise;
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type || 'image/png',
+        base64Data,
+        folder,
+      }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.publicUrl) return json.publicUrl;
+    }
+  } catch (apiErr) {
+    console.warn('[uploadImage] /api/upload unavailable, falling back to client storage:', apiErr);
+  }
+
   const ext = file.name.split('.').pop() ?? 'png';
   const path = `${folder}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, file, {

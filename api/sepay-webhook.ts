@@ -139,6 +139,18 @@ async function processSepayWebhook(headers: Record<string, string | string[] | u
       },
     ]);
 
+    await supabase.from('audit_logs').insert([
+      {
+        actor_name: 'SePay Webhook',
+        actor_role: 'system',
+        action: 'sepay_webhook_topup',
+        entity_type: 'wallet',
+        entity_id: paymentCode,
+        description: `Ngân hàng SePay báo chuyển khoản nạp ví tự động ${creditAmount.toLocaleString('vi-VN')}đ cho mã #${paymentCode}`,
+        metadata: { paymentCode, creditAmount, order_id: order.id },
+      },
+    ]);
+
     await notifyTelegram(paymentCode, order, creditAmount, true);
     return { statusCode: 200, body: { success: true, message: 'Đã nạp tiền vào ví thành công', paymentCode, status: 'completed', creditAmount } };
   } else {

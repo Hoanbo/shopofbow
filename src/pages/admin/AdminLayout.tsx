@@ -20,15 +20,22 @@ const UserIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const AuditIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
 // Sidebar navigation links
 const links = [
   { to: '/admin', label: 'Tổng quan', Icon: HomeIcon, end: true },
   { to: '/admin/orders', label: 'Đơn hàng', Icon: CheckIcon },
+  { to: '/admin/activity', label: 'Nhật ký hoạt động', Icon: AuditIcon },
   { to: '/admin/users', label: 'Người dùng', Icon: UserIcon },
   { to: '/admin/products', label: 'Sản phẩm', Icon: BagIcon },
   { to: '/admin/categories', label: 'Danh mục', Icon: AppIcon },
   { to: '/admin/faqs', label: 'FAQ chung', Icon: SparkIcon },
-  { to: '/admin/contact', label: 'Hộp thư liên hệ', Icon: PhoneIcon },
+  { to: '/admin/contact', label: 'Liên hệ', Icon: PhoneIcon },
   { to: '/admin/settings', label: 'Cài đặt hệ thống', Icon: BoltIcon },
 ];
 

@@ -11,7 +11,6 @@ import AppLogo from '../components/AppLogo';
 import AIToolCard from '../components/AIToolCard';
 import PremiumAppCard from '../components/PremiumAppCard';
 import FeaturedBannerCard from '../components/FeaturedBannerCard';
-import { ContactButtons } from '../components/ContactButtons';
 import {
   StarIcon,
   CheckIcon,
@@ -172,11 +171,10 @@ export default function Detail({ category, base, crumb }: Props) {
                       <button
                         key={`${p.label}-${i}`}
                         onClick={() => setPlan(i)}
-                        className={`relative rounded-[20px] border p-3.5 text-center transition-all duration-300 ${
-                          isSelected
-                            ? 'border-[#2563EB] bg-[#EEF6FF] dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-md ring-2 ring-blue-500/20'
-                            : 'border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-blue-300'
-                        }`}
+                        className={`relative rounded-[20px] border p-3.5 text-center transition-all duration-300 ${isSelected
+                          ? 'border-[#2563EB] bg-[#EEF6FF] dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-md ring-2 ring-blue-500/20'
+                          : 'border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-blue-300'
+                          }`}
                       >
                         {badgeText && (
                           <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white shadow-xs whitespace-nowrap">
@@ -345,17 +343,6 @@ export default function Detail({ category, base, crumb }: Props) {
           </div>
         </div>
       )}
-
-      {/* Support Banner Strip */}
-      <div className="mt-6 overflow-hidden rounded-[28px] bg-gradient-to-r from-[#00A3FF] via-[#0088FF] to-[#2563EB] p-6 sm:p-8 text-white shadow-lg">
-        <h2 className="text-xl font-black text-white sm:text-2xl">Cần hỗ trợ mua {item.name}?</h2>
-        <p className="mt-1.5 text-xs sm:text-sm font-medium text-sky-100">
-          Đội ngũ tư vấn BOW luôn sẵn sàng giải đáp thắc mắc và kích hoạt tài khoản ngay tức thì.
-        </p>
-        <div className="mt-5">
-          <ContactButtons />
-        </div>
-      </div>
 
       {/* Related Products Grid */}
       {relatedItems.length > 0 && (

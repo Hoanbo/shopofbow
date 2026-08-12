@@ -1,4 +1,5 @@
-import type { ReactNode, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes } from 'react';
+import { useState, type ReactNode, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from 'react';
+import { ConfirmModal } from '../ConfirmModal';
 
 /** Labeled text input for admin forms. */
 export function Field({
@@ -7,7 +8,7 @@ export function Field({
   ...props
 }: { label: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <label className="flex flex-col justify-end h-full">
+    <label className="flex flex-col justify-start w-full">
       <span className="mb-1.5 block text-xs sm:text-sm font-semibold text-ink leading-tight">{label}</span>
       <input
         {...props}
@@ -80,18 +81,33 @@ export function Toggle({
   );
 }
 
-/** Simple confirm-and-run delete button. */
+/** Custom styled confirm-and-run delete button. */
 export function DeleteButton({ onDelete, label = 'Xóa' }: { onDelete: () => void; label?: string }) {
+  const [showConfirm, setShowConfirm] = useState(false);
   return (
-    <button
-      type="button"
-      onClick={() => {
-        if (confirm('Bạn chắc chắn muốn xóa? Hành động này không thể hoàn tác.')) onDelete();
-      }}
-      className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-100"
-    >
-      {label}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setShowConfirm(true)}
+        className="rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 transition hover:bg-rose-100 dark:hover:bg-rose-900/60 cursor-pointer"
+      >
+        {label}
+      </button>
+
+      <ConfirmModal
+        isOpen={showConfirm}
+        title="Xác nhận xóa"
+        message="Bạn có chắc chắn muốn xóa không? Hành động này không thể hoàn tác."
+        variant="danger"
+        confirmText="Xóa ngay"
+        cancelText="Hủy bỏ"
+        onConfirm={() => {
+          setShowConfirm(false);
+          onDelete();
+        }}
+        onClose={() => setShowConfirm(false)}
+      />
+    </>
   );
 }
 
