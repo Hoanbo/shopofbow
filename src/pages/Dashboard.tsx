@@ -2,10 +2,18 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useFavorites } from '../context/FavoritesContext';
 import { supabase } from '../lib/supabase';
 import { CloseIcon } from '../components/icons';
 import { useToast } from '../components/Toast';
 import OrderDeliveredModal from '../components/OrderDeliveredModal';
+import UserTicketsTab from '../components/user/UserTicketsTab';
+import CreateTicketModal from '../components/user/CreateTicketModal';
+import UserOrderDetailModal from '../components/user/UserOrderDetailModal';
+import OrderTimeline from '../components/user/OrderTimeline';
+import ReviewModal from '../components/user/ReviewModal';
+import AppLogo from '../components/AppLogo';
+import { formatVND } from '../data/catalog';
 
 const BANK_CONFIG = {
   bankId: 'MB', // MB Bank (mã VietQR)
@@ -48,17 +56,34 @@ function OrderCard({
   order,
   onPay,
   onCancelSuccess,
+  onOpenDetail,
 }: {
   order: Order;
   onPay: (o: Order) => void;
   onCancelSuccess: () => void;
+  onOpenDetail?: (order: Order) => void;
 }) {
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [isExpired, setIsExpired] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [hasReviewed, setHasReviewed] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
   const toast = useToast();
+
+  useEffect(() => {
+    if (order.status !== 'completed') return;
+    const checkReview = async () => {
+      const { data } = await (supabase
+        .from('product_reviews')
+        .select('id')
+        .eq('order_id', order.id)
+        .maybeSingle() as any);
+      if (data?.id) setHasReviewed(true);
+    };
+    checkReview();
+  }, [order.id, order.status]);
 
   useEffect(() => {
     if (order.status !== 'pending_payment') return;
@@ -138,6 +163,16 @@ function OrderCard({
         </div>
       </div>
 
+      {/* 🚚 Order Status Timeline */}
+      <div className="mt-3">
+        <OrderTimeline
+          orderId={order.id}
+          currentStatus={displayStatus}
+          orderCreatedAt={order.created_at}
+          compact
+        />
+      </div>
+
       {order.notes && (
         <div className="mt-3 bg-slate-50 border border-slate-100 rounded-xl p-2.5 text-xs text-slate-600 font-medium">
           <strong>Ghi chú đơn hàng:</strong> {order.notes}
@@ -182,6 +217,44 @@ function OrderCard({
             )}
           </div>
         </div>
+      )}
+
+      {/* View Detail Trigger & Review Button */}
+      <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800/60 pt-2.5 text-xs">
+        {order.status === 'completed' ? (
+          hasReviewed ? (
+            <span className="inline-flex items-center gap-1 font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg">
+              ✓ Đã đánh giá
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowReviewModal(true)}
+              className="inline-flex items-center gap-1 font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/50 dark:border-amber-900/40 px-3 py-1 rounded-xl hover:scale-102 transition cursor-pointer"
+            >
+              <span>⭐</span>
+              <span>Đánh giá sản phẩm</span>
+            </button>
+          )
+        ) : (
+          <span />
+        )}
+
+        <button
+          type="button"
+          onClick={() => onOpenDetail && onOpenDetail(order)}
+          className="inline-flex items-center gap-1.5 font-extrabold text-[#2563EB] dark:text-[#35A8FF] hover:underline transition"
+        >
+          <span>🔎 Xem chi tiết đơn hàng →</span>
+        </button>
+      </div>
+
+      {showReviewModal && (
+        <ReviewModal
+          order={order}
+          onClose={() => setShowReviewModal(false)}
+          onSuccess={() => setHasReviewed(true)}
+        />
       )}
 
       {/* Modal xác nhận hủy đơn (PORTAL) */}
@@ -241,6 +314,7 @@ function OrderCard({
 
 export default function Dashboard() {
   const { session, balance, refreshBalance, loading: authLoading } = useAuth();
+  const { favoriteProducts, loadingFavorites, toggleFavorite } = useFavorites();
   const [searchParams, setSearchParams] = useSearchParams();
   const nav = useNavigate();
 
@@ -254,6 +328,13 @@ export default function Dashboard() {
   const [selectedPayOrder, setSelectedPayOrder] = useState<Order | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const ORDERS_PER_PAGE = 5;
+
+  // Support Ticket Modal from Order
+  const [supportOrderIdForModal, setSupportOrderIdForModal] = useState<string | null>(null);
+  const [showSupportModalFromOrder, setShowSupportModalFromOrder] = useState(false);
+
+  // Order Detail Modal State
+  const [selectedDetailOrder, setSelectedDetailOrder] = useState<Order | null>(null);
 
   // Deposit State
   const [depositAmount, setDepositAmount] = useState<number>(50000);
@@ -502,6 +583,7 @@ export default function Dashboard() {
             <nav className="mt-4 space-y-1">
               {[
                 { id: 'orders', label: '📋 Lịch sử đơn hàng' },
+                { id: 'tickets', label: '🎫 Yêu cầu hỗ trợ' },
                 { id: 'wallet', label: '💳 Ví tiền & Nạp số dư' },
                 { id: 'profile', label: '👤 Hồ sơ của tôi' },
                 { id: 'favorites', label: '💙 Sản phẩm yêu thích' },
@@ -580,6 +662,7 @@ export default function Dashboard() {
                         order={o}
                         onPay={(payOrder) => setSelectedPayOrder(payOrder)}
                         onCancelSuccess={fetchOrders}
+                        onOpenDetail={(detailOrder) => setSelectedDetailOrder(detailOrder)}
                       />
                     ))}
 
@@ -842,14 +925,103 @@ export default function Dashboard() {
 
           {/* TAB: FAVORITES */}
           {activeTab === 'favorites' && (
-            <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-6 shadow-xs">
-              <h2 className="text-lg font-black text-[#0F172A] border-b border-slate-50 pb-3">Sản phẩm yêu thích</h2>
-              <div className="py-16 text-center space-y-2">
-                <span className="text-4xl block">💙</span>
-                <p className="text-sm font-medium text-slate-500">Chức năng yêu thích sản phẩm đang được xây dựng.</p>
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-[28px] border border-[#E7EEF8] bg-white p-6 shadow-xs">
+                <div>
+                  <h2 className="text-xl font-black text-[#0F172A] tracking-tight">Sản phẩm yêu thích</h2>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Danh sách các sản phẩm AI Tools & Apps bạn quan tâm và lưu lại.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3.5 py-1.5 text-xs font-extrabold text-rose-600 border border-rose-100 shrink-0">
+                  ❤️ {favoriteProducts.length} sản phẩm
+                </span>
               </div>
+
+              {loadingFavorites ? (
+                <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-12 text-center shadow-xs">
+                  <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-100 border-t-[#2563EB]" />
+                  <p className="mt-3 text-xs font-semibold text-slate-400">Đang tải sản phẩm yêu thích...</p>
+                </div>
+              ) : favoriteProducts.length === 0 ? (
+                <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-10 sm:p-16 text-center shadow-xs space-y-4">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-2xl shadow-xs">
+                    ❤️
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-[#0F172A]">Chưa có sản phẩm yêu thích</h3>
+                    <p className="mt-1 text-xs font-medium text-slate-500 max-w-sm mx-auto leading-relaxed">
+                      Lưu những sản phẩm bạn quan tâm để dễ dàng tìm lại khi cần.
+                    </p>
+                  </div>
+                  <Link
+                    to="/products"
+                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-6 py-2.5 text-xs font-bold text-white shadow-md hover:from-[#0080E0] hover:to-[#1D4ED8] transition"
+                  >
+                    <span>🔍 Khám phá sản phẩm</span>
+                  </Link>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {favoriteProducts.map((item) => (
+                    <div
+                      key={item.id}
+                      className="group relative flex flex-col justify-between rounded-[24px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
+                    >
+                      {/* Remove from Favorite button */}
+                      <button
+                        type="button"
+                        onClick={() => toggleFavorite(item)}
+                        title="Bỏ yêu thích"
+                        className="absolute top-4 right-4 grid h-8 w-8 place-items-center rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-500 hover:bg-rose-100 transition shadow-2xs"
+                      >
+                        <svg className="h-4 w-4 fill-rose-500 stroke-rose-500" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 21.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
+                        </svg>
+                      </button>
+
+                      <div>
+                        <div className="flex items-center gap-3.5 pr-8">
+                          <AppLogo
+                            slug={item.slug}
+                            name={item.name}
+                            image={item.image}
+                            className="h-14 w-14 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <h4 className="font-extrabold text-sm text-[#0F172A] dark:text-white truncate">{item.name}</h4>
+                            <span className="mt-0.5 inline-block text-[10px] font-bold text-[#2563EB] bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full">
+                              {item.group}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="mt-3 line-clamp-2 text-xs font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
+                          {item.tagline || item.description}
+                        </p>
+                      </div>
+
+                      <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Giá từ</span>
+                          <span className="text-base font-black text-[#2563EB] dark:text-[#35A8FF]">{formatVND(item.price)}</span>
+                        </div>
+                        <Link
+                          to={`/products/${item.slug}`}
+                          className="rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] px-4 py-2 text-xs font-bold text-white shadow-xs hover:from-[#0080E0] hover:to-[#1D4ED8] transition"
+                        >
+                          Xem chi tiết
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
+
+          {/* TAB: SUPPORT TICKETS */}
+          {activeTab === 'tickets' && <UserTicketsTab />}
 
           {/* TAB: SETTINGS */}
           {activeTab === 'settings' && (
@@ -922,6 +1094,29 @@ export default function Dashboard() {
         onClose={() => setDeliveredOrderModal(null)}
         onViewDetails={() => {
           setSearchParams({ tab: 'orders' });
+        }}
+      />
+
+      {/* Create Support Ticket Modal from Order */}
+      <CreateTicketModal
+        isOpen={showSupportModalFromOrder}
+        onClose={() => {
+          setShowSupportModalFromOrder(false);
+          setSupportOrderIdForModal(null);
+        }}
+        initialOrderId={supportOrderIdForModal}
+        onTicketCreated={() => {
+          setSearchParams({ tab: 'tickets' });
+        }}
+      />
+
+      {/* User Order Detail Modal */}
+      <UserOrderDetailModal
+        order={selectedDetailOrder}
+        onClose={() => setSelectedDetailOrder(null)}
+        onRequestSupport={(orderId) => {
+          setSupportOrderIdForModal(orderId);
+          setShowSupportModalFromOrder(true);
         }}
       />
     </div>

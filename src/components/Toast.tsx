@@ -32,7 +32,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (message: string, kind: ToastKind = 'info') => {
       const id = ++counterRef.current;
       setToasts((prev) => [...prev, { id, kind, message }]);
-      setTimeout(() => dismiss(id), 4000);
+      setTimeout(() => dismiss(id), 3000);
     },
     [dismiss],
   );

@@ -101,7 +101,7 @@ export default function Auth() {
       setSuccess('Mã OTP khôi phục 6 số đã được gửi về email của bạn.');
       setMode('forgot_otp');
     } catch (err: any) {
-      setError(err?.message || 'Lỗi khi gửi yêu cầu khôi phục mật khẩu.');
+      setError(mapAuthError(err, 'forgot'));
     } finally {
       setBusy(false);
     }
@@ -167,7 +167,7 @@ export default function Auth() {
         setSuccess('Đã cập nhật mật khẩu mới! Vui lòng nhập email và mật khẩu mới để đăng nhập.');
       }, 1500);
     } catch (err: any) {
-      setError(mapAuthError(err, 'signup'));
+      setError(mapAuthError(err, 'update_password'));
     } finally {
       setBusy(false);
     }

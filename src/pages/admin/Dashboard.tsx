@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { fetchStats } from '../../data/admin';
 
-type RangeMode = '7d' | '30d' | '12m';
+type RangeMode = '7d' | '30d' | '90d' | '12m';
 
 interface DynamicChart {
   labels: string[];
@@ -44,6 +44,13 @@ interface ProductRow {
   created_at: string;
 }
 
+interface TopProductStat {
+  name: string;
+  salesCount: number;
+  revenue: number;
+  percentage: number;
+}
+
 function formatRelativeTime(dateStr: string): string {
   const past = new Date(dateStr).getTime();
   if (isNaN(past)) return 'Vừa xong';
@@ -55,6 +62,23 @@ function formatRelativeTime(dateStr: string): string {
   if (diffHour < 24) return `${diffHour} giờ trước`;
   const diffDay = Math.floor(diffHour / 24);
   return `${diffDay} ngày trước`;
+}
+
+function formatAuditDescription(desc: string | null | undefined): string {
+  if (!desc) return '';
+  return desc
+    .replace(/"pending_payment"/g, '"Chờ thanh toán"')
+    .replace(/"pending_delivery"/g, '"Chờ bàn giao"')
+    .replace(/"processing"/g, '"Đang thiết lập"')
+    .replace(/"completed"/g, '"Hoàn tất"')
+    .replace(/"cancelled"/g, '"Đã hủy"')
+    .replace(/"refunded"/g, '"Đã hoàn tiền"')
+    .replace(/\bpending_payment\b/g, 'Chờ thanh toán')
+    .replace(/\bpending_delivery\b/g, 'Chờ bàn giao')
+    .replace(/\bprocessing\b/g, 'Đang thiết lập')
+    .replace(/\bcompleted\b/g, 'Hoàn tất')
+    .replace(/\bcancelled\b/g, 'Đã hủy')
+    .replace(/\brefunded\b/g, 'Đã hoàn tiền');
 }
 
 function calcPercentageChange(current: number, previous: number): StatChange {
@@ -73,7 +97,11 @@ export default function Dashboard() {
     totalOrders: 0,
     totalUsers: 0,
     totalRevenue: 0,
+    todayRevenue: 0,
+    rev7d: 0,
+    rev30d: 0,
   });
+
   const [changes, setChanges] = useState<{
     revenue: StatChange;
     orders: StatChange;
@@ -88,9 +116,11 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(true);
   const [activeRange, setActiveRange] = useState<RangeMode>('7d');
+  const [rawOrders, setRawOrders] = useState<OrderRow[]>([]);
   const [chartData, setChartData] = useState<Record<RangeMode, DynamicChart>>({
     '7d': { labels: [], values: [] },
     '30d': { labels: [], values: [] },
+    '90d': { labels: [], values: [] },
     '12m': { labels: [], values: [] },
   });
 
@@ -104,6 +134,8 @@ export default function Dashboard() {
   const [recentOrders, setRecentOrders] = useState<OrderRow[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
 
+  const isPaidStatus = (status: string) => ['pending_delivery', 'processing', 'completed'].includes(status);
+
   const loadDashboardData = async () => {
     setLoading(true);
     try {
@@ -116,13 +148,13 @@ export default function Dashboard() {
         .order('created_at', { ascending: false }) as any);
 
       const allOrders: OrderRow[] = ordersData || [];
+      setRawOrders(allOrders);
       setRecentOrders(allOrders.slice(0, 5));
 
       // Compute action counts
       const pendingDelivery = allOrders.filter((o) => o.status === 'pending_delivery').length;
       const processing = allOrders.filter((o) => o.status === 'processing').length;
 
-      // Unread contact messages count from localStorage
       let contactMessages = 0;
       try {
         const savedMsgs = localStorage.getItem('bow_inbox_messages');
@@ -130,7 +162,7 @@ export default function Dashboard() {
           const msgs = JSON.parse(savedMsgs);
           contactMessages = msgs.filter((m: any) => m.unread && !m.archived).length;
         } else {
-          contactMessages = 2; // Default seed unread messages
+          contactMessages = 2;
         }
       } catch {
         contactMessages = 0;
@@ -155,20 +187,37 @@ export default function Dashboard() {
       const allProducts: ProductRow[] = productsData || [];
 
       // Filter paid revenue
-      const paidOrders = allOrders.filter((o) => ['pending_delivery', 'processing', 'completed'].includes(o.status));
+      const paidOrders = allOrders.filter((o) => isPaidStatus(o.status));
       const totalRev = paidOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
+
+      // Sub-KPIs
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+      const startOfToday = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+
+      const todayRevenue = paidOrders
+        .filter((o) => new Date(o.created_at).getTime() >= startOfToday)
+        .reduce((sum, o) => sum + Number(o.price || 0), 0);
+
+      const rev7d = paidOrders
+        .filter((o) => now - new Date(o.created_at).getTime() <= 7 * dayMs)
+        .reduce((sum, o) => sum + Number(o.price || 0), 0);
+
+      const rev30d = paidOrders
+        .filter((o) => now - new Date(o.created_at).getTime() <= 30 * dayMs)
+        .reduce((sum, o) => sum + Number(o.price || 0), 0);
 
       setStats({
         totalProducts: allProducts.length || base.totalProducts || 0,
         totalOrders: allOrders.length,
         totalUsers: allProfiles.length,
         totalRevenue: totalRev,
+        todayRevenue,
+        rev7d,
+        rev30d,
       });
 
       // 4. Calculate percentage changes
-      const now = Date.now();
-      const dayMs = 24 * 60 * 60 * 1000;
-
       const revCurr = paidOrders
         .filter((o) => now - new Date(o.created_at).getTime() <= 30 * dayMs)
         .reduce((sum, o) => sum + Number(o.price || 0), 0);
@@ -201,7 +250,7 @@ export default function Dashboard() {
       // 5. Build charts
       buildCharts(allOrders);
 
-      // 6. Fetch 5-6 recent activities from audit_logs (no metadata — not needed for activity feed)
+      // 6. Fetch recent activities from audit_logs
       const { data: auditData, error: auditErr } = await (supabase
         .from('audit_logs')
         .select('id, description, actor_name, actor_role, created_at')
@@ -213,7 +262,7 @@ export default function Dashboard() {
         auditData.forEach((log: any) => {
           acts.push({
             id: log.id,
-            text: log.description,
+            text: formatAuditDescription(log.description),
             tag: log.actor_name || log.actor_role || 'Nhật ký',
             iconBg: log.actor_role === 'admin'
               ? 'bg-purple-500 text-white'
@@ -224,7 +273,6 @@ export default function Dashboard() {
           });
         });
       } else {
-        // Fallback: notifications or recent order logs
         const { data: notifData } = await (supabase
           .from('notifications')
           .select('*')
@@ -253,6 +301,7 @@ export default function Dashboard() {
 
   const buildCharts = (orders: OrderRow[]) => {
     const now = new Date();
+    const dayMs = 24 * 60 * 60 * 1000;
 
     // 7d Chart
     const days7: { label: string; start: number; end: number }[] = [];
@@ -263,20 +312,17 @@ export default function Dashboard() {
       const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59).getTime();
       days7.push({ label: `${dayName} ${d.getDate()}/${d.getMonth() + 1}`, start, end });
     }
-    const isPaid = (status: string) => ['pending_delivery', 'processing', 'completed'].includes(status);
-
     const val7d = days7.map((day) =>
       orders
         .filter((o) => {
           const t = new Date(o.created_at).getTime();
-          return t >= day.start && t <= day.end && isPaid(o.status);
+          return t >= day.start && t <= day.end && isPaidStatus(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
     );
 
     // 30d Chart
     const weeks30: { label: string; start: number; end: number }[] = [];
-    const dayMs = 24 * 60 * 60 * 1000;
     for (let i = 3; i >= 0; i--) {
       const start = now.getTime() - (i + 1) * 7 * dayMs;
       const end = now.getTime() - i * 7 * dayMs;
@@ -286,7 +332,24 @@ export default function Dashboard() {
       orders
         .filter((o) => {
           const t = new Date(o.created_at).getTime();
-          return t >= w.start && t < w.end && isPaid(o.status);
+          return t >= w.start && t < w.end && isPaidStatus(o.status);
+        })
+        .reduce((sum, o) => sum + Number(o.price || 0), 0)
+    );
+
+    // 90d Chart (3 tháng - 6 mốc 15 ngày)
+    const points90: { label: string; start: number; end: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const start = now.getTime() - (i + 1) * 15 * dayMs;
+      const end = now.getTime() - i * 15 * dayMs;
+      const d = new Date(start);
+      points90.push({ label: `${d.getDate()}/${d.getMonth() + 1}`, start, end });
+    }
+    const val90d = points90.map((p) =>
+      orders
+        .filter((o) => {
+          const t = new Date(o.created_at).getTime();
+          return t >= p.start && t < p.end && isPaidStatus(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
     );
@@ -305,7 +368,7 @@ export default function Dashboard() {
       orders
         .filter((o) => {
           const d = new Date(o.created_at);
-          return d.getFullYear() === m.year && d.getMonth() === m.month && isPaid(o.status);
+          return d.getFullYear() === m.year && d.getMonth() === m.month && isPaidStatus(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
     );
@@ -313,6 +376,7 @@ export default function Dashboard() {
     setChartData({
       '7d': { labels: days7.map((d) => d.label), values: val7d },
       '30d': { labels: weeks30.map((w) => w.label), values: val30d },
+      '90d': { labels: points90.map((p) => p.label), values: val90d },
       '12m': { labels: months12.map((m) => m.label), values: val12m },
     });
   };
@@ -320,6 +384,100 @@ export default function Dashboard() {
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Filtered Analytics per activeRange
+  const rangeFilteredOrders = useMemo(() => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    let limitMs = 7 * dayMs;
+    if (activeRange === '30d') limitMs = 30 * dayMs;
+    if (activeRange === '90d') limitMs = 90 * dayMs;
+    if (activeRange === '12m') limitMs = 365 * dayMs;
+
+    return rawOrders.filter((o) => now - new Date(o.created_at).getTime() <= limitMs);
+  }, [rawOrders, activeRange]);
+
+  // Range Top 5 Products (Sorted strictly by sales count sold, excluding wallet top-ups)
+  const rangeTopProducts = useMemo<TopProductStat[]>(() => {
+    const paidInRange = rangeFilteredOrders.filter(
+      (o) => isPaidStatus(o.status) && o.product_name && !o.product_name.includes('Nạp tiền')
+    );
+    const totalSalesCountInRange = paidInRange.length;
+
+    const map = new Map<string, { salesCount: number; revenue: number }>();
+    paidInRange.forEach((o) => {
+      const pName = o.product_name!;
+      const curr = map.get(pName) || { salesCount: 0, revenue: 0 };
+      map.set(pName, {
+        salesCount: curr.salesCount + 1,
+        revenue: curr.revenue + Number(o.price || 0),
+      });
+    });
+
+    return Array.from(map.entries())
+      .map(([name, stat]) => ({
+        name,
+        salesCount: stat.salesCount,
+        revenue: stat.revenue,
+        percentage: totalSalesCountInRange > 0 ? Math.round((stat.salesCount / totalSalesCountInRange) * 100) : 0,
+      }))
+      .sort((a, b) => b.salesCount - a.salesCount || b.revenue - a.revenue)
+      .slice(0, 5);
+  }, [rangeFilteredOrders]);
+
+  // Range Category Performance & AOV Metrics
+  const categoryAnalytics = useMemo(() => {
+    const paidInRange = rangeFilteredOrders.filter(
+      (o) => isPaidStatus(o.status) && o.product_name && !o.product_name.includes('Nạp tiền')
+    );
+    const totalPaidRev = paidInRange.reduce((sum, o) => sum + Number(o.price || 0), 0);
+    const totalPaidSales = paidInRange.length;
+
+    // AOV (Average Order Value)
+    const aov = totalPaidSales > 0 ? Math.round(totalPaidRev / totalPaidSales) : 0;
+
+    // Group sales into AI Tools vs Premium Apps
+    let aiToolsCount = 0;
+    let aiToolsRev = 0;
+    let premiumAppsCount = 0;
+    let premiumAppsRev = 0;
+
+    const aiKeywords = ['claude', 'chatgpt', 'cursor', 'codex', 'leonardo', 'veo', 'gemini', 'grok', 'kling', 'perplexity', 'meitu', 'youku'];
+
+    paidInRange.forEach((o) => {
+      const pNameLower = (o.product_name || '').toLowerCase();
+      const isAI = aiKeywords.some((k) => pNameLower.includes(k)) || pNameLower.includes('ai');
+      const price = Number(o.price || 0);
+
+      if (isAI) {
+        aiToolsCount++;
+        aiToolsRev += price;
+      } else {
+        premiumAppsCount++;
+        premiumAppsRev += price;
+      }
+    });
+
+    const aiRevPct = totalPaidRev > 0 ? Math.round((aiToolsRev / totalPaidRev) * 100) : 0;
+    const appRevPct = totalPaidRev > 0 ? Math.round((premiumAppsRev / totalPaidRev) * 100) : 0;
+
+    const totalOrdersCount = rangeFilteredOrders.length;
+    const completedCount = rangeFilteredOrders.filter((o) => isPaidStatus(o.status)).length;
+    const completionRate = totalOrdersCount > 0 ? Math.round((completedCount / totalOrdersCount) * 100) : 0;
+
+    return {
+      aov,
+      totalPaidSales,
+      totalPaidRev,
+      aiToolsCount,
+      aiToolsRev,
+      aiRevPct,
+      premiumAppsCount,
+      premiumAppsRev,
+      appRevPct,
+      completionRate,
+    };
+  }, [rangeFilteredOrders]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -341,7 +499,7 @@ export default function Dashboard() {
   };
 
   // Dynamic Chart SVG calculations
-  const currentChart = chartData[activeRange];
+  const currentChart = chartData[activeRange] || { labels: [], values: [] };
   const maxVal = Math.max(...(currentChart.values.length ? currentChart.values : [0])) || 100000;
   const chartHeight = 150;
   const chartWidth = 500;
@@ -360,13 +518,39 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">Tổng quan hệ thống</h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Theo dõi doanh số, quản lý đơn hàng cần xử lý và xem nhật ký hoạt động hệ thống BOW.</p>
+      {/* Title Header & Time Filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">Tổng quan hệ thống</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Theo dõi doanh số, phân tích sản phẩm bán chạy và nhật ký hoạt động hệ thống BOW.</p>
+        </div>
+
+        {/* Global Time Filter Controls */}
+        <div className="flex items-center gap-1 bg-white dark:bg-[#131C32] p-1.5 rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A]/50 shadow-2xs self-start sm:self-auto">
+          <span className="text-[10px] font-black uppercase text-slate-400 px-2">Thời gian:</span>
+          {[
+            { key: '7d', label: '7 ngày' },
+            { key: '30d', label: '30 ngày' },
+            { key: '90d', label: '3 tháng' },
+            { key: '12m', label: '12 tháng' },
+          ].map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => setActiveRange(r.key as RangeMode)}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                activeRange === r.key
+                  ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs font-black'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* 4 KPI CARDS */}
+      {/* 4 MAIN KPI CARDS */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           {
@@ -418,7 +602,6 @@ export default function Dashboard() {
             key={c.key}
             className="group relative rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-4 shadow-xs hover:shadow-card hover:border-[#2563EB]/40 dark:hover:border-[#35A8FF]/40 transition-all duration-300 flex flex-col justify-between overflow-hidden"
           >
-            {/* Top header row: Icon + Label + Change Badge */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <span className={`h-8 w-8 rounded-xl bg-gradient-to-br ${c.accentColor} border flex items-center justify-center text-sm shrink-0 shadow-2xs group-hover:scale-105 transition-transform`}>
@@ -438,7 +621,6 @@ export default function Dashboard() {
               </span>
             </div>
 
-            {/* Bottom value + sparkline row */}
             <div className="mt-3.5 flex items-baseline justify-between gap-2">
               <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
                 {loading ? <span className="inline-block h-7 w-20 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /> : c.value}
@@ -460,29 +642,65 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* REVENUE CHART (8 COLS) & CẦN XỬ LÝ (4 COLS) */}
+      {/* QUICK STATS BAR */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/40 dark:bg-emerald-950/20 p-3.5 flex items-center gap-3">
+          <span className="text-xl">⚡</span>
+          <div>
+            <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block">Doanh thu Hôm nay</span>
+            <span className="text-sm font-extrabold text-slate-900 dark:text-white">{stats.todayRevenue.toLocaleString('vi-VN')}đ</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 flex items-center gap-3">
+          <span className="text-xl">📈</span>
+          <div>
+            <span className="text-[10px] font-black uppercase text-[#2563EB] dark:text-[#35A8FF] block">Doanh thu 7 Ngày</span>
+            <span className="text-sm font-extrabold text-slate-900 dark:text-white">{stats.rev7d.toLocaleString('vi-VN')}đ</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/40 dark:bg-indigo-950/20 p-3.5 flex items-center gap-3">
+          <span className="text-xl">📊</span>
+          <div>
+            <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block">Doanh thu 30 Ngày</span>
+            <span className="text-sm font-extrabold text-slate-900 dark:text-white">{stats.rev30d.toLocaleString('vi-VN')}đ</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-purple-100 dark:border-purple-900/30 bg-purple-50/40 dark:bg-purple-950/20 p-3.5 flex items-center gap-3">
+          <span className="text-xl">🎯</span>
+          <div>
+            <span className="text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 block">Đơn trong kỳ chọn</span>
+            <span className="text-sm font-extrabold text-slate-900 dark:text-white">{rangeFilteredOrders.length} đơn</span>
+          </div>
+        </div>
+      </div>
+
+      {/* REVENUE CHART & ACTION NEEDED */}
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Revenue Chart (8 Cols) */}
         <div className="lg:col-span-8 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
             <div>
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Doanh thu cửa hàng</h3>
-              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Biểu đồ dòng tiền luân chuyển từ các đơn hàng thực tế.</p>
+              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Doanh thu dòng tiền</h3>
+              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Biểu đồ tổng hợp doanh số từ các đơn hàng thực tế ({activeRange}).</p>
             </div>
             
-            {/* Chart toggle range */}
             <div className="flex gap-1 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl">
               {[
                 { key: '7d', label: '7 ngày' },
                 { key: '30d', label: '30 ngày' },
+                { key: '90d', label: '3 tháng' },
                 { key: '12m', label: '12 tháng' },
               ].map((r) => (
                 <button
                   key={r.key}
+                  type="button"
                   onClick={() => setActiveRange(r.key as RangeMode)}
-                  className={`rounded-lg px-3 py-1 text-[10px] font-bold transition-all ${
+                  className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
                     activeRange === r.key
-                      ? 'bg-white dark:bg-[#131C32] text-[#2563EB] shadow-xs font-extrabold'
+                      ? 'bg-white dark:bg-[#131C32] text-[#2563EB] dark:text-[#35A8FF] shadow-xs font-extrabold'
                       : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
                   }`}
                 >
@@ -569,7 +787,7 @@ export default function Dashboard() {
                 </div>
               </Link>
 
-              {/* Item 2: Đơn cần xử lý (đang thiết lập) */}
+              {/* Item 2: Đơn cần xử lý */}
               <Link
                 to="/admin/orders?status=processing"
                 className="flex items-center justify-between p-3 rounded-2xl border border-amber-100 dark:border-amber-900/30 bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition group"
@@ -614,6 +832,160 @@ export default function Dashboard() {
               Bấm vào từng mục để tới trang quản lý xử lý nhanh.
             </p>
           )}
+        </div>
+      </div>
+
+      {/* TOP SẢN PHẨM (6 COLS) & TRẠNG THÁI ĐƠN HÀNG (6 COLS) */}
+      <div className="grid gap-6 lg:grid-cols-12">
+        {/* TOP SẢN PHẨM BÁN CHẠY (6 Cols) */}
+        <div className="lg:col-span-6 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
+              <div>
+                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <span>🏆</span> TOP SẢN PHẨM BÁN CHẠY
+                </h3>
+                <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Top 5 sản phẩm có số đơn bán nhiều nhất ({activeRange}).</p>
+              </div>
+              <Link to="/admin/products" className="text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline">
+                Quản lý ›
+              </Link>
+            </div>
+
+            {rangeTopProducts.length === 0 ? (
+              <p className="py-8 text-center text-xs font-medium text-slate-400">Chưa có dữ liệu bán hàng trong khoảng thời gian này.</p>
+            ) : (
+              <div className="mt-4 space-y-3.5">
+                {rangeTopProducts.map((p, idx) => (
+                  <div key={p.name} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`h-5 w-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${
+                          idx === 0
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                            : idx === 1
+                            ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+                            : idx === 2
+                            ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                        }`}>
+                          #{idx + 1}
+                        </span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 truncate" title={p.name}>
+                          {p.name}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
+                        <span className="text-slate-400 font-semibold">{p.salesCount} đơn</span>
+                        <span className="font-extrabold text-[#2563EB] dark:text-[#35A8FF]">{p.revenue.toLocaleString('vi-VN')}đ</span>
+                      </div>
+                    </div>
+
+                    {/* Revenue share progress bar */}
+                    <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800/80 rounded-full overflow-hidden flex">
+                      <div
+                        className="h-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] rounded-full transition-all duration-500"
+                        style={{ width: `${Math.max(p.percentage, 4)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* HIỆU SUẤT DANH MỤC & GIÁ TRỊ ĐƠN HÀNG (6 Cols) */}
+        <div className="lg:col-span-6 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
+              <div>
+                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <span>📊</span> DANH MỤC & GIÁ TRỊ ĐƠN (AOV)
+                </h3>
+                <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Phân tích cơ cấu doanh số AI Tools, Apps & AOV ({activeRange}).</p>
+              </div>
+            </div>
+
+            {/* AOV & Completion Rate KPI Chips */}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-[#18243E] p-3.5">
+                <span className="text-[10px] font-black uppercase text-[#2563EB] dark:text-[#35A8FF] block">Giá trị đơn TB (AOV)</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white mt-1 block">
+                  {categoryAnalytics.aov.toLocaleString('vi-VN')}đ
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">Doanh thu TB trên mỗi đơn</span>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-[#18243E] p-3.5">
+                <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block">Tỷ lệ đơn thành công</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white mt-1 block">
+                  {categoryAnalytics.completionRate}%
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">Tỷ lệ đơn bàn giao thành công</span>
+              </div>
+            </div>
+
+            {/* Category Revenue Breakdown */}
+            <div className="mt-4 space-y-3">
+              {/* Category 1: AI Tools */}
+              <div className="rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#18243E] p-3.5 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🤖</span>
+                    <span className="font-extrabold text-slate-900 dark:text-white">AI Tools</span>
+                  </div>
+                  <div className="flex items-center gap-2 font-mono text-xs">
+                    <span className="text-slate-400 font-semibold">{categoryAnalytics.aiToolsCount} đơn</span>
+                    <span className="font-extrabold text-[#2563EB] dark:text-[#35A8FF]">
+                      {categoryAnalytics.aiToolsRev.toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold">
+                  <span>Tỷ trọng doanh thu</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-200">{categoryAnalytics.aiRevPct}%</span>
+                </div>
+
+                <div className="h-2 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-sky-400 to-[#2563EB] rounded-full transition-all duration-500"
+                    style={{ width: `${Math.max(categoryAnalytics.aiRevPct, categoryAnalytics.aiToolsCount > 0 ? 8 : 0)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Category 2: Premium Apps */}
+              <div className="rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#18243E] p-3.5 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📱</span>
+                    <span className="font-extrabold text-slate-900 dark:text-white">Premium Apps</span>
+                  </div>
+                  <div className="flex items-center gap-2 font-mono text-xs">
+                    <span className="text-slate-400 font-semibold">{categoryAnalytics.premiumAppsCount} đơn</span>
+                    <span className="font-extrabold text-purple-600 dark:text-purple-400">
+                      {categoryAnalytics.premiumAppsRev.toLocaleString('vi-VN')}đ
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold">
+                  <span>Tỷ trọng doanh thu</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-200">{categoryAnalytics.appRevPct}%</span>
+                </div>
+
+                <div className="h-2 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-purple-400 to-indigo-600 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.max(categoryAnalytics.appRevPct, categoryAnalytics.premiumAppsCount > 0 ? 8 : 0)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -677,7 +1049,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* HOẠT ĐỘNG GẦN ĐÂY (5 PREVIEW ENTRIES + VIEW ALL BUTTON) */}
+      {/* HOẠT ĐỘNG GẦN ĐÂY */}
       <div className="rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
           <div>

@@ -1,8 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { CloseIcon, CheckIcon } from './icons';
+import { CloseIcon } from './icons';
 import type { CatalogItem } from '../data/types';
+import {
+  validateCouponCode,
+  checkFirstOrderEligibility,
+  fetchPublicSuggestedCoupons,
+  type CouponValidationResult,
+  type Coupon,
+} from '../data/coupons';
 
 interface Plan {
   label: string;
@@ -37,13 +44,19 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false); // chống double-submit
 
-  const totalPrice = plan.price * quantity;
+  // Coupon States
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [suggestedCoupons, setSuggestedCoupons] = useState<Coupon[]>([]);
+  const [isFirstOrderUser, setIsFirstOrderUser] = useState(false);
 
+  const rawTotalPrice = plan.price * quantity;
+  const discountAmount = appliedCoupon?.valid ? (appliedCoupon.discount_amount ?? 0) : 0;
+  const finalPrice = Math.max(0, rawTotalPrice - discountAmount);
 
-
-  // Generate a unique payment code when modal opens.
-  // KHÔNG đặt balance vào dependency array — balance thay đổi sau refreshBalance
-  // sẽ không reset lại step về 'checkout'.
+  // Generate unique payment code & reset on open
   useEffect(() => {
     if (isOpen) {
       const rand = Math.floor(1000 + Math.random() * 9000);
@@ -53,22 +66,50 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
       setNotes('');
       setQuantity(1);
       setOrderId(null);
-      // Chọn method tốt nhất tại thời điểm mở — chỉ chạy 1 lần khi isOpen thay đổi
+      setCouponInput('');
+      setAppliedCoupon(null);
+      setCouponError(null);
+
+      // Check first order eligibility & suggestions
+      if (session?.user?.id) {
+        checkFirstOrderEligibility(session.user.id).then((isFirst) => {
+          setIsFirstOrderUser(isFirst);
+        });
+      }
+      fetchPublicSuggestedCoupons().then((list) => {
+        setSuggestedCoupons(list);
+      });
+
+      // Default payment method based on wallet balance
       setMethod(balance >= plan.price ? 'wallet' : 'vietqr');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]); // ← CHỈ isOpen, KHÔNG balance/plan.price để tránh reset step sau refreshBalance
+  }, [isOpen]);
 
-  // Auto-switch method sang vietqr khi số dư ví không đủ
+  // Auto-switch method sang vietqr khi số dư ví không đủ cho finalPrice
   useEffect(() => {
-    if (method === 'wallet' && balance < totalPrice) {
+    if (method === 'wallet' && balance < finalPrice) {
       setMethod('vietqr');
     }
-  }, [totalPrice, balance, method]);
+  }, [finalPrice, balance, method]);
 
-  // Ở bước thanh toán QR: theo dõi realtime đơn hàng.
-  // Khi SePay xác nhận (status -> 'pending_delivery'), tự chuyển sang màn thành công.
-  // Kèm fallback poll mỗi 5s phòng khi Realtime chưa bật cho bảng orders.
+  // Revalidate applied coupon when total amount changes (e.g. user changes quantity)
+  useEffect(() => {
+    if (appliedCoupon?.code && session?.user?.id) {
+      validateCouponCode(appliedCoupon.code, rawTotalPrice, session.user.id).then((res) => {
+        if (res.valid) {
+          setAppliedCoupon(res);
+          setCouponError(null);
+        } else {
+          setAppliedCoupon(null);
+          setCouponError(res.message || 'Mã giảm giá không còn phù hợp với số lượng mới.');
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawTotalPrice]);
+
+  // Realtime order tracking for QR payment
   useEffect(() => {
     if (step !== 'payment' || !orderId) return;
 
@@ -109,49 +150,78 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
 
   if (!isOpen || !session) return null;
 
+  // Handle Apply Coupon
+  const handleApplyCoupon = async (codeToUse?: string) => {
+    const targetCode = (codeToUse || couponInput).trim();
+    if (!targetCode) {
+      setCouponError('Vui lòng nhập mã giảm giá.');
+      return;
+    }
+    setCouponLoading(true);
+    setCouponError(null);
+    try {
+      const res = await validateCouponCode(targetCode, rawTotalPrice, session.user.id);
+      if (res.valid) {
+        setAppliedCoupon(res);
+        setCouponInput(res.code || targetCode.toUpperCase());
+        setCouponError(null);
+      } else {
+        setAppliedCoupon(null);
+        setCouponError(res.message);
+      }
+    } catch (err: any) {
+      setCouponError(err?.message || 'Không thể áp dụng mã giảm giá.');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput('');
+    setCouponError(null);
+  };
+
+  // Handle Wallet Payment
   const handleWalletPayment = async () => {
-    console.log('1. Click Thanh toán bằng ví');
     if (submittingRef.current) return;
     submittingRef.current = true;
     setError(null);
     setLoading(true);
     try {
-      console.log('2. Calling buy_with_wallet RPC');
       const { data, error: rpcErr } = await (supabase as any).rpc('buy_with_wallet', {
         p_user_id: session.user.id,
         p_product_name: quantity > 1 ? `${item.name} (x${quantity})` : item.name,
         p_plan_label: plan.label,
-        p_price: totalPrice,
+        p_price: rawTotalPrice,
         p_payment_code: paymentCode,
         p_notes: notes.trim(),
         p_product_id: item.id.length === 36 ? item.id : undefined,
         p_quantity: quantity,
+        p_coupon_code: appliedCoupon?.code || null,
       });
-
-      console.log('3. RPC result:', { data, rpcErr });
 
       if (rpcErr) throw rpcErr;
       if (data === 'success') {
-        console.log('4. Preparing success — calling onWalletSuccess');
-        // Lưu trước khi refreshBalance làm balance thay đổi
-        const paidAmount = totalPrice;
+        const paidAmount = finalPrice;
         const paidQty = quantity;
         const paidCode = paymentCode;
 
-        // Refresh balance trước khi đóng modal
         await refreshBalance();
-
-        console.log('5. refreshBalance done, calling onWalletSuccess + onClose');
-        // Gọi callback — parent render WalletSuccessModal độc lập hoàn toàn
         onWalletSuccess({ code: paidCode, amount: paidAmount, qty: paidQty });
-        // Đóng modal thanh toán
         onClose();
       } else if (data === 'insufficient_balance') {
-        throw new Error('Số dư ví không đủ. Vui lòng nạp thêm hoặc giảm số lượng.');
+        throw new Error('Số dư ví không đủ. Vui lòng nạp thêm hoặc đổi phương thức thanh toán.');
+      } else if (data === 'invalid_coupon') {
+        throw new Error('Mã giảm giá không hợp lệ hoặc đã hết hạn.');
+      } else if (data === 'coupon_first_order_only') {
+        throw new Error('Mã giảm giá này chỉ áp dụng cho đơn hàng đầu tiên.');
+      } else if (data === 'coupon_user_limit_reached') {
+        throw new Error('Bạn đã sử dụng hết lượt cho mã giảm giá này.');
       } else if (data === 'unauthorized') {
         throw new Error('Thao tác không được phép (Unauthorized).');
       } else {
-        throw new Error('Giao dịch thất bại. Vui lòng thử lại.');
+        throw new Error(`Giao dịch thất bại (${data}). Vui lòng thử lại.`);
       }
     } catch (err: any) {
       const msg = err?.message || err?.details || err?.hint || 'Lỗi kết nối trừ tiền ví.';
@@ -163,26 +233,29 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
     }
   };
 
+  // Handle VietQR / External Payment
   const handleExternalPayment = async () => {
     setError(null);
     setLoading(true);
     try {
-      // Insert order with status 'pending_payment' và lấy về id để theo dõi realtime
-      const { data: inserted, error: insErr } = await (supabase.from('orders') as any)
-        .insert({
-          user_id: session.user.id,
-          product_name: quantity > 1 ? `${item.name} (x${quantity})` : item.name,
-          plan_label: plan.label,
-          price: totalPrice,
-          status: 'pending_payment',
-          payment_code: paymentCode,
-          notes: notes.trim(),
-        })
-        .select('id')
-        .single();
+      const { data, error: rpcErr } = await (supabase as any).rpc('create_order_with_coupon', {
+        p_user_id: session.user.id,
+        p_product_name: quantity > 1 ? `${item.name} (x${quantity})` : item.name,
+        p_plan_label: plan.label,
+        p_price: rawTotalPrice,
+        p_payment_code: paymentCode,
+        p_notes: notes.trim(),
+        p_product_id: item.id.length === 36 ? item.id : undefined,
+        p_quantity: quantity,
+        p_coupon_code: appliedCoupon?.code || null,
+      });
 
-      if (insErr) throw insErr;
-      setOrderId(inserted?.id ?? null);
+      if (rpcErr) throw rpcErr;
+      if (!data?.success) {
+        throw new Error(data?.message || 'Không thể tạo đơn hàng thanh toán.');
+      }
+
+      setOrderId(data.order_id ?? null);
       setStep('payment');
     } catch (err: any) {
       setError(err?.message || err?.details || 'Lỗi tạo đơn hàng thanh toán.');
@@ -193,7 +266,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading || submittingRef.current) return; // chống double-submit
+    if (loading || submittingRef.current) return;
     if (method === 'wallet') {
       handleWalletPayment();
     } else {
@@ -201,8 +274,12 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
     }
   };
 
-  // Generate VietQR URL (dùng totalPrice tính cả số lượng)
-  const vietQrUrl = `https://img.vietqr.io/image/${BANK_CONFIG.bankId}-${BANK_CONFIG.accountNo}-compact2.jpg?amount=${totalPrice}&addInfo=${paymentCode}&accountName=${encodeURIComponent(BANK_CONFIG.accountName)}`;
+  // Generate VietQR URL with final discounted price
+  const vietQrUrl = `https://img.vietqr.io/image/${BANK_CONFIG.bankId}-${BANK_CONFIG.accountNo}-compact2.jpg?amount=${finalPrice}&addInfo=${paymentCode}&accountName=${encodeURIComponent(BANK_CONFIG.accountName)}`;
+
+  // Find if WELCOME20 coupon is available to suggest
+  const welcomeCoupon = suggestedCoupons.find(c => c.code.toUpperCase() === 'WELCOME20');
+  const showWelcomeSuggestion = isFirstOrderUser && welcomeCoupon && !appliedCoupon;
 
   return (
     <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
@@ -215,7 +292,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
         {step !== 'success' && (
           <button
             onClick={onClose}
-            className="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-full border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition"
+            className="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-full border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition cursor-pointer"
           >
             <CloseIcon className="h-4.5 w-4.5" />
           </button>
@@ -233,7 +310,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
             <div>
               <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Đơn hàng của bạn</span>
               <div className="mt-2 flex items-center gap-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 p-3.5 border border-slate-100 dark:border-slate-800">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 shrink-0">
                   <img src={item.image} alt={item.name} className="h-full w-full object-contain" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -249,7 +326,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                     </p>
                   )}
                   <span className="text-sm font-black text-[#2563EB] dark:text-[#35A8FF]">
-                    {totalPrice.toLocaleString('vi-VN')}đ
+                    {rawTotalPrice.toLocaleString('vi-VN')}đ
                   </span>
                 </div>
               </div>
@@ -261,15 +338,132 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                   <button
                     type="button"
                     onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition font-bold text-sm"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition font-bold text-sm cursor-pointer"
                   >−</button>
                   <span className="w-8 text-center text-sm font-black text-[#0F172A] dark:text-white">{quantity}</span>
                   <button
                     type="button"
                     onClick={() => setQuantity(q => Math.min(10, q + 1))}
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition font-bold text-sm"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition font-bold text-sm cursor-pointer"
                   >+</button>
                 </div>
+              </div>
+            </div>
+
+            {/* 🎟️ COUPON / DISCOUNT CODE SECTION */}
+            <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/30 dark:bg-blue-950/20 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-[#0F172A] dark:text-white flex items-center gap-1.5">
+                  <span>🎟️</span>
+                  <span>Mã giảm giá</span>
+                </span>
+                {appliedCoupon?.valid && (
+                  <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full">
+                    Đã áp dụng
+                  </span>
+                )}
+              </div>
+
+              {/* Coupon Suggestion for First-Order user */}
+              {showWelcomeSuggestion && (
+                <div className="flex items-center justify-between gap-2 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-800 dark:text-amber-300 animate-pulse">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-base">🎁</span>
+                    <span className="truncate">
+                      Giảm <strong>20.000đ</strong> đơn đầu tiên với mã <strong>WELCOME20</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyCoupon('WELCOME20')}
+                    className="shrink-0 rounded-lg bg-amber-500 text-white px-2.5 py-1 text-[11px] font-black hover:bg-amber-600 transition cursor-pointer shadow-xs"
+                  >
+                    Áp dụng
+                  </button>
+                </div>
+              )}
+
+              {/* Applied Coupon Display vs Input Form */}
+              {appliedCoupon?.valid ? (
+                <div className="flex items-center justify-between rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 p-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">
+                      ✓
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs font-black text-emerald-700 dark:text-emerald-300">
+                          {appliedCoupon.code}
+                        </span>
+                        <span className="text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                          (-{discountAmount.toLocaleString('vi-VN')}đ)
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                        {appliedCoupon.name || 'Mã giảm giá hợp lệ'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="text-xs font-bold text-rose-500 hover:text-rose-700 dark:text-rose-400 hover:underline px-2 py-1 cursor-pointer"
+                  >
+                    Bỏ mã
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={(e) => {
+                      setCouponInput(e.target.value.toUpperCase());
+                      setCouponError(null);
+                    }}
+                    placeholder="Nhập mã giảm giá (VD: WELCOME20)..."
+                    className="h-10 flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 px-3.5 text-xs font-mono font-bold uppercase tracking-wider outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] text-[#0F172A] dark:text-white placeholder:text-slate-400 placeholder:normal-case placeholder:font-sans placeholder:font-normal"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleApplyCoupon()}
+                    disabled={couponLoading || !couponInput.trim()}
+                    className="h-10 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] dark:bg-[#35A8FF] dark:hover:bg-[#2563EB] px-4 text-xs font-black text-white transition disabled:opacity-50 cursor-pointer shadow-xs"
+                  >
+                    {couponLoading ? '...' : 'Áp dụng'}
+                  </button>
+                </div>
+              )}
+
+              {couponError && (
+                <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1 mt-1">
+                  <span>⚠️</span>
+                  <span>{couponError}</span>
+                </p>
+              )}
+            </div>
+
+            {/* 💰 PRICE BREAKDOWN TABLE */}
+            <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between font-semibold text-slate-600 dark:text-slate-400">
+                <span>Tạm tính ({quantity} sản phẩm):</span>
+                <span className="font-bold text-slate-900 dark:text-white">{rawTotalPrice.toLocaleString('vi-VN')}đ</span>
+              </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="flex items-center gap-1">
+                    <span>Mã giảm giá ({appliedCoupon?.code}):</span>
+                  </span>
+                  <span className="font-black">-{discountAmount.toLocaleString('vi-VN')}đ</span>
+                </div>
+              )}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-2 flex justify-between items-baseline">
+                <span className="text-xs font-extrabold text-[#0F172A] dark:text-white uppercase tracking-wider">
+                  Tổng thanh toán:
+                </span>
+                <span className="text-base font-black text-[#2563EB] dark:text-[#35A8FF]">
+                  {finalPrice.toLocaleString('vi-VN')}đ
+                </span>
               </div>
             </div>
 
@@ -296,10 +490,10 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                 {/* Wallet Balance */}
                 <button
                   type="button"
-                  onClick={() => balance >= totalPrice && setMethod('wallet')}
-                  disabled={balance < totalPrice}
-                  className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition-all ${
-                    balance < totalPrice
+                  onClick={() => balance >= finalPrice && setMethod('wallet')}
+                  disabled={balance < finalPrice}
+                  className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition-all cursor-pointer ${
+                    balance < finalPrice
                       ? 'border-slate-100 dark:border-slate-800/40 bg-slate-50 dark:bg-slate-900/40 opacity-50 cursor-not-allowed'
                       : method === 'wallet'
                         ? 'border-[#2563EB] dark:border-[#35A8FF] bg-[#EEF6FF] dark:bg-blue-950/50 ring-2 ring-blue-500/20'
@@ -319,7 +513,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                 <button
                   type="button"
                   onClick={() => setMethod('vietqr')}
-                  className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition-all ${
+                  className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition-all cursor-pointer ${
                     method === 'vietqr'
                       ? 'border-[#2563EB] dark:border-[#35A8FF] bg-[#EEF6FF] dark:bg-blue-950/50 ring-2 ring-blue-500/20'
                       : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/50 hover:border-blue-300 dark:hover:border-blue-700'
@@ -336,24 +530,24 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
               </div>
 
               {/* Cảnh báo khi số dư ví không đủ */}
-              {balance < totalPrice && (
+              {balance < finalPrice && (
                 <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
                   <span>⚠️</span>
-                  <span>Số dư ví ({balance.toLocaleString('vi-VN')}đ) không đủ để thanh toán {totalPrice.toLocaleString('vi-VN')}đ. Vui lòng nạp thêm hoặc đổi phương thức thanh toán khác.</span>
+                  <span>Số dư ví ({balance.toLocaleString('vi-VN')}đ) không đủ để thanh toán {finalPrice.toLocaleString('vi-VN')}đ. Vui lòng nạp thêm hoặc chọn thanh toán Ngân hàng VietQR.</span>
                 </div>
               )}
             </div>
 
             <button
               type="submit"
-              disabled={loading || submittingRef.current || (method === 'wallet' && balance < totalPrice)}
-              className="w-full rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-3 text-sm font-bold text-white shadow-md transition-all duration-300 hover:from-[#0080E0] hover:to-[#1D4ED8] disabled:opacity-60"
+              disabled={loading || submittingRef.current || (method === 'wallet' && balance < finalPrice)}
+              className="w-full rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-3 text-sm font-bold text-white shadow-md transition-all duration-300 hover:from-[#0080E0] hover:to-[#1D4ED8] disabled:opacity-60 cursor-pointer"
             >
               {loading
                 ? (method === 'wallet' ? 'Đang thanh toán...' : 'Đang tạo đơn hàng...')
                 : method === 'wallet'
-                  ? `Thanh toán ${totalPrice.toLocaleString('vi-VN')}đ bằng ví`
-                  : 'Lấy mã QR thanh toán'
+                  ? `Thanh toán ${finalPrice.toLocaleString('vi-VN')}đ bằng ví`
+                  : `Lấy mã QR thanh toán (${finalPrice.toLocaleString('vi-VN')}đ)`
               }
             </button>
           </form>
@@ -365,8 +559,13 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
             <div>
               <h3 className="text-lg font-black text-[#0F172A] dark:text-white">Thanh toán đơn hàng</h3>
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
-                Vui lòng quét mã QR bên dưới để thanh toán số tiền {plan.price.toLocaleString('vi-VN')}đ.
+                Vui lòng quét mã QR bên dưới để thanh toán số tiền <strong className="text-[#2563EB] dark:text-[#35A8FF]">{finalPrice.toLocaleString('vi-VN')}đ</strong>.
               </p>
+              {discountAmount > 0 && (
+                <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  ✓ Đã áp dụng mã {appliedCoupon?.code} (Giảm {discountAmount.toLocaleString('vi-VN')}đ)
+                </p>
+              )}
             </div>
 
             {/* QR Code */}
@@ -378,72 +577,59 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
             <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-4 text-left text-xs space-y-2 text-[#0F172A] dark:text-white">
               <div className="flex justify-between font-medium">
                 <span className="text-slate-500 dark:text-slate-400">Ngân hàng thụ hưởng:</span>
-                <span className="font-extrabold">MB Bank</span>
+                <span className="font-bold">MB Bank (Quân Đội)</span>
               </div>
               <div className="flex justify-between font-medium">
                 <span className="text-slate-500 dark:text-slate-400">Số tài khoản:</span>
-                <span className="font-extrabold">{BANK_CONFIG.accountNo}</span>
+                <span className="font-mono font-bold text-[#2563EB] dark:text-[#35A8FF]">{BANK_CONFIG.accountNo}</span>
               </div>
               <div className="flex justify-between font-medium">
                 <span className="text-slate-500 dark:text-slate-400">Chủ tài khoản:</span>
-                <span className="font-extrabold">{BANK_CONFIG.accountName}</span>
+                <span className="font-bold">{BANK_CONFIG.accountName}</span>
               </div>
-              <div className="flex justify-between font-medium text-blue-600 dark:text-blue-400">
-                <span className="font-bold text-slate-500 dark:text-slate-400">Nội dung (BẮT BUỘC CHÍNH XÁC):</span>
-                <span className="font-black text-sm bg-blue-100 dark:bg-blue-950 px-2 py-0.5 rounded-md dark:text-[#35A8FF]">{paymentCode}</span>
+              <div className="flex justify-between font-medium border-t border-slate-200 dark:border-slate-700/60 pt-2">
+                <span className="text-slate-500 dark:text-slate-400">Số tiền:</span>
+                <span className="font-black text-[#2563EB] dark:text-[#35A8FF] text-sm">{finalPrice.toLocaleString('vi-VN')}đ</span>
+              </div>
+              <div className="flex justify-between font-medium items-center">
+                <span className="text-slate-500 dark:text-slate-400">Nội dung CK:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="rounded-md bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 font-mono font-black text-[#2563EB] dark:text-[#35A8FF]">
+                    {paymentCode}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(paymentCode)}
+                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    Copy
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900/50 p-3 text-xs text-sky-700 dark:text-sky-300 font-semibold leading-relaxed">
-              👉 Sau khi bạn chuyển khoản đúng nội dung và số tiền, hệ thống SePay sẽ tự động xác nhận và duyệt đơn trong 10s - 30s. Màn hình sẽ tự chuyển khi thanh toán thành công — vui lòng không đóng cửa sổ này.
+            <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-400">
+              <div className="h-2 w-2 animate-ping rounded-full bg-emerald-500" />
+              <span>Đang chờ hệ thống SePay tự động xác nhận giao dịch...</span>
             </div>
-
-            {/* Trạng thái chờ xác nhận tự động */}
-            <div className="flex items-center justify-center gap-2.5 rounded-xl border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/30 py-2.5 text-xs font-bold text-amber-600 dark:text-amber-400">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-300 dark:border-amber-700 border-t-amber-600 dark:border-t-amber-400" />
-              Đang chờ xác nhận thanh toán tự động…
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setStep('checkout')}
-                className="flex-1 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-              >
-                Quay lại
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 rounded-full bg-slate-100 dark:bg-slate-800/80 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-              >
-                Đóng (đơn vẫn được lưu)
-              </button>
-            </div>
-            <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed">
-              Bạn có thể đóng cửa sổ và theo dõi trạng thái trong mục <strong>Đơn hàng của tôi</strong>. Đơn sẽ tự cập nhật khi nhận được thanh toán.
-            </p>
           </div>
         )}
 
-        {/* STEP 3: SUCCESS BLOCK — Đồng bộ chuẩn với Ảnh 2 */}
+        {/* STEP 3: SUCCESS */}
         {step === 'success' && (
-          <div className="text-center space-y-5 py-3">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50">
-              <CheckIcon className="h-8 w-8" />
+          <div className="text-center space-y-4 py-4">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 text-2xl animate-bounce">
+              ✓
             </div>
             <div>
-              <h3 className="text-xl font-black text-[#0F172A] dark:text-white">Đặt hàng thành công!</h3>
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-400 mt-1">Mã đơn hàng: {paymentCode}</p>
-              <p className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-300 leading-relaxed max-w-sm mx-auto">
-                Cảm ơn bạn đã tin tưởng BOW. Đơn hàng đã được chuyển sang trạng thái <strong>Chờ bàn giao</strong>. Admin sẽ thiết lập tài khoản và gửi thông tin qua email/mục đơn hàng của bạn trong vòng 5 - 15 phút.
+              <h3 className="text-lg font-black text-[#0F172A] dark:text-white">Thanh toán thành công!</h3>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
+                Đơn hàng #{paymentCode} đã được khởi tạo và gửi tới ban quản trị.
               </p>
             </div>
-
             <button
-              type="button"
               onClick={onClose}
-              className="w-full rounded-full bg-[#0F172A] dark:bg-blue-600 py-3 text-sm font-bold text-white hover:bg-black dark:hover:bg-blue-700 transition"
+              className="mt-2 w-full rounded-full bg-[#2563EB] py-3 text-xs font-black text-white hover:bg-[#1D4ED8] transition cursor-pointer"
             >
               Đóng và tiếp tục mua sắm
             </button>

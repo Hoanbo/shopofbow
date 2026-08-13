@@ -8,9 +8,9 @@ import {
   BagIcon,
   AppIcon,
   SparkIcon,
-  PhoneIcon,
   MenuIcon,
   CloseIcon,
+  StarIcon,
   BoltIcon
 } from '../../components/icons';
 
@@ -26,16 +26,30 @@ const AuditIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const TicketIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+  </svg>
+);
+
+const TagIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+  </svg>
+);
+
 // Sidebar navigation links
 const links = [
   { to: '/admin', label: 'Tổng quan', Icon: HomeIcon, end: true },
   { to: '/admin/orders', label: 'Đơn hàng', Icon: CheckIcon },
+  { to: '/admin/tickets', label: 'Ticket hỗ trợ', Icon: TicketIcon },
   { to: '/admin/activity', label: 'Nhật ký hoạt động', Icon: AuditIcon },
-  { to: '/admin/users', label: 'Người dùng', Icon: UserIcon },
   { to: '/admin/products', label: 'Sản phẩm', Icon: BagIcon },
+  { to: '/admin/reviews', label: 'Đánh giá sản phẩm', Icon: StarIcon },
   { to: '/admin/categories', label: 'Danh mục', Icon: AppIcon },
+  { to: '/admin/coupons', label: 'Mã giảm giá', Icon: TagIcon },
+  { to: '/admin/users', label: 'Người dùng', Icon: UserIcon },
   { to: '/admin/faqs', label: 'FAQ chung', Icon: SparkIcon },
-  { to: '/admin/contact', label: 'Liên hệ', Icon: PhoneIcon },
   { to: '/admin/settings', label: 'Cài đặt hệ thống', Icon: BoltIcon },
 ];
 
@@ -162,7 +176,7 @@ export default function AdminLayout() {
             `relative flex items-center gap-3.5 rounded-2xl px-4 py-3.5 text-xs font-bold transition-all duration-200 ${
               isActive
                 ? 'bg-gradient-to-r from-[#19A7FF]/10 to-[#2563EB]/10 dark:from-[#19A7FF]/20 dark:to-[#2563EB]/20 text-[#2563EB] dark:text-[#35A8FF] shadow-xs before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:bg-gradient-to-b before:from-[#19A7FF] before:to-[#2563EB] before:rounded-r-md'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-[#F4F8FF] dark:hover:bg-slate-800/50 hover:text-[#2563EB]'
+                : 'text-slate-600 dark:text-slate-200 hover:bg-[#F4F8FF] dark:hover:bg-slate-800/80 hover:text-[#2563EB] dark:hover:text-white'
             }`
           }
         >
@@ -218,12 +232,12 @@ export default function AdminLayout() {
               target="_blank"
               rel="noopener noreferrer"
               title="Mở trang cửa hàng"
-              className="hidden sm:flex items-center gap-1.5 h-11 px-4 rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F0F7FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400 text-xs font-bold hover:text-[#2563EB] dark:hover:text-[#35A8FF]"
+              className="flex items-center gap-1.5 h-11 px-3 sm:px-4 rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F0F7FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400 text-xs font-bold hover:text-[#2563EB] dark:hover:text-[#35A8FF]"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-              Xem Website
+              <span className="hidden xs:inline">Xem Website</span>
             </a>
 
             {/* Theme Toggle Button */}

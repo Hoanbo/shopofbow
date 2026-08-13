@@ -9,6 +9,7 @@ import NotFound from './pages/NotFound';
 import Auth from './pages/Auth';
 import ClientDashboard from './pages/Dashboard';
 import { AuthProvider } from './context/AuthContext';
+import { FavoritesProvider } from './context/FavoritesContext';
 
 // Admin is code-split so the public site never downloads the dashboard bundle.
 const ProtectedRoute = lazy(() => import('./components/admin/ProtectedRoute'));
@@ -18,11 +19,13 @@ const AdminProducts = lazy(() => import('./pages/admin/Products'));
 const ProductEditor = lazy(() => import('./pages/admin/ProductEditor'));
 const AdminCategories = lazy(() => import('./pages/admin/Categories'));
 const AdminFaqs = lazy(() => import('./pages/admin/Faqs'));
-const AdminContact = lazy(() => import('./pages/admin/Contact'));
 const AdminOrders = lazy(() => import('./pages/admin/Orders'));
+const AdminTickets = lazy(() => import('./pages/admin/Tickets'));
 const AdminUsers = lazy(() => import('./pages/admin/Users'));
 const AdminAuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
+const AdminReviews = lazy(() => import('./pages/admin/Reviews'));
+const AdminCoupons = lazy(() => import('./pages/admin/Coupons'));
 
 const adminSpinner = (
   <div className="grid min-h-dvh place-items-center bg-sky-soft">
@@ -72,10 +75,13 @@ const router = createBrowserRouter([
           { path: 'products', element: lazyAdmin(<AdminProducts />) },
           { path: 'products/new', element: lazyAdmin(<ProductEditor />) },
           { path: 'products/:id', element: lazyAdmin(<ProductEditor />) },
+          { path: 'reviews', element: lazyAdmin(<AdminReviews />) },
           { path: 'categories', element: lazyAdmin(<AdminCategories />) },
           { path: 'faqs', element: lazyAdmin(<AdminFaqs />) },
-          { path: 'contact', element: lazyAdmin(<AdminContact />) },
+          { path: 'contact', element: <Navigate to="/admin/tickets" replace /> },
           { path: 'orders', element: lazyAdmin(<AdminOrders />) },
+          { path: 'coupons', element: lazyAdmin(<AdminCoupons />) },
+          { path: 'tickets', element: lazyAdmin(<AdminTickets />) },
           { path: 'audit-logs', element: lazyAdmin(<AdminAuditLogs />) },
           { path: 'activity', element: lazyAdmin(<AdminAuditLogs />) },
           { path: 'users', element: lazyAdmin(<AdminUsers />) },
@@ -89,7 +95,9 @@ const router = createBrowserRouter([
 export default function App() {
   return (
     <AuthProvider>
-      <RouterProvider router={router} />
+      <FavoritesProvider>
+        <RouterProvider router={router} />
+      </FavoritesProvider>
     </AuthProvider>
   );
 }

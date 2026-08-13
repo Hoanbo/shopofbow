@@ -12,14 +12,15 @@
 /** Thông báo mặc định khi không nhận diện được lỗi (yêu cầu #9). */
 export const DEFAULT_AUTH_ERROR = 'Đã xảy ra lỗi. Vui lòng thử lại sau.';
 
-/** Ngữ cảnh gọi — quyết định fallback tiếng Việt khi lỗi không khớp rule nào. */
-export type AuthContext = 'signin' | 'signup' | 'otp' | 'google';
+export type AuthContext = 'signin' | 'signup' | 'otp' | 'google' | 'forgot' | 'update_password';
 
 const CONTEXT_FALLBACK: Record<AuthContext, string> = {
   signin: 'Đăng nhập thất bại. Vui lòng thử lại sau.',
   signup: 'Đăng ký thất bại. Vui lòng thử lại sau.',
   otp: 'Xác minh OTP thất bại. Vui lòng thử lại sau.',
   google: 'Không thể đăng nhập bằng Google. Vui lòng thử lại sau.',
+  forgot: 'Không thể gửi yêu cầu khôi phục mật khẩu. Vui lòng thử lại sau.',
+  update_password: 'Không thể cập nhật mật khẩu. Vui lòng thử lại sau.',
 };
 
 type MatchRule = {

@@ -5,14 +5,16 @@ interface AppLogoProps {
   className?: string;
 }
 
-export default function AppLogo({ name = '', image = '', className = 'h-[64px] w-[64px]' }: AppLogoProps) {
+export default function AppLogo({ name = '', image = '', className = 'h-16 w-16 sm:h-[80px] sm:w-[80px]' }: AppLogoProps) {
   const imgSrc = image || '/assets/logos/bowLogo.jpeg';
   return (
-    <div className={`flex items-center justify-center overflow-hidden rounded-xl sm:rounded-2xl bg-white dark:bg-slate-900 p-0.5 sm:p-1 border border-slate-100/80 dark:border-slate-800/80 shadow-xs ${className}`}>
+    <div
+      className={`relative flex aspect-square items-center justify-center shrink-0 overflow-hidden rounded-2xl sm:rounded-[22px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-md shadow-slate-200/40 dark:shadow-none ${className}`}
+    >
       <img
         src={imgSrc}
         alt={name}
-        className="h-full w-full object-cover rounded-lg sm:rounded-xl"
+        className="h-full w-full object-cover object-center rounded-2xl transition-transform duration-300"
         loading="lazy"
         onError={(e) => {
           (e.target as HTMLImageElement).src = '/assets/logos/bowLogo.jpeg';
@@ -21,3 +23,4 @@ export default function AppLogo({ name = '', image = '', className = 'h-[64px] w
     </div>
   );
 }
+

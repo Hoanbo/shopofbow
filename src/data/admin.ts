@@ -218,9 +218,15 @@ export async function uploadImage(file: File, folder = 'products'): Promise<stri
 
   try {
     const base64Data = await base64Promise;
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
     const res = await fetch('/api/upload', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         fileName: file.name,
         fileType: file.type || 'image/png',

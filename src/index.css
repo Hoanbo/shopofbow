@@ -32,6 +32,18 @@
   html.dark ::-webkit-scrollbar-thumb {
     @apply bg-[#334155] rounded-full hover:bg-slate-600;
   }
+
+  /* Native select option dark theme override */
+  html.dark select option {
+    background-color: #18243E !important;
+    color: #FFFFFF !important;
+    padding: 8px 12px;
+  }
+  select option {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    padding: 8px 12px;
+  }
 }
 
 @layer components {

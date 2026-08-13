@@ -81,11 +81,11 @@ export default function Home() {
           )}
         </div>
 
-        {/* Mobile View: 4 Products Visible in Carousel with Auto-Scroll & Dots */}
+        {/* Mobile View: 3 Products Visible in Carousel with Auto-Scroll & Dots */}
         <div className="sm:hidden space-y-3">
           {loadingAi ? (
-            <div className="grid grid-cols-4 gap-1.5">
-              <Skeleton count={4} variant="tool" />
+            <div className="grid grid-cols-3 gap-2">
+              <Skeleton count={3} variant="tool" />
             </div>
           ) : (
             <>
@@ -96,10 +96,10 @@ export default function Home() {
                 onTouchEnd={() => setIsPaused(false)}
                 onMouseEnter={() => setIsPaused(true)}
                 onMouseLeave={() => setIsPaused(false)}
-                className="flex overflow-x-auto gap-2 snap-x snap-mandatory px-0.5 pb-2 no-scrollbar scroll-smooth"
+                className="flex overflow-x-auto gap-2.5 snap-x snap-mandatory px-0.5 pb-2 no-scrollbar scroll-smooth"
               >
                 {displayAiTools.map((item) => (
-                  <div key={item.id} className="w-[calc(25%-6px)] min-w-[76px] xs:min-w-[84px] shrink-0 snap-start">
+                  <div key={item.id} className="w-[calc(33.333%-7px)] min-w-[110px] xs:min-w-[124px] shrink-0 snap-start">
                     <AIToolCard item={item} />
                   </div>
                 ))}
@@ -135,8 +135,8 @@ export default function Home() {
         title="Premium Apps"
         to="/premium-apps"
       >
-        {/* Mobile: 2 Rows x 3 Columns (6 Items). Desktop: 1 Row x 6 Columns */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-4 lg:gap-5">
+        {/* Mobile: 3 Columns. Desktop: 6 Columns */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4 lg:gap-5">
           {loadingApps ? (
             <Skeleton count={6} variant="app" />
           ) : (

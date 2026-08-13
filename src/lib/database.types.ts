@@ -208,6 +208,103 @@ export interface Database {
           },
         ];
       };
+      user_favorites: {
+        Row: {
+          id: string;
+          user_id: string;
+          product_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          product_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          product_id?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'user_favorites_product_id_fkey';
+            columns: ['product_id'];
+            referencedRelation: 'products';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      support_tickets: {
+        Row: {
+          id: string;
+          ticket_number: string;
+          user_id: string;
+          order_id: string | null;
+          subject: string;
+          status: 'pending' | 'processing' | 'resolved' | 'closed';
+          priority: 'low' | 'normal' | 'high' | 'urgent';
+          created_at: string;
+          updated_at: string;
+          closed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          ticket_number?: string;
+          user_id: string;
+          order_id?: string | null;
+          subject: string;
+          status?: 'pending' | 'processing' | 'resolved' | 'closed';
+          priority?: 'low' | 'normal' | 'high' | 'urgent';
+          created_at?: string;
+          updated_at?: string;
+          closed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          ticket_number?: string;
+          user_id?: string;
+          order_id?: string | null;
+          subject?: string;
+          status?: 'pending' | 'processing' | 'resolved' | 'closed';
+          priority?: 'low' | 'normal' | 'high' | 'urgent';
+          created_at?: string;
+          updated_at?: string;
+          closed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      support_messages: {
+        Row: {
+          id: string;
+          ticket_id: string;
+          sender_id: string;
+          sender_role: 'user' | 'admin';
+          message: string;
+          attachments: any | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          ticket_id: string;
+          sender_id: string;
+          sender_role: 'user' | 'admin';
+          message: string;
+          attachments?: any | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          ticket_id?: string;
+          sender_id?: string;
+          sender_role?: 'user' | 'admin';
+          message?: string;
+          attachments?: any | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

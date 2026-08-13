@@ -25,7 +25,7 @@ import {
   type CategoryRow,
 } from '../../data/admin';
 import type { ProductType } from '../../lib/database.types';
-import { Field, TextArea, Select, Toggle, DeleteButton, Banner, AdminCard } from '../../components/admin/ui';
+import { Field, TextArea, Select, Toggle, DeleteButton, AdminCard } from '../../components/admin/ui';
 import { useToast } from '../../components/Toast';
 
 const emptyForm = {
@@ -67,8 +67,6 @@ export default function ProductEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(!isNew);
 
   // Sub-collections: Existing DB rows or Local Drafts for new product
@@ -96,7 +94,7 @@ export default function ProductEditor() {
     getProduct(id!)
       .then((p) => {
         if (!p) {
-          setErr('Không tìm thấy sản phẩm');
+          toast.error('Không tìm thấy sản phẩm');
           return;
         }
         setForm({
@@ -119,7 +117,7 @@ export default function ProductEditor() {
         });
         return loadSubs(p.id);
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : 'Lỗi tải dữ liệu'))
+      .catch((e) => toast.error(e instanceof Error ? e.message : 'Lỗi tải dữ liệu'))
       .finally(() => setLoading(false));
   }, [id, isNew, loadSubs]);
 
@@ -144,19 +142,17 @@ export default function ProductEditor() {
   });
 
   const onSave = async () => {
+    if (saving) return;
+
     if (!form.name.trim()) {
-      setErr('Vui lòng nhập tên sản phẩm');
       toast.error('Vui lòng nhập tên sản phẩm');
       return;
     }
     if (form.base_price != null && Number(form.base_price) < 0) {
-      setErr('Giá bán sản phẩm không được là số âm');
       toast.error('Giá bán sản phẩm không được là số âm');
       return;
     }
     setSaving(true);
-    setErr(null);
-    setOk(null);
     try {
       if (isNew) {
         // 1. Create main product record
@@ -215,7 +211,7 @@ export default function ProductEditor() {
           }
         ]).then(() => {});
 
-        toast.success('🎉 Đã tạo sản phẩm và toàn bộ gói giá, tính năng thành công!');
+        toast.success('Đã lưu sản phẩm thành công');
         nav(`/admin/products/${newId}`, { replace: true });
       } else {
         await updateProduct(id!, buildPayload());
@@ -232,12 +228,10 @@ export default function ProductEditor() {
           }
         ]).then(() => {});
 
-        toast.success('Đã lưu thay đổi sản phẩm!');
-        setOk('Đã lưu thay đổi.');
+        toast.success('Đã lưu sản phẩm thành công');
       }
     } catch (e: any) {
-      const msg = e instanceof Error ? e.message : 'Lưu thất bại';
-      setErr(msg);
+      const msg = e instanceof Error ? e.message : 'Lưu sản phẩm thất bại';
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -246,14 +240,12 @@ export default function ProductEditor() {
 
   const onUpload = async (file: File, field: 'logo_url' | 'banner_url') => {
     setUploading(true);
-    setErr(null);
     try {
       const url = await uploadImage(file, field === 'logo_url' ? 'logos' : 'banners');
       set(field, url);
       toast.success('Tải ảnh thành công!');
     } catch (e: any) {
       const msg = e instanceof Error ? e.message : 'Upload thất bại. Kiểm tra Supabase Storage.';
-      setErr(msg);
       toast.error(msg);
     } finally {
       setUploading(false);
@@ -288,9 +280,6 @@ export default function ProductEditor() {
           {saving ? 'Đang lưu...' : '💾 Lưu lại'}
         </button>
       </div>
-
-      {err && <Banner kind="error">{err}</Banner>}
-      {ok && <Banner kind="success">{ok}</Banner>}
 
       <div className="grid gap-5 lg:grid-cols-3">
         {/* main info */}

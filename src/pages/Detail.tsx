@@ -7,6 +7,7 @@ import { useAsync } from '../hooks/useAsync';
 import { useSeo } from '../hooks/useSeo';
 import { useAuth } from '../context/AuthContext';
 import CheckoutModal from '../components/CheckoutModal';
+import ProductReviewsSection from '../components/user/ProductReviewsSection';
 import AppLogo from '../components/AppLogo';
 import AIToolCard from '../components/AIToolCard';
 import PremiumAppCard from '../components/PremiumAppCard';
@@ -19,6 +20,8 @@ import {
   HeadsetIcon,
   ChevronRight,
 } from '../components/icons';
+
+import { useFavorites } from '../context/FavoritesContext';
 
 interface Props {
   category: CatalogItem['category'] | 'all';
@@ -91,8 +94,10 @@ export default function Detail({ category, base, crumb }: Props) {
     );
   }
 
+  const { isFavorite, toggleFavorite } = useFavorites();
   const relatedItems = related.filter((i) => i.id !== item.id).slice(0, 4);
   const active = item.plans[plan] ?? item.plans[0];
+  const fav = item ? (isFavorite(item.id) || isFavorite(item.slug)) : false;
 
   return (
     <div className="container-bow py-4 sm:py-6 space-y-6">
@@ -131,12 +136,41 @@ export default function Detail({ category, base, crumb }: Props) {
         {/* Right Column: Product Specs & Options */}
         <div className="flex flex-col justify-between">
           <div>
-            <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-[#2563EB]">
-              {item.group}
-            </span>
-            <h1 className="mt-2.5 text-2xl font-black text-[#0F172A] sm:text-3xl lg:text-4xl tracking-tight">
-              {item.name}
-            </h1>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-[#2563EB]">
+                  {item.group}
+                </span>
+                <h1 className="mt-2.5 text-2xl font-black text-[#0F172A] sm:text-3xl lg:text-4xl tracking-tight">
+                  {item.name}
+                </h1>
+              </div>
+
+              {/* Favorite Toggle Button */}
+              <button
+                type="button"
+                onClick={() => toggleFavorite(item)}
+                title={fav ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition-all shadow-xs border shrink-0 ${
+                  fav
+                    ? 'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900 dark:text-rose-400'
+                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-rose-300 hover:text-rose-500'
+                }`}
+              >
+                <svg
+                  className={`h-4 w-4 transition-transform duration-300 ${fav ? 'fill-rose-500 stroke-rose-500 scale-110' : 'fill-none stroke-currentColor'}`}
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 21.364l-7.682-7.682a4.5 4.5 0 010-6.364z"
+                  />
+                </svg>
+                <span>{fav ? 'Đã yêu thích' : 'Yêu thích'}</span>
+              </button>
+            </div>
             <p className="mt-1.5 text-sm font-medium text-slate-500 leading-relaxed">{item.tagline}</p>
 
             <div className="mt-4 flex items-center gap-3 text-sm">
@@ -343,6 +377,11 @@ export default function Detail({ category, base, crumb }: Props) {
           </div>
         </div>
       )}
+
+      {/* Product Reviews Section */}
+      <div className="mt-8">
+        <ProductReviewsSection productId={item.id} productName={item.name} />
+      </div>
 
       {/* Related Products Grid */}
       {relatedItems.length > 0 && (

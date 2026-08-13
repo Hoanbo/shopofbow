@@ -4,6 +4,7 @@ import SearchBar from './SearchBar';
 import { SearchIcon, AppIcon, HeadsetIcon } from './icons';
 import newLogo from '../assets/new-logover2.png';
 import { useAuth } from '../context/AuthContext';
+import { useFavorites } from '../context/FavoritesContext';
 import { supabase } from '../lib/supabase';
 
 interface HeaderNotification {
@@ -18,6 +19,7 @@ interface HeaderNotification {
 
 export default function Header() {
   const { session, loading, balance, signOut, isAdmin } = useAuth();
+  const { favoriteProducts } = useFavorites();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
@@ -467,12 +469,19 @@ export default function Header() {
                       <Link
                         to="/dashboard?tab=favorites"
                         onClick={() => setShowUserMenu(false)}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-[#0F172A] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
+                        className="flex w-full items-center justify-between gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-[#0F172A] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
                       >
-                        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                        </svg>
-                        Sản phẩm yêu thích
+                        <div className="flex items-center gap-2.5">
+                          <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                          Sản phẩm yêu thích
+                        </div>
+                        {favoriteProducts.length > 0 && (
+                          <span className="rounded-full bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/50 px-2 py-0.5 text-[10px] font-black text-rose-500">
+                            {favoriteProducts.length}
+                          </span>
+                        )}
                       </Link>
 
                       <Link

@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { SearchIcon } from '../../components/icons';
 import { createPortal } from 'react-dom';
+import { Pagination } from '../../components/admin/Pagination';
+
 
 /**
  * AuditLogItem — list view only (NO metadata, to minimize data sent to browser).
@@ -101,17 +104,102 @@ function CustomSelect({
 }
 
 function formatActionName(action: string): { label: string; icon: string } {
+  // Refund / Wallet / Financial
   if (action.includes('refund')) return { label: 'Hoàn tiền', icon: '💸' };
+  if (action.includes('wallet')) return { label: 'Đổi số dư ví', icon: '💳' };
+  if (action.includes('sepay')) return { label: 'SePay Nạp ví', icon: '💳' };
+
+  // Orders
   if (action.includes('completed')) return { label: 'Bàn giao xong', icon: '✅' };
   if (action.includes('processing')) return { label: 'Đang thiết lập', icon: '⚙️' };
   if (action.includes('pending_delivery')) return { label: 'Chờ bàn giao', icon: '📦' };
-  if (action.includes('wallet')) return { label: 'Đổi số dư ví', icon: '💳' };
+  if (action.includes('pending_payment')) return { label: 'Chờ thanh toán', icon: '⏳' };
+  if (action.includes('cancelled') || action.includes('cancel_order')) return { label: 'Hủy đơn hàng', icon: '❌' };
   if (action.includes('create_order')) return { label: 'Tạo đơn mới', icon: '🛒' };
+  if (action.includes('order_status_change') || action.includes('update_order')) return { label: 'Đổi trạng thái đơn', icon: '🔄' };
+
+  // Tickets
+  if (action === 'ticket_reply' || action.includes('ticket_reply')) return { label: 'Phản hồi Ticket', icon: '💬' };
+  if (action === 'ticket_closed_by_user') return { label: 'Khách đóng Ticket', icon: '🔒' };
+  if (action === 'ticket_closed_by_admin') return { label: 'Admin đóng Ticket', icon: '🔒' };
+  if (action === 'ticket_update') return { label: 'Cập nhật Ticket', icon: '🎫' };
+  if (action === 'ticket_create') return { label: 'Tạo Ticket hỗ trợ', icon: '🎫' };
+  if (action.includes('ticket')) return { label: 'Thao tác Ticket', icon: '🎫' };
+
+  // Reviews
+  if (action === 'review_approved') return { label: 'Duyệt Đánh giá', icon: '⭐' };
+  if (action === 'review_rejected') return { label: 'Từ chối Đánh giá', icon: '🔴' };
+  if (action === 'review_submitted') return { label: 'Gửi Đánh giá', icon: '⭐' };
+  if (action.includes('review')) return { label: 'Đánh giá SP', icon: '⭐' };
+
+  // Products
   if (action.includes('create_product')) return { label: 'Tạo sản phẩm', icon: '➕' };
   if (action.includes('update_product')) return { label: 'Sửa sản phẩm', icon: '✏️' };
   if (action.includes('delete_product')) return { label: 'Xóa sản phẩm', icon: '🗑️' };
-  if (action.includes('sepay')) return { label: 'SePay Nạp ví', icon: '💳' };
-  return { label: action, icon: '📋' };
+
+  // Coupons
+  if (action === 'coupon_used' || action === 'coupon_applied') return { label: 'Áp dụng mã giảm', icon: '🎟️' };
+  if (action === 'create_coupon') return { label: 'Tạo mã giảm giá', icon: '🎟️' };
+  if (action === 'update_coupon') return { label: 'Sửa mã giảm giá', icon: '🎟️' };
+  if (action === 'delete_coupon') return { label: 'Xóa mã giảm giá', icon: '🗑️' };
+  if (action === 'enable_coupon') return { label: 'Bật mã giảm giá', icon: '▶️' };
+  if (action === 'disable_coupon') return { label: 'Tắt mã giảm giá', icon: '⏸️' };
+  if (action.includes('coupon')) return { label: 'Mã giảm giá', icon: '🎟️' };
+
+  // Users / System Settings
+  if (action.includes('user_update') || action.includes('update_user')) return { label: 'Cập nhật User', icon: '👤' };
+  if (action.includes('system_update') || action.includes('update_setting')) return { label: 'Cài đặt hệ thống', icon: '⚙️' };
+
+  // Clean Fallback formatting
+  const cleanLabel = action
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (l) => l.toUpperCase());
+
+  return { label: cleanLabel, icon: '📋' };
+}
+
+function formatEntityTypeLabel(type: string): string {
+  if (!type) return '';
+  const t = type.toLowerCase();
+  if (t === 'support_ticket' || t === 'ticket') return 'TICKET';
+  if (t === 'product_review' || t === 'review') return 'ĐÁNH GIÁ';
+  if (t === 'coupon') return 'MÃ GIẢM GIÁ';
+  if (t === 'product') return 'SẢN PHẨM';
+  if (t === 'order') return 'ĐƠN HÀNG';
+  if (t === 'user') return 'NGƯỜI DÙNG';
+  if (t === 'wallet') return 'VÍ SỐ DƯ';
+  if (t === 'system') return 'HỆ THỐNG';
+  return type.toUpperCase();
+}
+
+function formatStatusLabel(s: string | null | undefined): string {
+  if (!s) return '';
+  const map: Record<string, string> = {
+    pending_payment: 'Chờ thanh toán',
+    pending_delivery: 'Chờ bàn giao',
+    processing: 'Đang thiết lập',
+    completed: 'Hoàn tất',
+    cancelled: 'Đã hủy',
+    refunded: 'Đã hoàn tiền',
+  };
+  return map[s] || s;
+}
+
+function formatAuditDescription(desc: string | null | undefined): string {
+  if (!desc) return '';
+  return desc
+    .replace(/"pending_payment"/g, '"Chờ thanh toán"')
+    .replace(/"pending_delivery"/g, '"Chờ bàn giao"')
+    .replace(/"processing"/g, '"Đang thiết lập"')
+    .replace(/"completed"/g, '"Hoàn tất"')
+    .replace(/"cancelled"/g, '"Đã hủy"')
+    .replace(/"refunded"/g, '"Đã hoàn tiền"')
+    .replace(/\bpending_payment\b/g, 'Chờ thanh toán')
+    .replace(/\bpending_delivery\b/g, 'Chờ bàn giao')
+    .replace(/\bprocessing\b/g, 'Đang thiết lập')
+    .replace(/\bcompleted\b/g, 'Hoàn tất')
+    .replace(/\bcancelled\b/g, 'Đã hủy')
+    .replace(/\brefunded\b/g, 'Đã hoàn tiền');
 }
 
 function formatEntityId(id?: string | null): string {
@@ -352,7 +440,7 @@ export default function AdminAuditLogs() {
             <div className="w-full overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse min-w-[700px]">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/40 text-slate-400 font-black uppercase text-[10px] tracking-wider">
+                  <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-[#18243E] text-slate-700 dark:text-slate-200 font-extrabold uppercase text-[10px] tracking-wider">
                     <th className="py-3.5 px-4 w-[120px]">Thời gian</th>
                     <th className="py-3.5 px-3 w-[160px]">Người thực hiện</th>
                     <th className="py-3.5 px-3 w-[130px]">Hành động</th>
@@ -371,8 +459,8 @@ export default function AdminAuditLogs() {
                         className="hover:bg-blue-50/40 dark:hover:bg-blue-950/20 cursor-pointer transition-colors"
                       >
                         {/* Created At */}
-                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                          {new Date(log.created_at).toLocaleDateString('vi-VN')} <span className="text-[10px] opacity-75">{new Date(log.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-600 dark:text-slate-300 font-mono text-[11px] font-bold">
+                          {new Date(log.created_at).toLocaleDateString('vi-VN')} <span className="text-[10px] opacity-80">{new Date(log.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
                         </td>
 
                         {/* Actor */}
@@ -395,16 +483,22 @@ export default function AdminAuditLogs() {
 
                         {/* Entity Type & Short ID */}
                         <td className="py-3.5 px-3 whitespace-nowrap">
-                          <span className="font-mono text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                            <span className="uppercase text-[10px] font-black text-slate-400 tracking-wider mr-1">{log.entity_type}</span>
-                            {formatEntityId(log.entity_id)}
+                          <span className="font-mono text-[11px] font-bold text-slate-900 dark:text-white">
+                            <span className="uppercase text-[10px] font-black text-sky-600 dark:text-[#35A8FF] tracking-wider mr-1.5">{formatEntityTypeLabel(log.entity_type)}</span>
+                            {(() => {
+                              if (log.entity_type === 'product') {
+                                const match = log.description?.match(/"([^"]+)"/);
+                                if (match && match[1]) return `"${match[1]}"`;
+                              }
+                              return formatEntityId(log.entity_id);
+                            })()}
                           </span>
                         </td>
 
                         {/* Description */}
                         <td className="py-3.5 px-4">
-                          <p className="line-clamp-1 leading-normal text-slate-800 dark:text-slate-200 font-medium">
-                            {log.description}
+                          <p className="line-clamp-1 leading-normal text-slate-900 dark:text-slate-100 font-semibold">
+                            {formatAuditDescription(log.description)}
                           </p>
                         </td>
 
@@ -417,7 +511,7 @@ export default function AdminAuditLogs() {
                               openLogDetail(log.id);
                             }}
                             disabled={detailLoading}
-                            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition shadow-2xs disabled:opacity-50"
+                            className="rounded-xl border border-blue-200 dark:border-blue-700/60 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 text-[11px] font-extrabold text-[#2563EB] dark:text-[#35A8FF] hover:bg-[#2563EB] hover:text-white dark:hover:bg-[#2563EB] dark:hover:text-white transition shadow-2xs disabled:opacity-50"
                           >
                             {detailLoading ? '⏳' : '🔍'} Chi tiết
                           </button>
@@ -431,47 +525,14 @@ export default function AdminAuditLogs() {
           </div>
 
           {/* PAGINATION */}
-          {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800/80 pt-4 bg-white dark:bg-[#131C32] p-4 rounded-[22px] border border-[#E8F1FF] shadow-xs">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                Hiển thị {((currentPage - 1) * LOGS_PER_PAGE) + 1} - {Math.min(currentPage * LOGS_PER_PAGE, filteredLogs.length)} / {filteredLogs.length} nhật ký
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-                >
-                  ‹ Trở lại
-                </button>
-
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                  <button
-                    key={pageNum}
-                    type="button"
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`h-7 w-7 rounded-xl text-xs font-extrabold transition ${
-                      currentPage === pageNum
-                        ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-                >
-                  Tiếp ›
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredLogs.length}
+            itemsPerPage={LOGS_PER_PAGE}
+            itemLabel="nhật ký"
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
@@ -496,14 +557,6 @@ function ModalDetail({
   onClose: () => void;
   getActorBadge: (role: AuditLogDetail['actor_role']) => React.ReactNode;
 }) {
-  const getHumanEntityName = (type: string, id?: string | null, name?: string) => {
-    if (type === 'wallet') return `Ví số dư (${name || 'Thành viên'})`;
-    if (type === 'order') return `Đơn hàng ${id ? `#${id}` : ''}`;
-    if (type === 'product') return `Sản phẩm ${id ? `#${id}` : ''}`;
-    if (type === 'user') return `Tài khoản (${name || 'Khách hàng'})`;
-    return `${type.toUpperCase()} ${id ? `#${id}` : ''}`;
-  };
-
   // Cast metadata values to safe primitives for rendering (metadata typed as Record<string, unknown>)
   const rawMeta = selectedLog.metadata || {};
   const meta = {
@@ -513,9 +566,136 @@ function ModalDetail({
     price: rawMeta.price != null ? Number(rawMeta.price) : null,
     old_status: typeof rawMeta.old_status === 'string' ? rawMeta.old_status : null,
     new_status: typeof rawMeta.new_status === 'string' ? rawMeta.new_status : null,
-    product_name: typeof rawMeta.product_name === 'string' ? rawMeta.product_name : null,
+    product_name: typeof rawMeta.product_name === 'string' ? rawMeta.product_name : (typeof rawMeta.name === 'string' ? rawMeta.name : null),
   };
   const hasMetadata = Object.values(meta).some((v) => v != null);
+
+  const navigate = useNavigate();
+
+  const getHumanEntityName = (type: string, id?: string | null, name?: string) => {
+    const t = (type || '').toLowerCase();
+    const desc = selectedLog.description || '';
+
+    // Check if description has ticket code like BOW-1004
+    const ticketMatch = desc.match(/BOW-\d+/i);
+    if ((t === 'support_ticket' || t === 'ticket') && ticketMatch) {
+      return `Ticket hỗ trợ #${ticketMatch[0]}`;
+    }
+
+    // Check if description has order payment code like BOW... or #BOW...
+    const orderMatch = desc.match(/#?(BOW[A-Z0-9]+)/i);
+    if (t === 'order' && orderMatch) {
+      return `Đơn hàng #${orderMatch[1]}`;
+    }
+
+    // Check if description has review code like #ee5b6b84
+    const reviewMatch = desc.match(/Đánh giá #([a-f0-9]+)/i);
+    if ((t === 'product_review' || t === 'review') && reviewMatch) {
+      return `Đánh giá sản phẩm #${reviewMatch[1]}`;
+    }
+
+    const cleanId = id ? (id.startsWith('#') ? id.slice(1) : id) : '';
+    const shortId = cleanId ? (cleanId.length > 12 ? `#${cleanId.substring(0, 8)}` : `#${cleanId}`) : '';
+
+    if (t === 'wallet') return `Ví số dư (${name || 'Thành viên'})`;
+    if (t === 'order') return `Đơn hàng ${shortId}`;
+    if (t === 'product') {
+      const match = desc.match(/"([^"]+)"/);
+      const prodName = meta.product_name || (match ? match[1] : null);
+      if (prodName) {
+        return `Sản phẩm "${prodName}"`;
+      }
+      return `Sản phẩm ${shortId}`;
+    }
+    if (t === 'user') return `Tài khoản (${name || 'Khách hàng'})`;
+    if (t === 'support_ticket' || t === 'ticket') return `Ticket hỗ trợ ${shortId}`;
+    if (t === 'product_review' || t === 'review') return `Đánh giá sản phẩm ${shortId}`;
+    if (t === 'coupon') {
+      const match = desc.match(/"([^"]+)"/);
+      const code = match ? match[1] : (id || '');
+      return `Mã giảm giá ${code ? `"${code}"` : shortId}`;
+    }
+
+    const typeVN: Record<string, string> = {
+      category: 'Danh mục',
+      setting: 'Cài đặt hệ thống',
+      system: 'Hệ thống',
+      faq: 'FAQ',
+    };
+
+    return `${typeVN[t] || t.toUpperCase()} ${shortId}`;
+  };
+
+  const getEntityTargetRoute = (): { label: string; route: string; icon: string } | null => {
+    const t = (selectedLog.entity_type || '').toLowerCase();
+    const desc = selectedLog.description || '';
+
+    // Coupon
+    if (t === 'coupon' || selectedLog.action.includes('coupon')) {
+      return {
+        label: 'Mở Quản lý Mã giảm giá',
+        route: '/admin/coupons',
+        icon: '🎟️',
+      };
+    }
+
+    // Ticket
+    if (t === 'support_ticket' || t === 'ticket' || selectedLog.action.includes('ticket')) {
+      const match = desc.match(/BOW-\d+/i);
+      const code = match ? match[0] : (selectedLog.entity_id || '');
+      return {
+        label: code ? `Mở Ticket ${code}` : 'Đi tới quản lý Ticket',
+        route: code ? `/admin/tickets?ticket=${encodeURIComponent(code)}` : '/admin/tickets',
+        icon: '🎫',
+      };
+    }
+
+    // Order
+    if (t === 'order' || selectedLog.action.includes('order')) {
+      const match = desc.match(/#?(BOW\w+)/i);
+      const code = match ? match[1] : (selectedLog.entity_id || '');
+      return {
+        label: code ? `Mở Đơn hàng #${code}` : 'Đi tới danh sách Đơn hàng',
+        route: code ? `/admin/orders?search=${encodeURIComponent(code)}` : '/admin/orders',
+        icon: '🛒',
+      };
+    }
+
+    // Review
+    if (t === 'product_review' || t === 'review' || selectedLog.action.includes('review')) {
+      const match = desc.match(/#([a-f0-9-]+)/i);
+      const id = match ? match[1] : (selectedLog.entity_id || '');
+      return {
+        label: id ? `Mở Đánh giá #${id.slice(0, 8)}` : 'Đi tới Quản lý Đánh giá',
+        route: id ? `/admin/reviews?search=${encodeURIComponent(id)}` : '/admin/reviews',
+        icon: '⭐',
+      };
+    }
+
+    // Product
+    if (t === 'product') {
+      const match = desc.match(/"([^"]+)"/);
+      const name = meta.product_name || (match ? match[1] : null) || selectedLog.entity_id || '';
+      return {
+        label: name ? `Mở Sản phẩm "${name}"` : 'Đi tới danh sách Sản phẩm',
+        route: name ? `/admin/products?search=${encodeURIComponent(name)}` : '/admin/products',
+        icon: '📦',
+      };
+    }
+
+    // User / Wallet
+    if (t === 'user' || t === 'wallet') {
+      return {
+        label: selectedLog.actor_name ? `Mở Người dùng (${selectedLog.actor_name})` : 'Đi tới Quản lý Người dùng',
+        route: selectedLog.actor_name ? `/admin/users?search=${encodeURIComponent(selectedLog.actor_name)}` : '/admin/users',
+        icon: '👤',
+      };
+    }
+
+    return null;
+  };
+
+  const navTarget = getEntityTargetRoute();
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -537,32 +717,48 @@ function ModalDetail({
         <div className="space-y-3 text-xs font-semibold text-slate-700 dark:text-slate-300">
           <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-850/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800">
             <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">ID Nhật ký</span>
-              <span className="font-mono text-[11px] text-slate-500">{selectedLog.id.substring(0, 18)}...</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-300 font-extrabold uppercase block">ID Nhật ký</span>
+              <span className="font-mono text-[11px] text-slate-600 dark:text-slate-200 font-bold">{selectedLog.id.substring(0, 18)}...</span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Thời gian</span>
-              <span>{new Date(selectedLog.created_at).toLocaleString('vi-VN')}</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-300 font-extrabold uppercase block">Thời gian</span>
+              <span className="text-slate-900 dark:text-white font-bold">{new Date(selectedLog.created_at).toLocaleString('vi-VN')}</span>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Người thực hiện</span>
-              <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[10px] text-slate-500 dark:text-slate-300 font-extrabold uppercase block">Người thực hiện</span>
+              <div className="flex items-center gap-1.5 mt-0.5 font-bold text-slate-900 dark:text-white">
                 {getActorBadge(selectedLog.actor_role)}
                 <span>{selectedLog.actor_name}</span>
               </div>
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Đối tượng tác động</span>
-              <span className="font-bold text-[#2563EB] dark:text-[#35A8FF]">
-                {getHumanEntityName(selectedLog.entity_type, selectedLog.entity_id, selectedLog.actor_name)}
-              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-300 font-extrabold uppercase block mb-1">Đối tượng tác động</span>
+              {navTarget ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate(navTarget.route);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/80 px-2.5 py-1 text-xs font-black text-[#2563EB] dark:text-[#35A8FF] hover:bg-[#2563EB] hover:text-white dark:hover:bg-[#2563EB] dark:hover:text-white transition cursor-pointer shadow-2xs"
+                  title="Bấm để mở chi tiết đối tượng"
+                >
+                  <span>{navTarget.icon}</span>
+                  <span>{getHumanEntityName(selectedLog.entity_type, selectedLog.entity_id, selectedLog.actor_name)}</span>
+                  <span className="text-[11px] opacity-70">→</span>
+                </button>
+              ) : (
+                <span className="font-extrabold text-[#2563EB] dark:text-[#35A8FF]">
+                  {getHumanEntityName(selectedLog.entity_type, selectedLog.entity_id, selectedLog.actor_name)}
+                </span>
+              )}
             </div>
           </div>
 
           <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Nội dung hoạt động</span>
-            <p className="bg-blue-50/50 dark:bg-blue-950/20 p-3.5 rounded-2xl border border-blue-100 dark:border-blue-900/30 text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
-              {selectedLog.description}
+            <span className="text-[10px] text-slate-500 dark:text-slate-300 font-extrabold uppercase block mb-1">Nội dung hoạt động</span>
+            <p className="bg-blue-50/50 dark:bg-blue-950/20 p-3.5 rounded-2xl border border-blue-100 dark:border-blue-900/30 text-slate-900 dark:text-slate-100 font-semibold leading-relaxed">
+              {formatAuditDescription(selectedLog.description)}
             </p>
           </div>
 
@@ -600,13 +796,13 @@ function ModalDetail({
                 {meta.old_status && (
                   <div>
                     <span className="text-[10px] text-slate-400 block font-semibold">Trạng thái trước</span>
-                    <span className="font-bold text-slate-600 dark:text-slate-400">{meta.old_status}</span>
+                    <span className="font-bold text-slate-600 dark:text-slate-400">{formatStatusLabel(meta.old_status)}</span>
                   </div>
                 )}
                 {meta.new_status && (
                   <div>
                     <span className="text-[10px] text-slate-400 block font-semibold">Trạng thái mới</span>
-                    <span className="font-bold text-emerald-500">{meta.new_status}</span>
+                    <span className="font-bold text-emerald-500">{formatStatusLabel(meta.new_status)}</span>
                   </div>
                 )}
                 {meta.product_name && (
