@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Listing from './pages/Listing';
 import Detail from './pages/Detail';
 import Contact from './pages/Contact';
+import Prompts from './pages/Prompts';
 import NotFound from './pages/NotFound';
 import Auth from './pages/Auth';
 import ClientDashboard from './pages/Dashboard';
@@ -26,6 +27,7 @@ const AdminAuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 const AdminSettings = lazy(() => import('./pages/admin/Settings'));
 const AdminReviews = lazy(() => import('./pages/admin/Reviews'));
 const AdminCoupons = lazy(() => import('./pages/admin/Coupons'));
+const AdminPrompts = lazy(() => import('./pages/admin/AdminPrompts'));
 
 const adminSpinner = (
   <div className="grid min-h-dvh place-items-center bg-sky-soft">
@@ -41,6 +43,7 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <Home /> },
       { path: '/dashboard', element: <ClientDashboard /> },
+      { path: '/prompts', element: <Prompts /> },
       { path: '/ai-tools', element: <Navigate to="/products" replace /> },
       { path: '/ai-tools/:slug', element: <Detail category="ai-tool" base="/products" crumb="Sản phẩm" /> },
       { path: '/premium-apps', element: <Navigate to="/products" replace /> },
@@ -75,6 +78,7 @@ const router = createBrowserRouter([
           { path: 'products', element: lazyAdmin(<AdminProducts />) },
           { path: 'products/new', element: lazyAdmin(<ProductEditor />) },
           { path: 'products/:id', element: lazyAdmin(<ProductEditor />) },
+          { path: 'prompts', element: lazyAdmin(<AdminPrompts />) },
           { path: 'reviews', element: lazyAdmin(<AdminReviews />) },
           { path: 'categories', element: lazyAdmin(<AdminCategories />) },
           { path: 'faqs', element: lazyAdmin(<AdminFaqs />) },

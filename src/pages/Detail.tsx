@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import type { CatalogItem } from '../data/types';
-import { fetchBySlug, fetchByCategory, fetchFaqs } from '../data/api';
+import { fetchBySlug, fetchByCategory, fetchAllProducts, fetchFaqs } from '../data/api';
 import { formatVND } from '../data/catalog';
 import { useAsync } from '../hooks/useAsync';
 import { useSeo } from '../hooks/useSeo';
@@ -37,22 +37,32 @@ const perks = [
 
 export default function Detail({ category, base, crumb }: Props) {
   const { slug } = useParams();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const { session } = useAuth();
+  const nav = useNavigate();
+  const loc = useLocation();
+
   const { data: item, loading } = useAsync(
     () => (slug ? fetchBySlug(slug) : Promise.resolve(null)),
     [slug],
   );
-  const { data: related = [] } = useAsync(
-    () => (item ? fetchByCategory(item.category) : Promise.resolve([])),
-    [item?.category],
-  );
+  const { data: related = [] } = useAsync(async () => {
+    if (!item) return [];
+    const catItems = await fetchByCategory(item.category);
+    const sameCat = catItems.filter((i) => i.id !== item.id);
+    if (sameCat.length >= 4) {
+      return sameCat.slice(0, 4);
+    }
+    const all = await fetchAllProducts();
+    const other = all.filter((i) => i.id !== item.id && !sameCat.some((c) => c.id === i.id));
+    return [...sameCat, ...other].slice(0, 4);
+  }, [item?.id, item?.category]);
+
   const { data: faqs = [] } = useAsync(() => (item ? fetchFaqs(item.id) : Promise.resolve([])), [item?.id]);
   const [plan, setPlan] = useState(0);
-  const { session } = useAuth();
   const [showCheckout, setShowCheckout] = useState(false);
   // Thông tin đơn hàng sau khi thanh toán ví thành công
   const [walletOrder, setWalletOrder] = useState<{ code: string; amount: number; qty: number } | null>(null);
-  const nav = useNavigate();
-  const loc = useLocation();
 
   useSeo({
     title: item?.name,
@@ -94,8 +104,7 @@ export default function Detail({ category, base, crumb }: Props) {
     );
   }
 
-  const { isFavorite, toggleFavorite } = useFavorites();
-  const relatedItems = related.filter((i) => i.id !== item.id).slice(0, 4);
+  const relatedItems = related.slice(0, 4);
   const active = item.plans[plan] ?? item.plans[0];
   const fav = item ? (isFavorite(item.id) || isFavorite(item.slug)) : false;
 
@@ -306,8 +315,12 @@ export default function Detail({ category, base, crumb }: Props) {
                     )}
 
                     {active.notes && (
-                      <div className="mt-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-900/50 p-2.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
-                        ⚠️ <strong>Lưu ý:</strong> {active.notes}
+                      <div className="mt-3 rounded-xl bg-sky-50/80 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-800/60 p-2.5 text-xs font-semibold text-sky-800 dark:text-sky-300 flex items-center gap-2">
+                        <span className="text-base shrink-0">🛡️</span>
+                        <span>
+                          <strong className="font-extrabold text-sky-900 dark:text-sky-200">Bảo hành:</strong>{' '}
+                          {active.notes}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -392,15 +405,11 @@ export default function Detail({ category, base, crumb }: Props) {
               Xem tất cả &gt;
             </Link>
           </div>
-          <div className={
-            category === 'ai-tool' || category === 'premium-app'
-              ? 'grid grid-cols-2 gap-4 md:grid-cols-4 sm:gap-5'
-              : 'grid grid-cols-1 gap-3.5 sm:gap-4 md:grid-cols-2 lg:grid-cols-4 lg:gap-5'
-          }>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 sm:gap-5">
             {relatedItems.map((r) => (
-              category === 'ai-tool' ? (
+              r.category === 'ai-tool' ? (
                 <AIToolCard key={r.id} item={r} />
-              ) : category === 'premium-app' ? (
+              ) : r.category === 'premium-app' ? (
                 <PremiumAppCard key={r.id} item={r} />
               ) : (
                 <FeaturedBannerCard key={r.id} item={r} base={base} />

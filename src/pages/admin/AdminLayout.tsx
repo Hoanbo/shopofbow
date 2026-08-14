@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import newLogo from '../../assets/new-logover2.png';
 import {
   HomeIcon,
   CheckIcon,
@@ -45,6 +46,7 @@ const links = [
   { to: '/admin/tickets', label: 'Ticket hỗ trợ', Icon: TicketIcon },
   { to: '/admin/activity', label: 'Nhật ký hoạt động', Icon: AuditIcon },
   { to: '/admin/products', label: 'Sản phẩm', Icon: BagIcon },
+  { to: '/admin/prompts', label: 'Thư viện Prompt', Icon: SparkIcon },
   { to: '/admin/reviews', label: 'Đánh giá sản phẩm', Icon: StarIcon },
   { to: '/admin/categories', label: 'Danh mục', Icon: AppIcon },
   { to: '/admin/coupons', label: 'Mã giảm giá', Icon: TagIcon },
@@ -201,38 +203,48 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-[#F5F9FF] dark:bg-[#0B1224] transition-colors duration-300 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 h-[76px] bg-white/95 dark:bg-[#131C32]/95 backdrop-blur-md border-b border-[#E8F1FF] dark:border-[#1E2A4A]/50 transition-colors duration-300">
-        <div className="h-full px-6 flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-40 h-[70px] sm:h-[76px] bg-white/95 dark:bg-[#131C32]/95 backdrop-blur-md border-b border-[#E8F1FF] dark:border-[#1E2A4A]/50 transition-colors duration-300">
+        <div className="h-full px-3.5 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
           
           {/* Logo & Menu Trigger */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-4">
             <button
               onClick={() => setOpenDrawer((v) => !v)}
-              className="grid h-11 w-11 place-items-center rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] dark:hover:bg-slate-800 transition lg:hidden shadow-xs text-slate-500 dark:text-slate-400"
+              className="grid h-10 w-10 sm:h-11 sm:w-11 place-items-center rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] dark:hover:bg-slate-800 transition lg:hidden shadow-xs text-slate-500 dark:text-slate-400"
               aria-label="Menu"
             >
-              {openDrawer ? <CloseIcon className="h-5.5 w-5.5" /> : <MenuIcon className="h-5.5 w-5.5" />}
+              {openDrawer ? <CloseIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
             </button>
 
-            <Link to="/admin" className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#19A7FF] to-[#2563EB] text-sm font-black text-white shadow-md">
-                B
-              </span>
-              <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white sm:block">
-                BOW <span className="text-[#2563EB] dark:text-[#35A8FF] font-black">Admin</span>
-              </span>
+            <Link to="/admin" className="flex items-center gap-2 group">
+              <img
+                src={newLogo}
+                alt="BOW Logo"
+                className="h-[34px] sm:h-[42px] w-auto object-contain transition-transform duration-200 group-hover:scale-105 filter contrast-[1.25] saturate-[1.3] brightness-[0.95] drop-shadow-[0_0_1px_rgba(15,23,42,0.85)] drop-shadow-[0_2px_5px_rgba(2,132,199,0.35)] dark:filter-none dark:contrast-[1.1] dark:drop-shadow-[0_0_8px_rgba(0,163,255,0.45)]"
+              />
+              <div className="flex flex-col leading-none">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-lg sm:text-2xl font-black tracking-tight text-[#00A3FF]">BOW</span>
+                  <span className="text-[9px] sm:text-[10px] font-extrabold uppercase px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/60 border border-blue-200/50 dark:border-blue-900/40 text-[#2563EB] dark:text-[#35A8FF] rounded-md">
+                    Admin
+                  </span>
+                </div>
+                <span className="text-[7px] sm:text-[7.5px] font-black uppercase tracking-widest text-[#FFB703] mt-0.5">
+                  Management Portal
+                </span>
+              </div>
             </Link>
           </div>
 
           {/* Quick Actions / Notifications / Theme / Avatar */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* View Storefront Button */}
             <a
               href="/"
               target="_blank"
               rel="noopener noreferrer"
               title="Mở trang cửa hàng"
-              className="flex items-center gap-1.5 h-11 px-3 sm:px-4 rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F0F7FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400 text-xs font-bold hover:text-[#2563EB] dark:hover:text-[#35A8FF]"
+              className="flex items-center gap-1.5 h-10 sm:h-11 px-2.5 sm:px-4 rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F0F7FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400 text-xs font-bold hover:text-[#2563EB] dark:hover:text-[#35A8FF]"
             >
               <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -243,7 +255,7 @@ export default function AdminLayout() {
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
-              className="grid h-11 w-11 place-items-center rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400"
+              className="grid h-10 w-10 sm:h-11 sm:w-11 place-items-center rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400"
               title={theme === 'light' ? 'Bật Dark Mode' : 'Bật Light Mode'}
             >
               {theme === 'light' ? (
@@ -261,13 +273,13 @@ export default function AdminLayout() {
             <div className="relative">
               <button
                 onClick={() => { setShowNotifications((v) => !v); if (!showNotifications) fetchNotifs(); }}
-                className="relative grid h-11 w-11 place-items-center rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400"
+                className="relative grid h-10 w-10 sm:h-11 sm:w-11 place-items-center rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] dark:hover:bg-slate-800 transition shadow-xs text-slate-500 dark:text-slate-400"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
                 {unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white ring-2 ring-white dark:ring-[#131C32]">
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white shadow-xs">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
@@ -276,14 +288,19 @@ export default function AdminLayout() {
               {showNotifications && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                  <div className="absolute right-0 mt-2 z-50 w-80 rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] shadow-xl text-left animate-fade-up overflow-hidden">
-                    <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-                      <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                        Thông báo {unreadCount > 0 && <span className="ml-1 rounded-full bg-red-100 dark:bg-red-950/30 text-red-600 dark:text-red-400 px-1.5 py-0.5 text-[9px]">{unreadCount} mới</span>}
-                      </h4>
+                  <div className="absolute right-0 mt-3 w-80 sm:w-96 rounded-[22px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] shadow-2xl z-50 overflow-hidden animate-scale-up">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 p-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm">Thông báo Admin</span>
+                        {unreadCount > 0 && (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/40 text-[10px] font-black">
+                            {unreadCount} mới
+                          </span>
+                        )}
+                      </div>
                       {unreadCount > 0 && (
-                        <button onClick={markAllRead} className="text-[10px] font-bold text-[#2563EB] hover:underline">
-                          Đánh dấu đã đọc
+                        <button onClick={markAllRead} className="text-xs font-bold text-[#2563EB] dark:text-[#38bdf8] hover:underline">
+                          Đã đọc tất cả
                         </button>
                       )}
                     </div>
@@ -331,7 +348,7 @@ export default function AdminLayout() {
       </header>
 
       {/* Main Content Layout container */}
-      <div className="mx-auto flex w-full max-w-[1360px] gap-8 px-6 py-8 flex-1">
+      <div className="mx-auto flex w-full max-w-[1360px] gap-6 lg:gap-8 px-3.5 sm:px-6 py-5 sm:py-8 flex-1">
         {/* Sidebar desktop */}
         <aside className="hidden w-64 shrink-0 lg:block">
           <div className="sticky top-28 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-4 shadow-xs transition-colors duration-300">
@@ -342,7 +359,7 @@ export default function AdminLayout() {
 
         {/* Sidebar mobile drawer */}
         {openDrawer && (
-          <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setOpenDrawer(false)}>
+          <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setOpenDrawer(false)}>
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" />
             <div
               className="absolute left-0 top-0 bottom-0 w-72 bg-white dark:bg-[#131C32] p-5 shadow-2xl transition-all animate-fade-up"
@@ -350,8 +367,19 @@ export default function AdminLayout() {
             >
               <div className="flex items-center justify-between border-b border-slate-50 dark:border-slate-800 pb-4">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#19A7FF] to-[#2563EB] text-xs font-black text-white shadow-xs">B</span>
-                  <span className="text-sm font-extrabold text-slate-900 dark:text-white">BOW Admin</span>
+                  <img
+                    src={newLogo}
+                    alt="BOW Logo"
+                    className="h-8 w-auto object-contain filter contrast-[1.25] saturate-[1.3] brightness-[0.95] drop-shadow-[0_0_1px_rgba(15,23,42,0.85)] drop-shadow-[0_2px_4px_rgba(2,132,199,0.35)] dark:filter-none dark:contrast-[1.1] dark:drop-shadow-[0_0_8px_rgba(0,163,255,0.45)]"
+                  />
+                  <div className="flex flex-col leading-none">
+                    <span className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1">
+                      <span className="text-[#00A3FF]">BOW</span>
+                      <span className="text-[9px] font-extrabold uppercase px-1 py-0.5 bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#35A8FF] rounded">
+                        Admin
+                      </span>
+                    </span>
+                  </div>
                 </div>
                 <button
                   onClick={() => setOpenDrawer(false)}

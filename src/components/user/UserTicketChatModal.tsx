@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
+import { sendTicketTelegramNotify, sendTicketEmailNotify } from '../../lib/notify';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../Toast';
 import { CloseIcon } from '../icons';
@@ -165,6 +166,9 @@ export default function UserTicketChatModal({ ticketId, onClose, onTicketUpdated
         message: text.length > 50 ? `${text.substring(0, 50)}...` : text,
       });
 
+      // 3. Send Telegram alert to Admin
+      sendTicketTelegramNotify(ticket.id, 'ticket_user_message', text).catch(() => {});
+
       if (onTicketUpdated) onTicketUpdated();
 
     } catch (err: any) {
@@ -222,6 +226,10 @@ export default function UserTicketChatModal({ ticketId, onClose, onTicketUpdated
         title: `🔒 Ticket #${ticket.ticket_number} đã được đóng`,
         message: `Khách hàng ${userEmail} đã xác nhận hài lòng và đóng vé hỗ trợ.`,
       });
+
+      // 4. Send Telegram and Email notifications
+      sendTicketTelegramNotify(ticket.id, 'ticket_closed').catch(() => {});
+      sendTicketEmailNotify(ticket.id, 'ticket_closed').catch(() => {});
 
       setTicket((prev) => (prev ? { ...prev, status: 'closed' } : null));
       toast.success('Đã xác nhận & đóng Ticket hỗ trợ thành công. Cảm ơn bạn!');

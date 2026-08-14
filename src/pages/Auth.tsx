@@ -18,8 +18,18 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const nav = useNavigate();
   const loc = useLocation() as { state?: { from?: string } };
+
+  // Countdown timer cho nút Gửi lại mã OTP (chống spam và tránh Rate Limit 429)
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   // Nguồn redirect DUY NHẤT: chỉ chạy khi auth đã load xong VÀ đã có session.
   // Tuyệt đối KHÔNG redirect khi đang ở các bước khôi phục mật khẩu (forgot / forgot_otp / update_password).
@@ -59,6 +69,7 @@ export default function Auth() {
     try {
       await signUp(email, password);
       setSuccess('Mã OTP xác thực 6 số đã được gửi về email của bạn.');
+      setResendCooldown(60);
       setMode('otp');
     } catch (err) {
       setError(mapAuthError(err, 'signup'));
@@ -99,6 +110,7 @@ export default function Auth() {
 
       setOtpToken('');
       setSuccess('Mã OTP khôi phục 6 số đã được gửi về email của bạn.');
+      setResendCooldown(60);
       setMode('forgot_otp');
     } catch (err: any) {
       setError(mapAuthError(err, 'forgot'));
@@ -394,19 +406,22 @@ export default function Auth() {
             <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 pt-1">
               <button
                 type="button"
+                disabled={resendCooldown > 0}
                 onClick={async () => {
+                  if (resendCooldown > 0) return;
                   setError(null);
                   setSuccess(null);
                   try {
                     await signUp(email, password);
                     setSuccess('Đã gửi lại mã OTP mới.');
+                    setResendCooldown(60);
                   } catch (err) {
                     setError(mapAuthError(err, 'signup'));
                   }
                 }}
-                className="hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition"
+                className="hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Gửi lại mã OTP
+                {resendCooldown > 0 ? `Gửi lại mã OTP (${resendCooldown}s)` : 'Gửi lại mã OTP'}
               </button>
               <button
                 type="button"
@@ -494,19 +509,22 @@ export default function Auth() {
             <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 pt-1">
               <button
                 type="button"
+                disabled={resendCooldown > 0}
                 onClick={async () => {
+                  if (resendCooldown > 0) return;
                   setError(null);
                   setSuccess(null);
                   try {
                     await supabase.auth.resetPasswordForEmail(email.trim());
                     setSuccess('Đã gửi lại mã OTP khôi phục mới.');
+                    setResendCooldown(60);
                   } catch (err: any) {
-                    setError(err?.message || 'Lỗi gửi lại mã OTP.');
+                    setError(mapAuthError(err, 'forgot'));
                   }
                 }}
-                className="hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition"
+                className="hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Gửi lại mã OTP
+                {resendCooldown > 0 ? `Gửi lại mã OTP (${resendCooldown}s)` : 'Gửi lại mã OTP'}
               </button>
               <button
                 type="button"

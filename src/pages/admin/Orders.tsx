@@ -7,7 +7,6 @@ import { useToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { Pagination } from '../../components/admin/Pagination';
 
-
 type Order = {
   id: string;
   user_id: string;
@@ -21,10 +20,205 @@ type Order = {
   payment_code: string;
   notes: string;
   account_details?: string;
+  delivery_info?: string;
+  expires_at?: string;
+  renewal_policy?: string;
+  target_account?: string;
   created_at: string;
   profiles?: {
     email: string;
     full_name: string;
+  };
+};
+
+const calcOrderExpiry = (order: Order) => {
+  if (order.status !== 'completed') return null;
+
+  const planStr = `${order.product_name || ''} ${order.plan_label || ''}`.toLowerCase();
+
+  if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
+    return {
+      label: 'Vĩnh viễn (Trọn đời)',
+      badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200/60',
+      icon: '👑',
+      daysText: 'Sử dụng không giới hạn thời gian',
+    };
+  }
+
+  let durationDays = 30;
+  let isHours = false;
+
+  if (planStr.includes('1 ngày') || planStr.includes('24h') || planStr.includes('1 day') || planStr.includes('api 10m') || planStr.includes('api 50m') || planStr.includes('api 100m')) {
+    durationDays = 1;
+    isHours = true;
+  } else if (planStr.includes('2 ngày') || planStr.includes('48h')) {
+    durationDays = 2;
+  } else if (planStr.includes('3 ngày')) {
+    durationDays = 3;
+  } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+    durationDays = 7;
+  } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
+    durationDays = 14;
+  } else if (planStr.includes('15 ngày')) {
+    durationDays = 15;
+  } else if (planStr.includes('1 tháng') || planStr.includes('30 ngày') || planStr.includes('1 month')) {
+    durationDays = 30;
+  } else if (planStr.includes('2 tháng') || planStr.includes('60 ngày')) {
+    durationDays = 60;
+  } else if (planStr.includes('3 tháng') || planStr.includes('90 ngày')) {
+    durationDays = 90;
+  } else if (planStr.includes('6 tháng') || planStr.includes('180 ngày')) {
+    durationDays = 180;
+  } else if (planStr.includes('1 năm') || planStr.includes('12 tháng') || planStr.includes('1 year') || planStr.includes('365 ngày')) {
+    durationDays = 365;
+  } else {
+    const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
+    if (dayMatch) {
+      durationDays = parseInt(dayMatch[1], 10);
+      if (durationDays === 1) isHours = true;
+    }
+  }
+
+  const createdAtMs = new Date(order.created_at).getTime();
+  const expiresAtMs = order.expires_at ? new Date(order.expires_at).getTime() : createdAtMs + durationDays * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  const diffMs = expiresAtMs - nowMs;
+  const diffHours = Math.ceil(diffMs / (60 * 60 * 1000));
+  const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+
+  if (diffMs <= 0) {
+    return {
+      label: 'Đã hết hạn',
+      badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/60',
+      icon: '🔴',
+      daysText: 'Đã kết thúc chu kỳ sử dụng',
+    };
+  }
+
+  if (isHours && diffHours <= 24) {
+    return {
+      label: `Còn ${diffHours} giờ`,
+      badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200/60',
+      icon: '⚡',
+      daysText: `Hạn dùng đến: ${new Date(expiresAtMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+    };
+  }
+
+  if (diffDays <= 3) {
+    return {
+      label: `Còn ${diffDays} ngày (Sắp hết)`,
+      badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/60 animate-pulse',
+      icon: '🟡',
+      daysText: `Hạn dùng đến: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+    };
+  }
+
+  return {
+    label: `Còn ${diffDays} ngày`,
+    badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200/60',
+    icon: '🟢',
+    daysText: `Hạn dùng đến: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+  };
+};
+
+const calcAdminWarranty = (order: Order) => {
+  if (order.status !== 'completed') return null;
+
+  const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${order.notes || ''}`.toLowerCase();
+
+  // 1. Gói không bảo hành
+  if (planStr.includes('kbh') || planStr.includes('không bảo hành') || planStr.includes('no warranty')) {
+    return {
+      label: 'Không bảo hành',
+      badgeClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200/60',
+      icon: '⚪',
+      daysText: 'Gói không áp dụng bảo hành',
+    };
+  }
+
+  // 2. Gói vĩnh viễn
+  if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
+    return {
+      label: 'Bảo hành trọn đời',
+      badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200/60',
+      icon: '👑',
+      daysText: 'Bảo hành trọn đời dịch vụ',
+    };
+  }
+
+  let durationDays = 30;
+  let isHours = false;
+
+  if (planStr.includes('1 ngày') || planStr.includes('24h') || planStr.includes('1 day') || planStr.includes('api 10m') || planStr.includes('api 50m') || planStr.includes('api 100m')) {
+    durationDays = 1;
+    isHours = true;
+  } else if (planStr.includes('2 ngày') || planStr.includes('48h')) {
+    durationDays = 2;
+  } else if (planStr.includes('3 ngày')) {
+    durationDays = 3;
+  } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+    durationDays = 7;
+  } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
+    durationDays = 14;
+  } else if (planStr.includes('15 ngày')) {
+    durationDays = 15;
+  } else if (planStr.includes('1 tháng') || planStr.includes('30 ngày') || planStr.includes('1 month')) {
+    durationDays = 30;
+  } else if (planStr.includes('2 tháng') || planStr.includes('60 ngày')) {
+    durationDays = 60;
+  } else if (planStr.includes('3 tháng') || planStr.includes('90 ngày')) {
+    durationDays = 90;
+  } else if (planStr.includes('6 tháng') || planStr.includes('180 ngày')) {
+    durationDays = 180;
+  } else if (planStr.includes('1 năm') || planStr.includes('12 tháng') || planStr.includes('1 year') || planStr.includes('365 ngày')) {
+    durationDays = 365;
+  } else {
+    const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
+    if (dayMatch) {
+      durationDays = parseInt(dayMatch[1], 10);
+      if (durationDays === 1) isHours = true;
+    }
+  }
+
+  const createdAtMs = new Date(order.created_at).getTime();
+  const expiresAtMs = order.expires_at ? new Date(order.expires_at).getTime() : createdAtMs + durationDays * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  const diffMs = expiresAtMs - nowMs;
+  const diffHours = Math.ceil(diffMs / (60 * 60 * 1000));
+  const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+
+  if (diffMs <= 0) {
+    return {
+      label: 'Hết hạn BH',
+      badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/60',
+      icon: '🔴',
+      daysText: `Hết hạn BH: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+    };
+  }
+
+  if (isHours && diffHours <= 24) {
+    return {
+      label: `BH: Còn ${diffHours}h`,
+      badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
+      icon: '⚡',
+      daysText: `Đến ${new Date(expiresAtMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+    };
+  }
+
+  if (diffDays <= 3) {
+    return {
+      label: `BH: Còn ${diffDays} ngày`,
+      badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/60 animate-pulse',
+      icon: '🟡',
+      daysText: `Hết hạn BH: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+    };
+  }
+
+  return {
+    label: `BH: Còn ${diffDays} ngày`,
+    badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
+    icon: '🛡️',
+    daysText: `Bảo hành đến: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
   };
 };
 
@@ -99,76 +293,80 @@ export default function AdminOrders() {
         setOrderTimeline(timelineRes.data);
       }
     } catch (err) {
-      console.error('Error fetching order detail:', err);
+      console.error('Error fetching order/user detail:', err);
     } finally {
       setLoadingDetail(false);
     }
   };
 
-  const handleCopyText = (text: string, label: string) => {
+  const handleCopyText = (text: string, label = 'nội dung') => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
     toast.success(`Đã sao chép ${label}!`);
   };
 
-  // Confirm Modal State
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const ORDERS_PER_PAGE = 8;
+
+  // Reset to page 1 when filters or search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStatus, searchQuery]);
+
+  // Confirmation Modal state
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
     message: string;
-    confirmText?: string;
-    variant?: 'danger' | 'warning' | 'primary' | 'success';
-    loading?: boolean;
+    confirmText: string;
+    variant: 'danger' | 'primary';
+    loading: boolean;
     onConfirm: () => Promise<void>;
   }>({
     isOpen: false,
     title: '',
     message: '',
+    confirmText: 'Xác nhận',
+    variant: 'primary',
+    loading: false,
     onConfirm: async () => {},
   });
 
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const { data, error } = await (supabase
+      const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
-        .select('*, profiles!orders_user_profile_fk(email, full_name)') as any)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      let orderData = data;
-      if (error) {
-        const fallback = await (supabase.from('orders') as any)
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (fallback.error) throw error;
-        orderData = fallback.data;
-      }
-      if (orderData) {
-        const now = Date.now();
-        const expiredIds: string[] = [];
-        const processedData = orderData.map((o: any) => {
-          if (o.status === 'pending_payment') {
-            const expiresAt = new Date(o.created_at).getTime() + 15 * 60 * 1000;
-            if (expiresAt < now) {
-              expiredIds.push(o.id);
-              return { ...o, status: 'cancelled' };
-            }
-          }
-          return o;
-        });
+      if (ordersError) throw ordersError;
 
-        setOrders(processedData as Order[]);
+      const userIds = Array.from(new Set((ordersData || []).map((o: any) => o.user_id).filter(Boolean)));
+      const profilesMap = new Map<string, { email: string; full_name: string }>();
 
-        if (expiredIds.length > 0) {
-          (supabase.from('orders') as any)
-            .update({ status: 'cancelled' })
-            .in('id', expiredIds)
-            .then(() => {
-              // updated silently
-            });
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', userIds);
+
+        if (profilesData) {
+          profilesData.forEach((p: any) => {
+            profilesMap.set(p.id, { email: p.email, full_name: p.full_name });
+          });
         }
       }
+
+      const mergedOrders = (ordersData || []).map((o: any) => ({
+        ...o,
+        profiles: profilesMap.get(o.user_id),
+      }));
+
+      setOrders(mergedOrders);
     } catch (err: any) {
-      toast.error(err.message || 'Lỗi khi tải đơn hàng.');
+      toast.error(err.message || 'Lỗi khi tải danh sách đơn hàng.');
     } finally {
       setLoading(false);
     }
@@ -177,7 +375,8 @@ export default function AdminOrders() {
   useEffect(() => {
     fetchOrders();
 
-    const adminOrdersChannel = supabase
+    // Setup Realtime Listener on orders table for instant live updates
+    const ordersChannel = supabase
       .channel('admin-orders-realtime')
       .on(
         'postgres_changes',
@@ -193,9 +392,58 @@ export default function AdminOrders() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(adminOrdersChannel);
+      supabase.removeChannel(ordersChannel);
     };
   }, []);
+
+  // Tự động scroll đến đơn hàng mục tiêu nếu có param ?order_id=xxx
+  useEffect(() => {
+    if (targetOrderId && orders.length > 0) {
+      setTimeout(() => {
+        const el = document.getElementById(`admin-order-${targetOrderId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+    }
+  }, [targetOrderId, orders]);
+
+  const handleRefund = (orderId: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Hoàn tiền về ví khách hàng',
+      message: 'Bạn có chắc chắn muốn HOÀN TIỀN 100% về ví số dư cho khách hàng? Trạng thái đơn sẽ chuyển sang ĐÃ HOÀN TIỀN.',
+      confirmText: 'Hoàn tiền ngay',
+      variant: 'danger',
+      loading: false,
+      onConfirm: async () => {
+        setConfirmConfig((prev) => ({ ...prev, loading: true }));
+        try {
+          const { data, error } = await (supabase as any).rpc('refund_order', {
+            p_order_id: orderId,
+          });
+
+          if (error) throw error;
+
+          if (data === 'refunded_success') {
+            await sendOrderEmail(orderId, 'refunded');
+            toast.success('Đã hoàn tiền vào ví khách hàng thành công!');
+            fetchOrders();
+            if (selectedOrderDetail && selectedOrderDetail.id === orderId) {
+              setSelectedOrderDetail((prev) => prev ? { ...prev, status: 'refunded' } : null);
+            }
+          } else {
+            throw new Error('Không thể hoàn tiền cho đơn hàng này.');
+          }
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          toast.error(err.message || 'Lỗi khi hoàn tiền đơn hàng.');
+        } finally {
+          setConfirmConfig((prev) => ({ ...prev, loading: false }));
+        }
+      },
+    });
+  };
 
   const handleUpdateStatus = (orderId: string, newStatus: Order['status']) => {
     const isCancel = newStatus === 'cancelled';
@@ -210,6 +458,7 @@ export default function AdminOrders() {
         : `Chuyển trạng thái đơn sang "${newStatus}"?`,
       confirmText: isCancel ? 'Hủy đơn' : isProcessing ? 'Xác nhận xử lý' : 'Cập nhật',
       variant: isCancel ? 'danger' : 'primary',
+      loading: false,
       onConfirm: async () => {
         setConfirmConfig((prev) => ({ ...prev, loading: true }));
         try {
@@ -283,7 +532,8 @@ export default function AdminOrders() {
       const { error } = await (supabase.from('orders') as any)
         .update({
           status: 'completed',
-          account_details: deliveryDetails.trim()
+          account_details: deliveryDetails.trim(),
+          delivery_info: deliveryDetails.trim()
         })
         .eq('id', deliveryOrder.id);
 
@@ -299,92 +549,15 @@ export default function AdminOrders() {
         toast.success(`🎉 Bàn giao đơn #${deliveryOrder.payment_code} thành công!`);
       }
 
-      if (selectedOrderDetail && selectedOrderDetail.id === deliveryOrder.id) {
-        setSelectedOrderDetail((prev) => prev ? { ...prev, status: 'completed', account_details: deliveryDetails.trim() } : null);
-      }
-
       setDeliveryOrder(null);
       setDeliveryDetails('');
       fetchOrders();
     } catch (err: any) {
-      toast.error(err.message || 'Lỗi khi bàn giao đơn hàng.');
+      toast.error(err.message || 'Lỗi khi bàn giao dịch vụ.');
     } finally {
       setSubmittingDelivery(false);
     }
   };
-
-  const handleRefund = (orderId: string) => {
-    setConfirmConfig({
-      isOpen: true,
-      title: 'Hoàn tiền đơn hàng',
-      message: 'Xác nhận HOÀN TIỀN đơn hàng này về ví số dư của khách hàng?',
-      confirmText: 'Hoàn tiền',
-      variant: 'danger',
-      onConfirm: async () => {
-        setConfirmConfig((prev) => ({ ...prev, loading: true }));
-        try {
-          const { data, error } = await (supabase as any).rpc('refund_order', {
-            p_order_id: orderId
-          });
-          if (error) throw error;
-          if (data === 'success') {
-            const emailRes = await sendOrderEmail(orderId, 'refunded');
-            if (emailRes.email_sent) {
-              toast.success('Hoàn tiền về ví thành công và đã gửi email thông báo!');
-            } else if (emailRes.message === 'logged_no_smtp_pass') {
-              toast.success('Hoàn tiền về ví thành công! (Cần thêm SMTP_PASS vào .env để gửi email thực tế)');
-            } else {
-              toast.success('Hoàn tiền về ví thành công!');
-            }
-            fetchOrders();
-            if (selectedOrderDetail && selectedOrderDetail.id === orderId) {
-              setSelectedOrderDetail((prev) => prev ? { ...prev, status: 'refunded' } : null);
-            }
-            setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
-          } else if (data === 'unauthorized') {
-            throw new Error('Thao tác không được phép (Chỉ Admin mới có quyền hoàn tiền).');
-          } else {
-            throw new Error('Giao dịch hoàn tiền thất bại.');
-          }
-        } catch (err: any) {
-          toast.error(err.message || 'Lỗi hoàn tiền.');
-        } finally {
-          setConfirmConfig((prev) => ({ ...prev, loading: false }));
-        }
-      },
-    });
-  };
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const ORDERS_PER_PAGE = 6;
-
-  // Reset page to 1 when search or status filter changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filterStatus, searchQuery]);
-
-  // Handle URL targetOrderId for smooth scrolling
-  useEffect(() => {
-    if (!targetOrderId || orders.length === 0) return;
-    const targetOrder = orders.find((o) => o.id === targetOrderId);
-    if (!targetOrder) return;
-
-    if (filterStatus !== 'all' && targetOrder.status !== filterStatus) {
-      setFilterStatus('all');
-    }
-    if (searchQuery.trim() !== '') {
-      setSearchQuery('');
-    }
-
-    const timer = setTimeout(() => {
-      const el = document.getElementById(`admin-order-${targetOrderId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [targetOrderId, orders]);
 
   const filteredOrders = orders.filter((o) => {
     const matchStatus = filterStatus === 'all' || o.status === filterStatus;
@@ -488,104 +661,142 @@ export default function AdminOrders() {
         </div>
       ) : (
         <div className="space-y-4 animate-fade-in">
-          {paginatedOrders.map((o) => (
-            <div id={`admin-order-${o.id}`} key={o.id} className={`rounded-[24px] border ${o.id === targetOrderId ? 'border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900/60' : 'border-[#E8F1FF] dark:border-[#1E2A4A]/50'} bg-white dark:bg-[#131C32] p-6 shadow-xs flex flex-col gap-4`}>
-              {/* Header info */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-50 dark:border-slate-800/60 pb-4">
-                <div>
-                  <h3 className="font-extrabold text-slate-950 dark:text-white text-sm sm:text-base leading-tight">{o.product_name}</h3>
-                  <p className="text-xs text-slate-400 font-bold mt-1">
-                    Gói: {o.plan_label} — Mã đơn: <span className="font-bold text-slate-900 dark:text-white">{o.payment_code}</span>
-                  </p>
-                </div>
-                <div className="flex flex-col sm:items-end gap-1">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-black text-[#2563EB]">
-                      {o.price.toLocaleString('vi-VN')}đ
-                    </span>
-                    {getStatusBadge(o.status)}
-                  </div>
-                  {Number(o.discount_amount) > 0 ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
-                      🎟️ {o.coupon_code || 'Mã giảm giá'}: -{Number(o.discount_amount).toLocaleString('vi-VN')}đ
-                    </span>
-                  ) : null}
-                </div>
-              </div>
+          {paginatedOrders.map((o) => {
+            const expiryInfo = calcOrderExpiry(o);
+            const warranty = calcAdminWarranty(o);
+            const deliveryText = o.delivery_info || o.account_details;
 
-              {/* Customer details */}
-              <div className="grid gap-3 sm:grid-cols-2 text-xs font-semibold text-slate-500 dark:text-slate-400 leading-relaxed">
-                <p>👤 <strong>Khách hàng:</strong> {o.profiles?.full_name || 'Thành viên'} ({o.profiles?.email || 'N/A'})</p>
-                <p>📅 <strong>Ngày đặt:</strong> {new Date(o.created_at).toLocaleString('vi-VN')}</p>
-                {o.notes && (
-                  <p className="sm:col-span-2 bg-[#F4F8FF] dark:bg-slate-850/40 p-3.5 rounded-2xl border border-[#E8F1FF] dark:border-slate-800 text-slate-600 dark:text-slate-300 font-medium">
-                    📝 <strong>Ghi chú:</strong> {o.notes}
-                  </p>
-                )}
-                {o.account_details && (
-                  <div className="sm:col-span-2 bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-100 dark:border-emerald-950/30 text-emerald-800 dark:text-emerald-400">
-                    🎁 <strong>Thông tin đã bàn giao:</strong>
-                    <pre className="font-mono whitespace-pre-wrap mt-1 leading-snug">{o.account_details}</pre>
+            return (
+              <div id={`admin-order-${o.id}`} key={o.id} className={`rounded-[24px] border ${o.id === targetOrderId ? 'border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900/60' : 'border-[#E8F1FF] dark:border-[#1E2A4A]/50'} bg-white dark:bg-[#131C32] p-6 shadow-xs flex flex-col gap-4`}>
+                {/* Header info */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-50 dark:border-slate-800/60 pb-4">
+                  <div>
+                    <h3 className="font-extrabold text-slate-950 dark:text-white text-sm sm:text-base leading-tight">{o.product_name}</h3>
+                    <p className="text-xs text-slate-400 font-bold mt-1">
+                      Gói: {o.plan_label} — Mã đơn: <span className="font-bold text-slate-900 dark:text-white">{o.payment_code}</span>
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:items-end gap-1">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="text-sm font-black text-[#2563EB]">
+                        {o.price.toLocaleString('vi-VN')}đ
+                      </span>
+                      {getStatusBadge(o.status)}
+                    </div>
+                    {Number(o.discount_amount) > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+                        🎟️ {o.coupon_code || 'Mã giảm giá'}: -{Number(o.discount_amount).toLocaleString('vi-VN')}đ
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Customer details */}
+                <div className="grid gap-3 sm:grid-cols-2 text-xs font-semibold text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <p>👤 <strong>Khách hàng:</strong> {o.profiles?.full_name || 'Thành viên'} ({o.profiles?.email || 'N/A'})</p>
+                  <p>📅 <strong>Ngày đặt:</strong> {new Date(o.created_at).toLocaleString('vi-VN')}</p>
+                  {o.notes && (
+                    <p className="sm:col-span-2 bg-[#F4F8FF] dark:bg-slate-850/40 p-3.5 rounded-2xl border border-[#E8F1FF] dark:border-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                      📝 <strong>Ghi chú:</strong> {o.notes}
+                    </p>
+                  )}
+                  {deliveryText && (
+                    <div className="sm:col-span-2 bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5 rounded-2xl border border-emerald-100 dark:border-emerald-950/30 text-emerald-800 dark:text-emerald-400">
+                      <strong className="block text-emerald-900 dark:text-emerald-300 font-bold text-xs mb-1">
+                        🎁 Thông tin đã bàn giao:
+                      </strong>
+                      <pre className="font-mono whitespace-pre-wrap mt-1 leading-snug">{deliveryText}</pre>
+                    </div>
+                  )}
+                </div>
+
+                {/* ⏰ Subscription Expiry Bar (Hiển thị thời hạn còn lại giống bên User) */}
+                {o.status === 'completed' && expiryInfo && (
+                  <div className="rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 dark:from-blue-950/40 dark:to-indigo-950/20 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span>⏰</span> Thời hạn:
+                      </span>
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${expiryInfo.badgeClass}`}>
+                        <span>{expiryInfo.icon}</span>
+                        <span>{expiryInfo.label}</span>
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
+                        • {expiryInfo.daysText}
+                      </span>
+                    </div>
+
+                    {warranty && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                          <span>🛡️</span> Bảo hành:
+                        </span>
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${warranty.badgeClass}`}>
+                          <span>{warranty.icon}</span>
+                          <span>{warranty.label}</span>
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
 
-              {/* Admin Actions */}
-              <div className="flex flex-wrap gap-2.5 justify-end border-t border-slate-50 dark:border-slate-800/60 pt-4">
-                {/* Nút Xem chi tiết đơn hàng (Luôn hiển thị) */}
-                <button
-                  onClick={() => openOrderDetail(o)}
-                  className="rounded-full border border-[#DCEAFF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-slate-800/80 hover:bg-[#EDF5FF] dark:hover:bg-slate-800 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition shadow-xs flex items-center gap-1.5"
-                >
-                  <span>👁️</span> Xem chi tiết
-                </button>
-                {o.status === 'pending_delivery' && (
-                  <>
-                    <button
-                      onClick={() => handleUpdateStatus(o.id, 'processing')}
-                      className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500 transition shadow-xs"
-                    >
-                      ⚙️ Báo đang xử lý
-                    </button>
+                {/* Admin Actions */}
+                <div className="flex flex-wrap gap-2.5 justify-end border-t border-slate-50 dark:border-slate-800/60 pt-4">
+                  {/* Nút Xem chi tiết đơn hàng (Luôn hiển thị) */}
+                  <button
+                    onClick={() => openOrderDetail(o)}
+                    className="rounded-full border border-[#DCEAFF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-slate-800/80 hover:bg-[#EDF5FF] dark:hover:bg-slate-800 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 transition shadow-xs flex items-center gap-1.5"
+                  >
+                    <span>👁️</span> Xem chi tiết
+                  </button>
+                  {o.status === 'pending_delivery' && (
+                    <>
+                      <button
+                        onClick={() => handleUpdateStatus(o.id, 'processing')}
+                        className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500 transition shadow-xs"
+                      >
+                        ⚙️ Báo đang xử lý
+                      </button>
+                      <button
+                        onClick={() => setDeliveryOrder(o)}
+                        className="rounded-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-4.5 py-2 text-xs font-bold text-white shadow-md transition hover:scale-102"
+                      >
+                        🚀 Bàn giao tài khoản
+                      </button>
+                    </>
+                  )}
+                  {o.status === 'processing' && (
                     <button
                       onClick={() => setDeliveryOrder(o)}
                       className="rounded-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-4.5 py-2 text-xs font-bold text-white shadow-md transition hover:scale-102"
                     >
                       🚀 Bàn giao tài khoản
                     </button>
-                  </>
-                )}
-                {o.status === 'processing' && (
-                  <button
-                    onClick={() => setDeliveryOrder(o)}
-                    className="rounded-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-4.5 py-2 text-xs font-bold text-white shadow-md transition hover:scale-102"
-                  >
-                    🚀 Bàn giao tài khoản
-                  </button>
-                )}
-                
-                {/* Allow refund ONLY for pending_delivery or processing (before completed) */}
-                {(o.status === 'pending_delivery' || o.status === 'processing') && (
-                  <button
-                    onClick={() => handleRefund(o.id)}
-                    className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] px-4.5 py-2 text-xs font-bold text-slate-500 hover:text-[#2563EB] transition shadow-xs"
-                  >
-                    💸 Hoàn tiền về ví
-                  </button>
-                )}
-                
-                {/* Allow cancel if pending payment */}
-                {o.status === 'pending_payment' && (
-                  <button
-                    onClick={() => handleUpdateStatus(o.id, 'cancelled')}
-                    className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-red-50 px-4.5 py-2 text-xs font-bold text-slate-500 hover:text-red-500 transition shadow-xs"
-                  >
-                    ❌ Hủy đơn hàng
-                  </button>
-                )}
+                  )}
+                  
+                  {/* Allow refund ONLY for pending_delivery or processing (before completed) */}
+                  {(o.status === 'pending_delivery' || o.status === 'processing') && (
+                    <button
+                      onClick={() => handleRefund(o.id)}
+                      className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] px-4.5 py-2 text-xs font-bold text-slate-500 hover:text-[#2563EB] transition shadow-xs"
+                    >
+                      💸 Hoàn tiền về ví
+                    </button>
+                  )}
+                  
+                  {/* Allow cancel if pending payment */}
+                  {o.status === 'pending_payment' && (
+                    <button
+                      onClick={() => handleUpdateStatus(o.id, 'cancelled')}
+                      className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-red-50 px-4.5 py-2 text-xs font-bold text-slate-500 hover:text-red-500 transition shadow-xs"
+                    >
+                      ❌ Hủy đơn hàng
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* Pagination Controls */}
           <Pagination
@@ -714,67 +925,100 @@ export default function AdminOrders() {
                 </div>
 
                 {/* Section 2: Chi tiết Sản phẩm & Tài chính */}
-                <div className="rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A]/60 bg-white dark:bg-[#18243E]/40 p-4 sm:p-5 space-y-3">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                    <span>🛍️</span> Thông tin đơn hàng & Thanh toán
-                  </h3>
+                {(() => {
+                  const modalExpiry = calcOrderExpiry(selectedOrderDetail);
+                  const modalWarranty = calcAdminWarranty(selectedOrderDetail);
 
-                  <div className="space-y-2 text-xs font-semibold">
-                    <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
-                      <span className="text-slate-400">Sản phẩm / Dịch vụ:</span>
-                      <span className="font-bold text-slate-900 dark:text-white">{selectedOrderDetail.product_name}</span>
-                    </div>
-                    <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
-                      <span className="text-slate-400">Gói thời hạn:</span>
-                      <span className="font-bold text-slate-900 dark:text-white">{selectedOrderDetail.plan_label}</span>
-                    </div>
-                    {selectedOrderDetail.original_price && selectedOrderDetail.original_price > selectedOrderDetail.price ? (
-                      <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
-                        <span className="text-slate-400">Giá gốc:</span>
-                        <span className="line-through text-slate-400">{selectedOrderDetail.original_price.toLocaleString('vi-VN')}đ</span>
-                      </div>
-                    ) : null}
-                    {Number(selectedOrderDetail.discount_amount) > 0 ? (
-                      <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 text-emerald-600 dark:text-emerald-400 font-bold">
-                        <span>Mã giảm giá ({selectedOrderDetail.coupon_code || 'COUPON'}):</span>
-                        <span>-{Number(selectedOrderDetail.discount_amount).toLocaleString('vi-VN')}đ</span>
-                      </div>
-                    ) : null}
-                    <div className="flex justify-between py-2 items-center bg-[#F4F8FF] dark:bg-slate-800/60 px-3 rounded-xl">
-                      <span className="font-extrabold text-slate-700 dark:text-slate-200">TỔNG THANH TOÁN:</span>
-                      <span className="text-base font-black text-[#2563EB]">
-                        {selectedOrderDetail.price.toLocaleString('vi-VN')}đ
-                      </span>
-                    </div>
-                  </div>
+                  return (
+                    <div className="rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A]/60 bg-white dark:bg-[#18243E]/40 p-4 sm:p-5 space-y-3">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                        <span>🛍️</span> Thông tin đơn hàng & Thanh toán
+                      </h3>
 
-                  {selectedOrderDetail.notes && (
-                    <div className="bg-[#F8FAFC] dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800 text-xs">
-                      <span className="font-bold text-slate-500 block mb-1">Ghi chú của khách:</span>
-                      <p className="text-slate-800 dark:text-slate-200 font-medium">{selectedOrderDetail.notes}</p>
+                      <div className="space-y-2 text-xs font-semibold">
+                        <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
+                          <span className="text-slate-400">Sản phẩm / Dịch vụ:</span>
+                          <span className="font-bold text-slate-900 dark:text-white">{selectedOrderDetail.product_name}</span>
+                        </div>
+                        <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
+                          <span className="text-slate-400">Gói thời hạn:</span>
+                          <span className="font-bold text-slate-900 dark:text-white">{selectedOrderDetail.plan_label}</span>
+                        </div>
+                        {selectedOrderDetail.status === 'completed' && modalExpiry && (
+                          <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 items-center flex-wrap gap-2">
+                            <span className="text-slate-400">Thời hạn sử dụng:</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${modalExpiry.badgeClass}`}>
+                                <span>{modalExpiry.icon}</span>
+                                <span>{modalExpiry.label}</span>
+                              </span>
+                              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">({modalExpiry.daysText})</span>
+                            </div>
+                          </div>
+                        )}
+                        {selectedOrderDetail.status === 'completed' && modalWarranty && (
+                          <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 items-center flex-wrap gap-2">
+                            <span className="text-slate-400">Chính sách bảo hành:</span>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${modalWarranty.badgeClass}`}>
+                              <span>{modalWarranty.icon}</span>
+                              <span>{modalWarranty.label}</span>
+                            </span>
+                          </div>
+                        )}
+                        {selectedOrderDetail.original_price && selectedOrderDetail.original_price > selectedOrderDetail.price ? (
+                          <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
+                            <span className="text-slate-400">Giá gốc:</span>
+                            <span className="line-through text-slate-400">{selectedOrderDetail.original_price.toLocaleString('vi-VN')}đ</span>
+                          </div>
+                        ) : null}
+                        {Number(selectedOrderDetail.discount_amount) > 0 ? (
+                          <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 text-emerald-600 dark:text-emerald-400 font-bold">
+                            <span>Mã giảm giá ({selectedOrderDetail.coupon_code || 'COUPON'}):</span>
+                            <span>-{Number(selectedOrderDetail.discount_amount).toLocaleString('vi-VN')}đ</span>
+                          </div>
+                        ) : null}
+                        <div className="flex justify-between py-2 items-center bg-[#F4F8FF] dark:bg-slate-800/60 px-3 rounded-xl">
+                          <span className="font-extrabold text-slate-700 dark:text-slate-200">TỔNG THANH TOÁN:</span>
+                          <span className="text-base font-black text-[#2563EB]">
+                            {selectedOrderDetail.price.toLocaleString('vi-VN')}đ
+                          </span>
+                        </div>
+                      </div>
+
+                      {selectedOrderDetail.notes && (
+                        <div className="bg-[#F8FAFC] dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800 text-xs">
+                          <span className="font-bold text-slate-500 block mb-1">Ghi chú của khách:</span>
+                          <p className="text-slate-800 dark:text-slate-200 font-medium">{selectedOrderDetail.notes}</p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* Section 3: Thông tin bàn giao (Account Details) */}
-                {selectedOrderDetail.account_details && (
-                  <div className="rounded-[22px] border border-emerald-200/60 dark:border-emerald-950/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 sm:p-5 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
-                        <span>🎁</span> Thông tin đã bàn giao cho khách
-                      </h3>
-                      <button
-                        onClick={() => handleCopyText(selectedOrderDetail.account_details || '', 'thông tin bàn giao')}
-                        className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:underline flex items-center gap-1"
-                      >
-                        <span>📋</span> Sao chép
-                      </button>
+                {(() => {
+                  const modalDelivery = selectedOrderDetail.delivery_info || selectedOrderDetail.account_details;
+                  if (!modalDelivery) return null;
+
+                  return (
+                    <div className="rounded-[22px] border border-emerald-200/60 dark:border-emerald-950/60 bg-emerald-50/40 dark:bg-emerald-950/20 p-4 sm:p-5 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                          <span>🎁</span> Thông tin đã bàn giao cho khách
+                        </h3>
+                        <button
+                          onClick={() => handleCopyText(modalDelivery, 'thông tin bàn giao')}
+                          className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:underline flex items-center gap-1"
+                        >
+                          <span>📋</span> Sao chép
+                        </button>
+                      </div>
+                      <pre className="font-mono text-xs text-emerald-900 dark:text-emerald-200 whitespace-pre-wrap bg-white dark:bg-[#131C32] p-3 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 leading-relaxed">
+                        {modalDelivery}
+                      </pre>
                     </div>
-                    <pre className="font-mono text-xs text-emerald-900 dark:text-emerald-200 whitespace-pre-wrap bg-white dark:bg-[#131C32] p-3 rounded-xl border border-emerald-200/60 dark:border-emerald-900/40 leading-relaxed">
-                      {selectedOrderDetail.account_details}
-                    </pre>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Section 4: Lịch sử trạng thái đơn hàng (Timeline) */}
                 {orderTimeline.length > 0 && (
@@ -909,7 +1153,7 @@ export default function AdminOrders() {
         document.body
       )}
 
-      {/* Confirm Modal */}
+      {/* CONFIRM ACTION MODAL */}
       <ConfirmModal
         isOpen={confirmConfig.isOpen}
         title={confirmConfig.title}

@@ -47,10 +47,10 @@ const RULES: MatchRule[] = [
     test: /user already registered|already registered|already been registered|user.*exists/i,
     message: 'Email này đã được đăng ký. Vui lòng đăng nhập hoặc dùng email khác.',
   },
-  // Rate limit — "For security purposes, you can only request this after N seconds"
+  // Rate limit — "For security purposes, you can only request this after N seconds" / 429
   {
-    test: /for security purposes|only request this after|rate limit|too many requests|request this after \d+ seconds/i,
-    message: 'Bạn thao tác quá nhanh. Vui lòng chờ một lát rồi thử lại.',
+    test: /for security purposes|only request this after|rate limit|too many requests|request this after \d+ seconds|over_email_send_rate_limit|over_request_rate_limit|email rate limit/i,
+    message: 'Bạn thao tác quá nhanh. Vui lòng chờ khoảng 60 giây trước khi thử lại.',
   },
   // OTP sai / hết hạn
   {
@@ -93,7 +93,10 @@ function extractRawMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'object') {
     const anyErr = err as Record<string, unknown>;
-    return String(anyErr.message ?? anyErr.error_description ?? anyErr.error ?? '');
+    const status = anyErr.status ? `status_${anyErr.status} ` : '';
+    const code = anyErr.code ? `code_${anyErr.code} ` : '';
+    const msg = String(anyErr.message ?? anyErr.error_description ?? anyErr.error ?? '');
+    return `${status}${code}${msg}`.trim();
   }
   return '';
 }
@@ -102,16 +105,29 @@ function extractRawMessage(err: unknown): string {
  * Chuyển bất kỳ lỗi auth nào thành thông báo tiếng Việt an toàn để hiển thị.
  *
  * @param err      Lỗi bắt được từ Supabase (hoặc bất kỳ đâu trong luồng auth).
- * @param context  Ngữ cảnh ('signin' | 'signup' | 'otp' | 'google') để chọn
- *                 fallback phù hợp khi không nhận diện được lỗi. Có thể truyền
- *                 thẳng một chuỗi fallback tùy ý.
+ * @param context  Ngữ cảnh ('signin' | 'signup' | 'otp' | 'google' | 'forgot' | 'update_password')
  */
 export function mapAuthError(err: unknown, context?: AuthContext | string): string {
   const raw = extractRawMessage(err);
 
-  // Giữ thông tin debug cho developer — CHỈ ở môi trường dev (yêu cầu #6).
+  // Giữ thông tin debug cho developer — CHỈ ở môi trường dev
   if (import.meta.env.DEV) {
     console.error('[auth] raw error:', err);
+  }
+
+  // 1. Bắt lỗi HTTP 429 hoặc Supabase Rate Limit trực tiếp
+  const anyErr = (typeof err === 'object' && err !== null ? err : {}) as Record<string, unknown>;
+  if (
+    anyErr.status === 429 ||
+    anyErr.code === 'over_email_send_rate_limit' ||
+    anyErr.code === 'over_request_rate_limit' ||
+    anyErr.code === 'rate_limit_exceeded'
+  ) {
+    const secondsMatch = raw.match(/after (\d+) seconds/i) || raw.match(/every (\d+) seconds/i);
+    if (secondsMatch && secondsMatch[1]) {
+      return `Bạn thao tác quá nhanh. Vui lòng chờ ${secondsMatch[1]} giây trước khi thử lại.`;
+    }
+    return 'Bạn thao tác quá nhanh. Vui lòng chờ khoảng 60 giây trước khi thử lại.';
   }
 
   // Xác định fallback: theo ngữ cảnh, hoặc chuỗi tùy ý, hoặc mặc định.
@@ -122,10 +138,16 @@ export function mapAuthError(err: unknown, context?: AuthContext | string): stri
 
   if (!raw) return fallback;
 
+  // Kiểm tra thời gian chờ cụ thể trong message
+  const secMatch = raw.match(/(?:after|every|in)\s+(\d+)\s+seconds/i);
+  if (secMatch && secMatch[1]) {
+    return `Bạn thao tác quá nhanh. Vui lòng chờ ${secMatch[1]} giây trước khi thử lại.`;
+  }
+
   for (const rule of RULES) {
     if (rule.test.test(raw)) return rule.message;
   }
 
-  // Message lạ / tiếng Anh không nhận diện -> KHÔNG hiển thị raw (yêu cầu #2, #9).
+  // Message lạ / tiếng Anh không nhận diện -> KHÔNG hiển thị raw
   return fallback;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import SearchBar from './SearchBar';
-import { SearchIcon, AppIcon, HeadsetIcon } from './icons';
+import { SearchIcon, AppIcon, HeadsetIcon, SparkIcon } from './icons';
 import newLogo from '../assets/new-logover2.png';
 import { useAuth } from '../context/AuthContext';
 import { useFavorites } from '../context/FavoritesContext';
@@ -191,16 +191,16 @@ export default function Header() {
           /* STANDARD HEADER LAYOUT */
           <>
             {/* LOGO */}
-            <Link to="/" className="flex shrink-0 items-center gap-2">
+            <Link to="/" className="flex shrink-0 items-center gap-2 group">
               <img
                 src={newLogo}
                 alt="BOW Logo"
-                className="h-[38px] sm:h-[44px] w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-[0_1.5px_2px_rgba(15,23,42,0.12)] drop-shadow-[0_1px_4px_rgba(0,163,255,0.2)] dark:drop-shadow-[0_0_8px_rgba(53,168,255,0.2)] transition-transform duration-200 hover:scale-105"
+                className="h-[40px] sm:h-[46px] w-auto object-contain transition-transform duration-200 group-hover:scale-105 filter contrast-[1.25] saturate-[1.3] brightness-[0.95] drop-shadow-[0_0_1px_rgba(15,23,42,0.85)] drop-shadow-[0_2px_5px_rgba(2,132,199,0.35)] dark:filter-none dark:contrast-[1.1] dark:drop-shadow-[0_0_8px_rgba(0,163,255,0.45)]"
                 style={{ imageRendering: '-webkit-optimize-contrast' }}
               />
               <div className="flex flex-col leading-none">
                 <span className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-[#00A3FF]">BOW</span>
-                <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-[#FFB703] mt-0.5">
+                <span className="text-[7.5px] sm:text-[8px] font-black uppercase tracking-widest text-[#FFB703] mt-0.5">
                   Let's Connect
                 </span>
               </div>
@@ -220,6 +220,20 @@ export default function Header() {
               >
                 <AppIcon className="h-5 w-5" />
                 Sản phẩm
+              </NavLink>
+
+              <NavLink
+                to="/prompts"
+                className={({ isActive }) =>
+                  `flex items-center gap-1.5 relative py-1 transition-colors duration-200 whitespace-nowrap after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:bg-[#00A3FF] after:transition-all after:duration-300 ${
+                    isActive
+                      ? 'text-[#00A3FF] after:w-full'
+                      : 'hover:text-[#00A3FF] after:w-0 hover:after:w-full'
+                  }`
+                }
+              >
+                <SparkIcon className="h-5 w-5" />
+                Prompt AI
               </NavLink>
 
               <NavLink

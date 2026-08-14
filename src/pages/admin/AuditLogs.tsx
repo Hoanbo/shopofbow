@@ -188,6 +188,7 @@ function formatStatusLabel(s: string | null | undefined): string {
 function formatAuditDescription(desc: string | null | undefined): string {
   if (!desc) return '';
   return desc
+    // Order & Delivery statuses
     .replace(/"pending_payment"/g, '"Chờ thanh toán"')
     .replace(/"pending_delivery"/g, '"Chờ bàn giao"')
     .replace(/"processing"/g, '"Đang thiết lập"')
@@ -196,10 +197,33 @@ function formatAuditDescription(desc: string | null | undefined): string {
     .replace(/"refunded"/g, '"Đã hoàn tiền"')
     .replace(/\bpending_payment\b/g, 'Chờ thanh toán')
     .replace(/\bpending_delivery\b/g, 'Chờ bàn giao')
-    .replace(/\bprocessing\b/g, 'Đang thiết lập')
     .replace(/\bcompleted\b/g, 'Hoàn tất')
     .replace(/\bcancelled\b/g, 'Đã hủy')
-    .replace(/\brefunded\b/g, 'Đã hoàn tiền');
+    .replace(/\brefunded\b/g, 'Đã hoàn tiền')
+
+    // Ticket Statuses
+    .replace(/"pending"/g, '"Chờ phản hồi"')
+    .replace(/"resolved"/g, '"Đã giải quyết"')
+    .replace(/"closed"/g, '"Đã đóng"')
+    .replace(/\bstatus:?\s*pending\b/gi, 'Trạng thái: Chờ phản hồi')
+    .replace(/\bstatus:?\s*resolved\b/gi, 'Trạng thái: Đã giải quyết')
+    .replace(/\bstatus:?\s*closed\b/gi, 'Trạng thái: Đã đóng')
+
+    // Ticket Priorities
+    .replace(/"low"/g, '"Thấp"')
+    .replace(/"normal"/g, '"Bình thường"')
+    .replace(/"high"/g, '"Cao"')
+    .replace(/"urgent"/g, '"Khẩn cấp"')
+    .replace(/\bpriority:?\s*urgent\b/gi, 'Mức ưu tiên: Khẩn cấp')
+    .replace(/\bpriority:?\s*high\b/gi, 'Mức ưu tiên: Cao')
+    .replace(/\bpriority:?\s*normal\b/gi, 'Mức ưu tiên: Bình thường')
+    .replace(/\bpriority:?\s*low\b/gi, 'Mức ưu tiên: Thấp')
+
+    // Review Statuses
+    .replace(/"approved"/g, '"Đã duyệt"')
+    .replace(/"rejected"/g, '"Đã từ chối"')
+    .replace(/\bapproved\b/g, 'Đã duyệt')
+    .replace(/\brejected\b/g, 'Đã từ chối');
 }
 
 function formatEntityId(id?: string | null): string {

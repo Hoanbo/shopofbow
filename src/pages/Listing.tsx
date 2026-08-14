@@ -76,7 +76,7 @@ export default function Listing({ category, title, subtitle }: Props) {
           className={
             tab === 'product' || (category === 'product' && tab === 'all')
               ? 'grid grid-cols-1 gap-4 md:grid-cols-3 sm:gap-5'
-              : 'grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6 sm:gap-5'
+              : 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-5 lg:gap-6'
           }
         >
           <Skeleton
@@ -95,7 +95,7 @@ export default function Listing({ category, title, subtitle }: Props) {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6 sm:gap-5 lg:gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5 sm:gap-5 lg:gap-6">
           {items.map((item) => {
             if (item.category === 'premium-app') {
               return <PremiumAppCard key={item.id} item={item} />;

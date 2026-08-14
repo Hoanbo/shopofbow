@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
+import { sendTicketTelegramNotify } from '../../lib/notify';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../Toast';
 import { CloseIcon } from '../icons';
@@ -136,6 +137,9 @@ export default function CreateTicketModal({
         title: `🎫 Ticket mới ${ticket.ticket_number}`,
         message: `${userEmail}: ${subject.trim()}`,
       });
+
+      // 5. Send Telegram notification to Admin Bot
+      sendTicketTelegramNotify(ticket.id, 'ticket_created', message.trim()).catch(() => {});
 
       toast.success(`Tạo yêu cầu ${ticket.ticket_number} thành công!`);
       setSubject('');

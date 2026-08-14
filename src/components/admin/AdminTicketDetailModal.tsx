@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { sendTicketTelegramNotify, sendTicketEmailNotify } from '../../lib/notify';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../Toast';
 import { CloseIcon } from '../icons';
@@ -321,6 +322,15 @@ export default function AdminTicketDetailModal({ ticketId, onClose, onTicketUpda
         message: `Trạng thái Yêu cầu hỗ trợ của bạn đã chuyển sang: ${statusLabels[targetStatus] || targetStatus}`,
       });
 
+      // 3. Email & Telegram Notifications for target status
+      if (targetStatus === 'resolved') {
+        sendTicketEmailNotify(ticket.id, 'ticket_resolved').catch(() => {});
+        sendTicketTelegramNotify(ticket.id, 'ticket_resolved').catch(() => {});
+      } else if (targetStatus === 'closed') {
+        sendTicketEmailNotify(ticket.id, 'ticket_closed').catch(() => {});
+        sendTicketTelegramNotify(ticket.id, 'ticket_closed').catch(() => {});
+      }
+
       toast.success(`Đã cập nhật Ticket ${ticket.ticket_number}`);
       if (onTicketUpdated) onTicketUpdated();
 
@@ -373,7 +383,7 @@ export default function AdminTicketDetailModal({ ticketId, onClose, onTicketUpda
         description: `Admin phản hồi Ticket ${ticket.ticket_number}: "${text.length > 40 ? text.substring(0, 40) + '...' : text}"`,
       });
 
-      // 4. User Notification
+      // 4. User In-App Notification
       await (supabase.from('notifications') as any).insert({
         user_id: ticket.user_id,
         is_admin: false,
@@ -381,6 +391,9 @@ export default function AdminTicketDetailModal({ ticketId, onClose, onTicketUpda
         title: `BOW đã phản hồi Ticket ${ticket.ticket_number}`,
         message: text.length > 60 ? `${text.substring(0, 60)}...` : text,
       });
+
+      // 5. Send Email notification to User
+      sendTicketEmailNotify(ticket.id, 'ticket_reply', text).catch(() => {});
 
       toast.success('Đã gửi phản hồi cho khách hàng!');
       if (onTicketUpdated) onTicketUpdated();

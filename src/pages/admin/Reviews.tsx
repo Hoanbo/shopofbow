@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
@@ -161,6 +162,53 @@ export default function AdminReviews() {
     }
   };
 
+  // Direct Quick Moderate (Without opening modal if admin wants 1-click approve/reject)
+  const handleQuickDirectModerate = async (review: AdminReview, targetStatus: 'approved' | 'rejected', e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) throw new Error('Không có phiên làm việc Admin.');
+
+      const { error: upErr } = await (supabase.from('product_reviews') as any)
+        .update({
+          status: targetStatus,
+          reviewed_by: session.user.id,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', review.id);
+
+      if (upErr) throw upErr;
+
+      const prodName = review.products?.name || 'Sản phẩm';
+
+      await (supabase.from('audit_logs') as any).insert({
+        actor_id: session.user.id,
+        actor_name: session.user.email || 'Admin',
+        actor_role: 'admin',
+        action: targetStatus === 'approved' ? 'review_approved' : 'review_rejected',
+        entity_type: 'product_review',
+        entity_id: review.id,
+        description: `Admin ${targetStatus === 'approved' ? 'duyệt nhanh' : 'từ chối nhanh'} Đánh giá #${review.id.slice(0, 8)} cho ${prodName}`,
+      });
+
+      await (supabase.from('notifications') as any).insert({
+        user_id: review.user_id,
+        is_admin: false,
+        type: 'review_status',
+        title: targetStatus === 'approved' ? 'Đánh giá đã được phê duyệt' : 'Cập nhật Đánh giá sản phẩm',
+        message: targetStatus === 'approved'
+          ? `Đánh giá của bạn cho sản phẩm "${prodName}" đã được phê duyệt và xuất hiện công khai!`
+          : `Đánh giá của bạn cho sản phẩm "${prodName}" chưa được phê duyệt.`,
+      });
+
+      toast.success(`Đã ${targetStatus === 'approved' ? 'duyệt' : 'từ chối'} đánh giá #${review.id.slice(0, 8)}!`);
+      fetchReviews();
+    } catch (err: any) {
+      console.error('Quick moderate error:', err);
+      toast.error(err.message || 'Lỗi khi cập nhật đánh giá.');
+    }
+  };
+
   // Metrics
   const totalCount = reviews.length;
   const pendingCount = reviews.filter((r) => r.status === 'pending').length;
@@ -184,7 +232,7 @@ export default function AdminReviews() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const REVIEWS_PER_PAGE = 8;
+  const REVIEWS_PER_PAGE = 10;
   const totalPages = Math.ceil(filtered.length / REVIEWS_PER_PAGE);
   const paginatedReviews = filtered.slice((currentPage - 1) * REVIEWS_PER_PAGE, currentPage * REVIEWS_PER_PAGE);
 
@@ -195,11 +243,26 @@ export default function AdminReviews() {
   const getStatusBadge = (status: AdminReview['status']) => {
     switch (status) {
       case 'pending':
-        return <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 text-xs font-bold text-amber-700 dark:text-amber-400 border border-amber-200/50">🟡 Chờ duyệt</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-600 dark:text-amber-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+            Chờ duyệt
+          </span>
+        );
       case 'approved':
-        return <span className="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-200/50">🟢 Đã duyệt</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+            Đã duyệt
+          </span>
+        );
       case 'rejected':
-        return <span className="inline-flex items-center rounded-full bg-rose-50 dark:bg-rose-950/40 px-2.5 py-0.5 text-xs font-bold text-rose-700 dark:text-rose-400 border border-rose-200/50">🔴 Từ chối</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/20 px-2.5 py-1 text-xs font-bold text-rose-600 dark:text-rose-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
+            Từ chối
+          </span>
+        );
     }
   };
 
@@ -250,7 +313,7 @@ export default function AdminReviews() {
               key={tab.key}
               type="button"
               onClick={() => setFilterStatus(tab.key)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition shrink-0 cursor-pointer whitespace-nowrap ${
                 filterStatus === tab.key
                   ? 'bg-[#2563EB] text-white shadow-xs'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
@@ -274,54 +337,139 @@ export default function AdminReviews() {
         </div>
       </div>
 
-      {/* Table List */}
-      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#18243E] overflow-hidden shadow-xs">
+      {/* Mobile Card List (< 768px) */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="py-12 text-center text-slate-400 font-bold animate-pulse">
+            Đang tải danh sách đánh giá...
+          </div>
+        ) : paginatedReviews.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 font-bold">
+            Không tìm thấy đánh giá nào.
+          </div>
+        ) : (
+          paginatedReviews.map((r) => (
+            <div key={r.id} className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#18243E] p-4 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-mono text-xs font-black text-slate-400">#{r.id.slice(0, 8)}</span>
+                  <span className="text-[11px] text-slate-400">•</span>
+                  <span className="text-[11px] text-slate-400 font-medium truncate">{new Date(r.created_at).toLocaleString('vi-VN')}</span>
+                </div>
+                {getStatusBadge(r.status)}
+              </div>
+
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <span className="font-extrabold text-slate-900 dark:text-white block text-sm truncate">{r.products?.name || 'Sản phẩm'}</span>
+                  {r.orders?.payment_code && (
+                    <span className="text-xs font-mono text-[#2563EB] dark:text-[#35A8FF] font-bold block">#{r.orders.payment_code}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-0.5 shrink-0 bg-amber-500/10 px-2.5 py-1 rounded-xl">
+                  <StarIcon className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                  <span className="text-xs font-black text-amber-600 dark:text-amber-400 ml-1">{r.rating} / 5</span>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                <p className="line-clamp-3 italic">"{r.content}"</p>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <div className="min-w-0 flex-1 text-[11px]">
+                  <span className="font-bold text-slate-900 dark:text-white block truncate">{r.profiles?.full_name || 'Khách hàng'}</span>
+                  <span className="font-mono text-slate-400 block truncate">{r.profiles?.email || 'N/A'}</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {r.status === 'pending' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => handleQuickDirectModerate(r, 'approved', e)}
+                        className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 text-xs font-black transition shadow-xs"
+                      >
+                        ✓ Duyệt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleQuickDirectModerate(r, 'rejected', e)}
+                        className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-2 py-1.5 text-xs font-black transition shadow-xs"
+                      >
+                        ✕
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedReview(r); setAdminNote(r.admin_note || ''); }}
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1.5 text-xs font-bold transition"
+                  >
+                    Chi tiết
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop Table List (Hidden on mobile < 768px) */}
+      <div className="hidden md:block rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#18243E] overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50/80 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 uppercase font-black tracking-wider text-[10px] border-b border-slate-200/60 dark:border-slate-800">
               <tr>
-                <th className="px-4 py-3">ID / Khách hàng</th>
-                <th className="px-4 py-3">Sản phẩm / Đơn hàng</th>
-                <th className="px-4 py-3">Đánh giá</th>
-                <th className="px-4 py-3">Nội dung</th>
-                <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-3">Thời gian</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Khách hàng</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Sản phẩm / Đơn hàng</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Đánh giá</th>
+                <th className="px-3.5 py-3">Nội dung</th>
+                <th className="px-3.5 py-3 whitespace-nowrap">Trạng thái</th>
+                <th className="px-3.5 py-3 text-right whitespace-nowrap">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium text-slate-700 dark:text-slate-300">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-bold animate-pulse">
+                  <td colSpan={6} className="py-12 text-center text-slate-400 font-bold animate-pulse">
                     Đang tải danh sách đánh giá...
                   </td>
                 </tr>
               ) : paginatedReviews.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-bold">
+                  <td colSpan={6} className="py-12 text-center text-slate-400 font-bold">
                     Không tìm thấy đánh giá nào.
                   </td>
                 </tr>
               ) : (
                 paginatedReviews.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition">
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-[11px] font-bold text-slate-400 block">#{r.id.slice(0, 8)}</span>
-                      <span className="font-extrabold text-slate-900 dark:text-white block">
+                    {/* Khách hàng & Thời gian */}
+                    <td className="px-3.5 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-[10px] font-bold text-slate-400">#{r.id.slice(0, 8)}</span>
+                      </div>
+                      <span className="font-extrabold text-slate-900 dark:text-white block truncate max-w-[150px]">
                         {r.profiles?.full_name || 'Khách hàng'}
                       </span>
-                      <span className="font-mono text-[11px] text-slate-400 block">{r.profiles?.email || 'N/A'}</span>
+                      <span className="font-mono text-[11px] text-slate-400 block truncate max-w-[150px]">{r.profiles?.email || 'N/A'}</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">{new Date(r.created_at).toLocaleString('vi-VN')}</span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="font-extrabold text-slate-900 dark:text-white block">{r.products?.name || 'Sản phẩm'}</span>
+
+                    {/* Sản phẩm / Đơn hàng */}
+                    <td className="px-3.5 py-3">
+                      <span className="font-extrabold text-slate-900 dark:text-white block truncate max-w-[150px]">{r.products?.name || 'Sản phẩm'}</span>
                       {r.orders?.payment_code && (
-                        <span className="font-mono text-[11px] text-[#2563EB] dark:text-[#35A8FF] font-bold">
+                        <span className="font-mono text-[11px] text-[#2563EB] dark:text-[#35A8FF] font-bold block">
                           #{r.orders.payment_code}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
+
+                    {/* Đánh giá */}
+                    <td className="px-3.5 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-0.5">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <StarIcon
                             key={star}
@@ -331,29 +479,64 @@ export default function AdminReviews() {
                           />
                         ))}
                       </div>
-                      <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 mt-0.5 block">
+                      <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 mt-0.5 block">
                         {r.rating} / 5 Sao
                       </span>
                     </td>
-                    <td className="px-4 py-3 max-w-xs truncate" title={r.content}>
-                      {r.content}
+
+                    {/* Nội dung */}
+                    <td className="px-3.5 py-3 max-w-[220px]">
+                      <p className="line-clamp-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300" title={r.content}>
+                        {r.content}
+                      </p>
                     </td>
-                    <td className="px-4 py-3">{getStatusBadge(r.status)}</td>
-                    <td className="px-4 py-3 font-mono text-[11px]">
-                      {new Date(r.created_at).toLocaleString('vi-VN')}
+
+                    {/* Trạng thái */}
+                    <td className="px-3.5 py-3 whitespace-nowrap">
+                      {getStatusBadge(r.status)}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => { setSelectedReview(r); setAdminNote(r.admin_note || ''); }}
-                        className={`rounded-xl border px-3 py-1.5 text-xs font-extrabold transition cursor-pointer ${
-                          r.status === 'pending'
-                            ? 'bg-[#2563EB] text-white border-[#2563EB] shadow-xs hover:bg-[#1D4ED8]'
-                            : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        {r.status === 'pending' ? '🔎 Xem & Duyệt' : '👁️ Xem chi tiết'}
-                      </button>
+
+                    {/* Thao tác (Quick Actions) */}
+                    <td className="px-3.5 py-3 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {r.status === 'pending' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => handleQuickDirectModerate(r, 'approved', e)}
+                              title="Phê duyệt ngay"
+                              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-xs font-black transition shadow-xs cursor-pointer flex items-center gap-1"
+                            >
+                              <span>✓</span>
+                              <span>Duyệt</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleQuickDirectModerate(r, 'rejected', e)}
+                              title="Từ chối đánh giá"
+                              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-2 py-1 text-xs font-black transition shadow-xs cursor-pointer flex items-center gap-1"
+                            >
+                              <span>✕</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedReview(r); setAdminNote(r.admin_note || ''); }}
+                              title="Xem chi tiết"
+                              className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 p-1.5 text-xs transition cursor-pointer"
+                            >
+                              👁️
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedReview(r); setAdminNote(r.admin_note || ''); }}
+                            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-1 text-xs font-bold transition cursor-pointer"
+                          >
+                            👁️ Chi tiết
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -361,30 +544,30 @@ export default function AdminReviews() {
             </tbody>
           </table>
         </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={filtered.length}
-              itemsPerPage={REVIEWS_PER_PAGE}
-              itemLabel="đánh giá"
-              onPageChange={(p) => setCurrentPage(p)}
-            />
-          </div>
-        )}
       </div>
 
-      {/* Moderation Modal */}
-      {selectedReview && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="p-4 bg-white dark:bg-[#18243E] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            itemsPerPage={REVIEWS_PER_PAGE}
+            itemLabel="đánh giá"
+            onPageChange={(p) => setCurrentPage(p)}
+          />
+        </div>
+      )}
+
+      {/* Moderation Modal - Fixed in Viewport via Portal with internal scroll */}
+      {selectedReview && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 overflow-hidden">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => !updating && setSelectedReview(null)} />
 
-          <div className="relative z-[100000] w-full max-w-lg overflow-hidden rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] p-6 shadow-2xl space-y-5 animate-scale-up">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-4">
+          <div className="relative z-[100000] w-full max-w-lg max-h-[90dvh] flex flex-col overflow-hidden rounded-[24px] sm:rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] shadow-2xl animate-scale-up text-slate-900 dark:text-white">
+            {/* Header (Fixed) */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 p-4 sm:p-5 shrink-0">
               <div className="flex items-center gap-3">
                 <span className="h-10 w-10 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-500 flex items-center justify-center text-xl shrink-0">
                   ⭐
@@ -398,86 +581,89 @@ export default function AdminReviews() {
               <button
                 type="button"
                 onClick={() => setSelectedReview(null)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
               >
                 <CloseIcon className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Current Status Banner */}
-            <div className={`p-3 rounded-2xl border flex items-center justify-between text-xs font-bold ${
-              selectedReview.status === 'approved'
-                ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-                : selectedReview.status === 'rejected'
-                ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
-                : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
-            }`}>
-              <span className="flex items-center gap-1.5 font-black">
-                <span>{selectedReview.status === 'approved' ? '🟢' : selectedReview.status === 'rejected' ? '🔴' : '🟡'}</span>
-                <span>Trạng thái: {selectedReview.status === 'approved' ? 'Đã Phê Duyệt' : selectedReview.status === 'rejected' ? 'Đã Từ Chối' : 'Chờ Kiểm Duyệt'}</span>
-              </span>
-              <span className="text-[10px] font-mono opacity-80">
-                Order #{selectedReview.orders?.payment_code || 'N/A'}
-              </span>
-            </div>
-
-            {/* Verification Badges */}
-            <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 space-y-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">Xác minh hệ thống</span>
-              <div className="flex items-center gap-2">
-                <span>✓ User đã mua sản phẩm</span>
-                <span>•</span>
-                <span>✓ Order #{selectedReview.orders?.payment_code || 'N/A'} đã hoàn thành</span>
-              </div>
-            </div>
-
-            {/* User & Product Details */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-[#18243E]">
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Khách hàng</span>
-                <p className="font-extrabold text-slate-900 dark:text-white mt-0.5">{selectedReview.profiles?.full_name || 'Khách hàng'}</p>
-                <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate">{selectedReview.profiles?.email || 'N/A'}</p>
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              {/* Current Status Banner */}
+              <div className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs font-bold ${
+                selectedReview.status === 'approved'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                  : selectedReview.status === 'rejected'
+                  ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                  : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+              }`}>
+                <span className="flex items-center gap-1.5 font-black whitespace-nowrap">
+                  <span>{selectedReview.status === 'approved' ? '🟢' : selectedReview.status === 'rejected' ? '🔴' : '🟡'}</span>
+                  <span>Trạng thái: {selectedReview.status === 'approved' ? 'Đã Phê Duyệt' : selectedReview.status === 'rejected' ? 'Đã Từ Chối' : 'Chờ Kiểm Duyệt'}</span>
+                </span>
+                <span className="text-[11px] font-mono opacity-80 whitespace-nowrap">
+                  Đơn hàng: #{selectedReview.orders?.payment_code || 'N/A'}
+                </span>
               </div>
 
-              <div className="p-3 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-[#18243E]">
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Sản phẩm</span>
-                <p className="font-extrabold text-slate-900 dark:text-white mt-0.5">{selectedReview.products?.name || 'Sản phẩm'}</p>
-                <div className="flex items-center gap-1 mt-0.5">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <StarIcon
-                      key={star}
-                      className={`h-3 w-3 ${star <= selectedReview.rating ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-300'}`}
-                    />
-                  ))}
-                  <span className="font-bold text-amber-500 ml-1">{selectedReview.rating} Sao</span>
+              {/* Verification Badges */}
+              <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5 space-y-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">Xác minh hệ thống</span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                  <span className="flex items-center gap-1">✓ User đã mua sản phẩm</span>
+                  <span className="hidden sm:inline">•</span>
+                  <span className="flex items-center gap-1">✓ Order #{selectedReview.orders?.payment_code || 'N/A'} đã hoàn thành</span>
                 </div>
               </div>
-            </div>
 
-            {/* Review Content Box */}
-            <div className="space-y-1 text-xs">
-              <span className="font-bold text-slate-700 dark:text-slate-300 block">Nội dung đánh giá:</span>
-              <div className="p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium whitespace-pre-wrap leading-relaxed">
-                {selectedReview.content}
+              {/* User & Product Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-[#18243E]">
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Khách hàng</span>
+                  <p className="font-extrabold text-slate-900 dark:text-white mt-0.5">{selectedReview.profiles?.full_name || 'Khách hàng'}</p>
+                  <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 truncate">{selectedReview.profiles?.email || 'N/A'}</p>
+                </div>
+
+                <div className="p-3 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-[#18243E]">
+                  <span className="text-[10px] font-black uppercase text-slate-400 block">Sản phẩm</span>
+                  <p className="font-extrabold text-slate-900 dark:text-white mt-0.5">{selectedReview.products?.name || 'Sản phẩm'}</p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <StarIcon
+                        key={star}
+                        className={`h-3 w-3 ${star <= selectedReview.rating ? 'fill-amber-400 text-amber-400' : 'fill-slate-200 text-slate-300'}`}
+                      />
+                    ))}
+                    <span className="font-bold text-amber-500 ml-1">{selectedReview.rating} Sao</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Review Content Box */}
+              <div className="space-y-1.5 text-xs">
+                <span className="font-bold text-slate-700 dark:text-slate-300 block">Nội dung đánh giá:</span>
+                <div className="p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-medium whitespace-pre-wrap leading-relaxed">
+                  {selectedReview.content}
+                </div>
+              </div>
+
+              {/* Admin Note / Rejection Reason */}
+              <div className="space-y-1.5 text-xs">
+                <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                  Ghi chú Admin / Lý do từ chối (tùy chọn):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Nhập ghi chú phản hồi cho khách hàng..."
+                  value={adminNote}
+                  onChange={(e) => setAdminNote(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3.5 py-2.5 text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:border-[#2563EB]"
+                />
               </div>
             </div>
 
-            {/* Admin Note / Rejection Reason */}
-            <div className="space-y-1 text-xs">
-              <label className="font-bold text-slate-700 dark:text-slate-300 block">
-                Ghi chú Admin / Lý do từ chối (tùy chọn):
-              </label>
-              <input
-                type="text"
-                placeholder="Nhập ghi chú phản hồi cho khách hàng..."
-                value={adminNote}
-                onChange={(e) => setAdminNote(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-xs font-medium text-slate-900 dark:text-white focus:outline-none"
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 pt-2">
+            {/* Action Buttons (Fixed Footer) */}
+            <div className="flex items-center gap-3 p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-[#18243E]/50 shrink-0">
               {selectedReview.status === 'pending' && (
                 <>
                   <button
@@ -540,7 +726,8 @@ export default function AdminReviews() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

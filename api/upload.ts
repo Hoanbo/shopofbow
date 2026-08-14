@@ -106,3 +106,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: err.message || 'Upload failed' });
   }
 }
+
+export const netlifyHandler = async (event: any) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+  let body: any = {};
+  try {
+    body = JSON.parse(event.body || '{}');
+  } catch {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON body' }) };
+  }
+
+  // Simulated Vercel Response
+  let status = 200;
+  let responseData: any = {};
+  const res: any = {
+    status: (s: number) => {
+      status = s;
+      return {
+        json: (d: any) => { responseData = d; return d; },
+      };
+    },
+  };
+
+  await handler({ method: 'POST', headers: event.headers, body } as any, res);
+  return { statusCode: status, body: JSON.stringify(responseData) };
+};

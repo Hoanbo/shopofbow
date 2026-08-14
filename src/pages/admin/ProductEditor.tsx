@@ -732,6 +732,7 @@ function PlansEditor({
     name: '',
     duration: '',
     price: 0,
+    warranty: '',
     is_highlight: false,
     badge: '',
     features: [] as string[],
@@ -746,6 +747,7 @@ function PlansEditor({
       name: '',
       duration: '',
       price: 0,
+      warranty: '',
       is_highlight: false,
       badge: '',
       features: [],
@@ -760,6 +762,7 @@ function PlansEditor({
       name: p.name,
       duration: p.duration ?? '',
       price: Number(p.price) || 0,
+      warranty: p.notes ?? '',
       is_highlight: p.is_highlight ?? false,
       badge: p.badge ?? '',
       features: p.features ? [...p.features] : [],
@@ -803,6 +806,7 @@ function PlansEditor({
                   name: draft.name.trim(),
                   duration: draft.duration.trim() || null,
                   price: Number(draft.price) || 0,
+                  notes: draft.warranty.trim() || null,
                   is_highlight: draft.is_highlight,
                   badge: draft.badge.trim() || null,
                   features: draft.features.length > 0 ? draft.features : null,
@@ -821,6 +825,7 @@ function PlansEditor({
           name: draft.name.trim(),
           duration: draft.duration.trim() || null,
           price: Number(draft.price) || 0,
+          notes: draft.warranty.trim() || null,
           is_highlight: draft.is_highlight,
           badge: draft.badge.trim() || null,
           features: draft.features.length > 0 ? draft.features : null,
@@ -844,6 +849,7 @@ function PlansEditor({
           price: Number(draft.price) || 0,
           original_price: null,
           description: null,
+          notes: draft.warranty.trim() || null,
           is_highlight: draft.is_highlight,
           is_active: true,
           sort_order: plans.length + 1,
@@ -864,6 +870,7 @@ function PlansEditor({
           duration: draft.duration.trim() || null,
           price: Number(draft.price) || 0,
           original_price: null,
+          notes: draft.warranty.trim() || null,
           is_highlight: draft.is_highlight,
           sort_order: plans.length + 1,
           badge: draft.badge.trim() || null,
@@ -928,6 +935,11 @@ function PlansEditor({
                   <span className="font-extrabold text-slate-900 dark:text-white text-xs">{p.name}</span>
                   {p.duration && <span className="text-xs text-slate-400 font-semibold">({p.duration})</span>}
                   <span className="text-xs font-black text-[#2563EB] dark:text-[#35A8FF]">{Number(p.price).toLocaleString('vi-VN')}₫</span>
+                  {p.notes && (
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
+                      🛡️ {p.notes}
+                    </span>
+                  )}
                   {p.badge && (
                     <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/50 px-2.5 py-0.5 text-[9px] font-black uppercase text-blue-700 dark:text-blue-300">
                       🏷 {p.badge}
@@ -1011,6 +1023,35 @@ function PlansEditor({
             placeholder="0"
           />
           <Field label="Nhãn / Badge" value={draft.badge} onChange={(e) => setDraft((d) => ({ ...d, badge: e.target.value }))} placeholder="Ví dụ: 5 THÀNH VIÊN, PROFILE RIÊNG..." />
+        </div>
+
+        {/* Bảo hành input & Quick Suggestion Pills */}
+        <div className="space-y-1.5">
+          <Field
+            label="Chính sách bảo hành"
+            value={draft.warranty}
+            onChange={(e) => setDraft((d) => ({ ...d, warranty: e.target.value }))}
+            placeholder="Ví dụ: Full thời gian, 24 giờ, 7 ngày, Không bảo hành..."
+          />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-[11px] text-slate-400 font-semibold mr-1">Gợi ý nhanh:</span>
+            {[
+              'Bảo hành Full thời gian',
+              'Bảo hành 24 giờ',
+              'Bảo hành 7 ngày',
+              'Bảo hành 30 ngày',
+              'Không bảo hành',
+            ].map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setDraft((d) => ({ ...d, warranty: opt }))}
+                className="rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 text-[10px] font-bold transition cursor-pointer"
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Feature List Input for this Plan */}

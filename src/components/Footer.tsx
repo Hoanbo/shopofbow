@@ -42,11 +42,11 @@ export default function Footer() {
       <div className="container-bow grid gap-8 py-10 sm:grid-cols-2 lg:grid-cols-5 lg:py-12">
         {/* Brand Info (2 Columns wide on desktop) */}
         <div className="lg:col-span-2">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <img
               src={newLogo}
               alt="BOW Logo"
-              className="h-10 w-auto object-contain filter contrast-[1.12] saturate-[1.1] drop-shadow-[0_1.5px_2px_rgba(15,23,42,0.12)] drop-shadow-[0_1px_4px_rgba(0,163,255,0.2)] dark:drop-shadow-[0_0_8px_rgba(53,168,255,0.2)]"
+              className="h-10 w-auto object-contain filter contrast-[1.25] saturate-[1.3] brightness-[0.95] drop-shadow-[0_0_1px_rgba(15,23,42,0.85)] drop-shadow-[0_2px_5px_rgba(2,132,199,0.35)] dark:filter-none dark:contrast-[1.1] dark:drop-shadow-[0_0_8px_rgba(0,163,255,0.45)]"
             />
             <div className="flex flex-col leading-none">
               <span className="text-xl font-black tracking-tight text-[#00A3FF]">BOW</span>

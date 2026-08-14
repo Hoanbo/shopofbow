@@ -1,6 +1,6 @@
 // api/email-notify.ts — Vercel Serverless Function & Netlify Function Compatibility
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
@@ -8,11 +8,24 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SITE_URL = process.env.VITE_APP_URL || 'https://shopofbow.vercel.app';
 
-
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
 const SMTP_USER = process.env.SMTP_USER || 'hoankb4@gmail.com';
 const SMTP_PASS = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+
+function escapeHtml(str: string): string {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function checkIsAdmin(supabase: SupabaseClient, userId: string, email?: string): Promise<boolean> {
+  if (email?.toLowerCase() === 'hoankb4@gmail.com') return true;
+  const { data } = await supabase
+    .from('admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return !!data;
+}
 
 async function processEmailNotify(headers: Record<string, string | string[] | undefined>, body: any) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -24,33 +37,29 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
 
   const authHeaderRaw = headers['authorization'] || headers['Authorization'] || '';
   const authHeader = Array.isArray(authHeaderRaw) ? authHeaderRaw[0] : authHeaderRaw;
-  let isAuthorized = false;
+  
+  let isInternalKey = false;
+  let authenticatedUser: any = null;
+  let isAdmin = false;
 
   if (INTERNAL_API_KEY && authHeader === `Apikey ${INTERNAL_API_KEY}`) {
-    isAuthorized = true;
+    isInternalKey = true;
+    isAdmin = true;
   } else if (authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (user && !error) {
-      if (user.email?.toLowerCase() === 'hoankb4@gmail.com') {
-        isAuthorized = true;
-      } else {
-        const { data: isAdmin } = await supabase
-          .from('admins')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (isAdmin) isAuthorized = true;
-      }
+      authenticatedUser = user;
+      isAdmin = await checkIsAdmin(supabase, user.id, user.email);
     }
   }
 
-  if (!isAuthorized) {
+  if (!isInternalKey && !authenticatedUser) {
     console.error('[email-notify] Unauthorized request header:', authHeader);
     return { statusCode: 401, body: { error: 'Unauthorized' } };
   }
 
-  let payload: { order_id?: string; type?: 'completed' | 'refunded' | 'processing' } = {};
+  let payload: any = {};
   if (typeof body === 'string') {
     try {
       payload = JSON.parse(body || '{}');
@@ -61,9 +70,189 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
     payload = body;
   }
 
-  const { order_id } = payload;
-  if (!order_id) {
-    return { statusCode: 400, body: { error: 'order_id is required' } };
+  const { order_id, ticket_id, type, message } = payload;
+
+  if (!order_id && !ticket_id) {
+    return { statusCode: 400, body: { error: 'order_id or ticket_id is required' } };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 1. TICKET EMAIL NOTIFICATIONS
+  // ─────────────────────────────────────────────────────────────
+  if (ticket_id) {
+    try {
+      const { data: ticket, error: tErr } = await supabase
+        .from('support_tickets')
+        .select('*, profiles:profiles!support_tickets_user_id_fkey(full_name, email), orders:orders(product_name, payment_code)')
+        .eq('id', ticket_id)
+        .maybeSingle();
+
+      if (tErr || !ticket) {
+        console.error('[email-notify] Ticket not found:', tErr);
+        return { statusCode: 404, body: { error: 'Ticket not found' } };
+      }
+
+      // 🔒 BẢO MẬT: Kiểm tra quyền gửi email
+      if (!isAdmin) {
+        // Chỉ admin mới được gửi thông báo phản hồi (ticket_reply) hoặc giải quyết (ticket_resolved) tới khách
+        if (type === 'ticket_reply' || type === 'ticket_resolved') {
+          console.error(`[email-notify] Forbidden: Non-admin ${authenticatedUser.id} tried to send ${type}`);
+          return { statusCode: 403, body: { error: 'Forbidden: Only admin can trigger staff reply/resolved emails' } };
+        }
+        // Khách hàng chỉ được gửi email đóng ticket trên chính ticket của mình
+        if (ticket.user_id !== authenticatedUser.id) {
+          console.error(`[email-notify] Forbidden: User ${authenticatedUser.id} tried to send email for ticket owned by ${ticket.user_id}`);
+          return { statusCode: 403, body: { error: 'Forbidden: You do not own this ticket' } };
+        }
+      }
+
+      const profile: any = ticket.profiles;
+      let userEmail = profile?.email;
+
+      if (!userEmail && ticket.user_id) {
+        const { data: userData } = await supabase.auth.admin.getUserById(ticket.user_id);
+        userEmail = userData.user?.email;
+      }
+
+      if (!userEmail) {
+        console.error('[email-notify] User email not found for ticket:', ticket_id);
+        return { statusCode: 404, body: { error: 'User email not found' } };
+      }
+
+      const customerName = profile?.full_name || 'Khách hàng';
+      const ticketNumber = ticket.ticket_number;
+      const subject = ticket.subject;
+      const messageSnippet = message ? String(message).trim() : '';
+
+      let emailSubject = '';
+      let badgeText = '';
+      let badgeColor = '';
+      let titleText = '';
+      let descHtml = '';
+      let btnText = '';
+      let btnUrl = `${SITE_URL}/dashboard?tab=tickets`;
+
+      if (type === 'ticket_resolved') {
+        emailSubject = `🟢 [BOW] Yêu cầu hỗ trợ #${ticketNumber} đã được giải quyết!`;
+        badgeText = 'ĐÃ GIẢI QUYẾT XONG';
+        badgeColor = 'background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);';
+        titleText = 'Yêu cầu hỗ trợ của bạn đã được giải quyết!';
+        descHtml = `Chào <strong>${escapeHtml(customerName)}</strong>,<br/><br/>Đội ngũ kỹ thuật BOW đã xử lý hoàn tất yêu cầu hỗ trợ <strong>#${escapeHtml(ticketNumber)}</strong> (<em>${escapeHtml(subject)}</em>).<br/><br/>👉 <strong>Vui lòng kiểm tra lại dịch vụ/tài khoản của bạn.</strong> Nếu mọi thứ đã hoạt động tốt, bạn hãy bấm nút <strong>Xác nhận hài lòng & Đóng Ticket</strong> trên website để kết thúc hỗ trợ. Nếu vẫn cần hỗ trợ thêm, bạn có thể tiếp tục gửi tin nhắn phản hồi ngay tại phòng chat.`;
+        btnText = '✅ XEM & XÁC NHẬN HÀI LÒNG TRÊN WEB';
+      } else if (type === 'ticket_closed') {
+        emailSubject = `🔒 [BOW] Vé hỗ trợ #${ticketNumber} đã được đóng`;
+        badgeText = 'ĐÃ ĐÓNG VÉ HỖ TRỢ';
+        badgeColor = 'background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3);';
+        titleText = 'Vé hỗ trợ đã được đóng hoàn tất!';
+        descHtml = `Yêu cầu hỗ trợ <strong>#${escapeHtml(ticketNumber)}</strong> (<em>${escapeHtml(subject)}</em>) đã được đóng. Cảm ơn bạn đã tin tưởng và đồng hành cùng BOW. Chúc bạn có trải nghiệm tuyệt vời cùng dịch vụ!`;
+        btnText = '📋 XEM LỊCH SỬ HỖ TRỢ TRÊN WEB';
+      } else {
+        // ticket_reply
+        emailSubject = `💬 [BOW] Đội ngũ kỹ thuật đã phản hồi Ticket #${ticketNumber}!`;
+        badgeText = 'PHẢN HỒI MỚI TỪ BOW';
+        badgeColor = 'background: rgba(53, 168, 255, 0.15); color: #35a8ff; border: 1px solid rgba(53, 168, 255, 0.3);';
+        titleText = 'Bạn có phản hồi mới từ kỹ thuật viên BOW!';
+        descHtml = `Chào <strong>${escapeHtml(customerName)}</strong>,<br/><br/>Kỹ thuật viên BOW vừa phản hồi yêu cầu hỗ trợ <strong>#${escapeHtml(ticketNumber)}</strong> (<em>${escapeHtml(subject)}</em>):` +
+          (messageSnippet ? `<br/><br/><div style="background: rgba(15,23,42,0.6); border-left: 3px solid #35a8ff; padding: 12px 16px; border-radius: 8px; color: #f8fafc; font-style: italic;">"${escapeHtml(messageSnippet)}"</div>` : '') +
+          `<br/>Vui lòng truy cập website để xem chi tiết và trả lời lại nếu cần.`;
+        btnText = '💬 MỞ CHAT XEM PHẢN HỒI & TRẢ LỜI';
+      }
+
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b1120; color: #e2e8f0; margin: 0; padding: 24px; }
+            .card { max-width: 540px; margin: 0 auto; background: linear-gradient(180deg, #15233e 0%, #0f172a 100%); border: 1px solid #1e293b; border-radius: 24px; padding: 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+            .badge { display: inline-block; ${badgeColor} font-size: 11px; font-weight: 900; text-transform: uppercase; padding: 6px 14px; border-radius: 99px; letter-spacing: 1px; }
+            .title { font-size: 21px; font-weight: 900; color: #ffffff; margin-top: 16px; margin-bottom: 8px; }
+            .text { font-size: 14px; color: #94a3b8; line-height: 1.6; text-align: left; }
+            .info-box { background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 16px; padding: 16px; margin: 20px 0; text-align: left; }
+            .row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+            .row:last-child { margin-bottom: 0; }
+            .label { color: #64748b; font-weight: 600; }
+            .value { color: #f8fafc; font-weight: 800; }
+            .btn { display: inline-block; background: linear-gradient(90deg, #00A3FF 0%, #2563EB 100%); color: #ffffff; font-weight: 900; font-size: 14px; text-decoration: none; padding: 14px 28px; border-radius: 14px; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4); text-align: center; }
+            .footer { font-size: 11px; color: #475569; margin-top: 24px; text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="badge">${badgeText}</div>
+            <div class="title">${titleText}</div>
+            <div class="text">${descHtml}</div>
+
+            <div class="info-box">
+              <div class="row">
+                <span class="label">Mã Ticket:</span>
+                <span class="value" style="color: #38bdf8; font-family: monospace;">#${ticketNumber}</span>
+              </div>
+              <div class="row">
+                <span class="label">Chủ đề:</span>
+                <span class="value">${escapeHtml(subject)}</span>
+              </div>
+              ${ticket.orders?.payment_code ? `
+              <div class="row">
+                <span class="label">Đơn hàng:</span>
+                <span class="value" style="color: #fbbf24; font-family: monospace;">#${ticket.orders.payment_code}</span>
+              </div>` : ''}
+              <div class="row">
+                <span class="label">Trạng thái hiện tại:</span>
+                <span class="value" style="color: #10b981;">${type === 'ticket_resolved' ? '🟢 Đã giải quyết' : type === 'ticket_closed' ? '⚫ Đã đóng' : '🟡 Đang xử lý'}</span>
+              </div>
+            </div>
+
+            <a href="${btnUrl}" class="btn" target="_blank">
+              ${btnText}
+            </a>
+
+            <div class="footer">
+              Đội ngũ hỗ trợ BOW luôn sẵn sàng đồng hành cùng bạn 24/7.
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      if (SMTP_PASS) {
+        const transporter = nodemailer.createTransport({
+          host: SMTP_HOST,
+          port: SMTP_PORT,
+          secure: SMTP_PORT === 465,
+          auth: {
+            user: SMTP_USER,
+            pass: SMTP_PASS,
+          },
+        });
+
+        const info = await transporter.sendMail({
+          from: `"BOW Support" <${SMTP_USER}>`,
+          to: userEmail,
+          subject: emailSubject,
+          html: emailHtml,
+        });
+
+        console.log(`[email-notify] Ticket Email (${type}) sent to ${userEmail}, messageId: ${info.messageId}`);
+        return { statusCode: 200, body: { status: 'sent', type, messageId: info.messageId } };
+      }
+
+      console.log(`[email-notify] SMTP_PASS not set, logged ticket email for ${userEmail} (${type})`);
+      return { statusCode: 200, body: { status: 'logged_no_smtp_pass', email: userEmail } };
+
+    } catch (err: any) {
+      console.error('[email-notify] Ticket email error:', err);
+      return { statusCode: 500, body: { error: err.message || 'Internal server error' } };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. ORDER EMAIL NOTIFICATIONS (🔒 BẢO MẬT: Chỉ Admin hoặc Internal API Key)
+  // ─────────────────────────────────────────────────────────────
+  if (!isAdmin) {
+    console.error('[email-notify] Non-admin tried to trigger order email');
+    return { statusCode: 403, body: { error: 'Forbidden: Admin access required for order emails' } };
   }
 
   try {
@@ -91,7 +280,7 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
 
     const userEmail = userData.user.email;
     const formattedPrice = Number(order.price || 0).toLocaleString('vi-VN') + 'đ';
-    const emailType = payload.type || (order.status === 'refunded' ? 'refunded' : order.status === 'processing' ? 'processing' : 'completed');
+    const emailType = type || (order.status === 'refunded' ? 'refunded' : order.status === 'processing' ? 'processing' : 'completed');
 
     let emailSubject = '';
     let badgeText = '';

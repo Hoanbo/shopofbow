@@ -88,7 +88,7 @@ export default function ProductReviewsSection({
   const totalCount = reviews.length;
   const avgRating = totalCount > 0
     ? (reviews.reduce((acc, r) => acc + r.rating, 0) / totalCount).toFixed(1)
-    : '5.0';
+    : '0.0';
 
   const countsByStar = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
   reviews.forEach((r) => {
@@ -126,13 +126,15 @@ export default function ProductReviewsSection({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-5 rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-[#18243E]">
         {/* Rating Score */}
         <div className="flex flex-col items-center justify-center text-center space-y-1 md:border-r border-slate-200/60 dark:border-slate-800">
-          <span className="text-4xl font-black text-slate-900 dark:text-white">{avgRating}</span>
+          <span className="text-4xl font-black text-slate-900 dark:text-white">
+            {totalCount > 0 ? avgRating : '0.0'}
+          </span>
           <div className="flex items-center gap-1">
             {[1, 2, 3, 4, 5].map((star) => (
               <StarIcon
                 key={star}
                 className={`h-4 w-4 ${
-                  star <= Math.round(Number(avgRating))
+                  totalCount > 0 && star <= Math.round(Number(avgRating))
                     ? 'fill-amber-400 text-amber-400'
                     : 'fill-slate-200 text-slate-300 dark:fill-slate-700 dark:text-slate-600'
                 }`}
@@ -140,7 +142,7 @@ export default function ProductReviewsSection({
             ))}
           </div>
           <span className="text-xs font-bold text-slate-500 dark:text-slate-400 pt-1">
-            Dựa trên {totalCount} đánh giá đã xác minh
+            {totalCount > 0 ? `Dựa trên ${totalCount} đánh giá đã xác minh` : 'Chưa có đánh giá đã xác minh'}
           </span>
         </div>
 

@@ -12,6 +12,7 @@ import CreateTicketModal from '../components/user/CreateTicketModal';
 import UserOrderDetailModal from '../components/user/UserOrderDetailModal';
 import OrderTimeline from '../components/user/OrderTimeline';
 import ReviewModal from '../components/user/ReviewModal';
+import OrderRenewalModal from '../components/user/OrderRenewalModal';
 import AppLogo from '../components/AppLogo';
 import { formatVND } from '../data/catalog';
 
@@ -26,10 +27,17 @@ type Order = {
   product_name: string;
   plan_label: string;
   price: number;
+  original_price?: number;
+  discount_amount?: number;
+  coupon_code?: string;
   status: 'pending_payment' | 'pending_delivery' | 'processing' | 'completed' | 'cancelled' | 'refunded';
   payment_code: string;
   notes: string;
   account_details?: string;
+  delivery_info?: string;
+  expires_at?: string;
+  renewal_policy?: string;
+  target_account?: string;
   created_at: string;
 };
 
@@ -54,11 +62,15 @@ const getStatusBadge = (status: Order['status']) => {
 // Sub-component for individual Order Card with built-in Countdown & Cancel logic
 function OrderCard({
   order,
+  hasReviewed,
+  onReviewSuccess,
   onPay,
   onCancelSuccess,
   onOpenDetail,
 }: {
   order: Order;
+  hasReviewed: boolean;
+  onReviewSuccess: (orderId: string) => void;
   onPay: (o: Order) => void;
   onCancelSuccess: () => void;
   onOpenDetail?: (order: Order) => void;
@@ -68,22 +80,9 @@ function OrderCard({
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [hasReviewed, setHasReviewed] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
   const toast = useToast();
-
-  useEffect(() => {
-    if (order.status !== 'completed') return;
-    const checkReview = async () => {
-      const { data } = await (supabase
-        .from('product_reviews')
-        .select('id')
-        .eq('order_id', order.id)
-        .maybeSingle() as any);
-      if (data?.id) setHasReviewed(true);
-    };
-    checkReview();
-  }, [order.id, order.status]);
 
   useEffect(() => {
     if (order.status !== 'pending_payment') return;
@@ -146,6 +145,204 @@ function OrderCard({
   const isPaidOrder = ['pending_delivery', 'processing'].includes(order.status);
   const canCancel = ['pending_payment', 'pending_delivery', 'processing'].includes(order.status) && !isExpired;
 
+  const calcExpiryInfo = () => {
+    if (order.status !== 'completed') return null;
+
+    const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${order.notes || ''}`.toLowerCase();
+
+    // 1. Gói vĩnh viễn
+    if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
+      return {
+        label: 'Vĩnh viễn (Trọn đời)',
+        badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200/60',
+        icon: '👑',
+        daysText: 'Sử dụng không giới hạn thời gian',
+      };
+    }
+
+    // 2. Nhận diện số ngày theo chu kỳ gói
+    let durationDays = 30;
+    let isHours = false;
+
+    if (planStr.includes('1 ngày') || planStr.includes('24h') || planStr.includes('1 day') || planStr.includes('api 10m') || planStr.includes('api 50m') || planStr.includes('api 100m')) {
+      durationDays = 1;
+      isHours = true;
+    } else if (planStr.includes('2 ngày') || planStr.includes('48h')) {
+      durationDays = 2;
+    } else if (planStr.includes('3 ngày')) {
+      durationDays = 3;
+    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+      durationDays = 7;
+    } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
+      durationDays = 14;
+    } else if (planStr.includes('15 ngày')) {
+      durationDays = 15;
+    } else if (planStr.includes('1 tháng') || planStr.includes('30 ngày') || planStr.includes('1 month')) {
+      durationDays = 30;
+    } else if (planStr.includes('2 tháng') || planStr.includes('60 ngày')) {
+      durationDays = 60;
+    } else if (planStr.includes('3 tháng') || planStr.includes('90 ngày')) {
+      durationDays = 90;
+    } else if (planStr.includes('6 tháng') || planStr.includes('180 ngày')) {
+      durationDays = 180;
+    } else if (planStr.includes('1 năm') || planStr.includes('12 tháng') || planStr.includes('1 year') || planStr.includes('365 ngày')) {
+      durationDays = 365;
+    } else {
+      const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
+      if (dayMatch) {
+        durationDays = parseInt(dayMatch[1], 10);
+        if (durationDays === 1) isHours = true;
+      }
+    }
+
+    const createdAtMs = new Date(order.created_at).getTime();
+    const expiresAtMs = order.expires_at ? new Date(order.expires_at).getTime() : createdAtMs + durationDays * 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const diffMs = expiresAtMs - nowMs;
+    const diffHours = Math.ceil(diffMs / (60 * 60 * 1000));
+    const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+
+    if (diffMs <= 0) {
+      return {
+        label: 'Đã hết hạn',
+        badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/60',
+        icon: '🔴',
+        daysText: 'Đã kết thúc chu kỳ sử dụng',
+        isExpiringSoon: false,
+        isExpired: true,
+      };
+    }
+
+    if (isHours && diffHours <= 24) {
+      return {
+        label: `Còn ${diffHours} giờ`,
+        badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200/60',
+        icon: '⚡',
+        daysText: `Hạn dùng đến ${new Date(expiresAtMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+        isExpiringSoon: diffHours <= 6,
+        isExpired: false,
+      };
+    }
+
+    if (diffDays <= 5) {
+      return {
+        label: `Còn ${diffDays} ngày (Sắp hết)`,
+        badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/60 animate-pulse',
+        icon: '🟡',
+        daysText: `Hết hạn: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+        isExpiringSoon: true,
+        isExpired: false,
+      };
+    }
+
+    return {
+      label: `Còn ${diffDays} ngày`,
+      badgeClass: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200/60',
+      icon: '🟢',
+      daysText: `Hạn dùng đến: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+      isExpiringSoon: false,
+      isExpired: false,
+    };
+  };
+
+  const calcWarranty = () => {
+    if (order.status !== 'completed') return null;
+
+    const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${order.notes || ''}`.toLowerCase();
+
+    // 1. Gói không bảo hành
+    if (planStr.includes('kbh') || planStr.includes('không bảo hành') || planStr.includes('no warranty')) {
+      return {
+        label: 'Không bảo hành',
+        badgeClass: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200/60',
+        icon: '⚪',
+      };
+    }
+
+    // 2. Gói vĩnh viễn
+    if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
+      return {
+        label: 'Bảo hành trọn đời',
+        badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200/60',
+        icon: '👑',
+      };
+    }
+
+    let durationDays = 30;
+    let isHours = false;
+
+    if (planStr.includes('1 ngày') || planStr.includes('24h') || planStr.includes('1 day') || planStr.includes('api 10m') || planStr.includes('api 50m') || planStr.includes('api 100m')) {
+      durationDays = 1;
+      isHours = true;
+    } else if (planStr.includes('2 ngày') || planStr.includes('48h')) {
+      durationDays = 2;
+    } else if (planStr.includes('3 ngày')) {
+      durationDays = 3;
+    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+      durationDays = 7;
+    } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
+      durationDays = 14;
+    } else if (planStr.includes('15 ngày')) {
+      durationDays = 15;
+    } else if (planStr.includes('1 tháng') || planStr.includes('30 ngày') || planStr.includes('1 month')) {
+      durationDays = 30;
+    } else if (planStr.includes('2 tháng') || planStr.includes('60 ngày')) {
+      durationDays = 60;
+    } else if (planStr.includes('3 tháng') || planStr.includes('90 ngày')) {
+      durationDays = 90;
+    } else if (planStr.includes('6 tháng') || planStr.includes('180 ngày')) {
+      durationDays = 180;
+    } else if (planStr.includes('1 năm') || planStr.includes('12 tháng') || planStr.includes('1 year') || planStr.includes('365 ngày')) {
+      durationDays = 365;
+    } else {
+      const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
+      if (dayMatch) {
+        durationDays = parseInt(dayMatch[1], 10);
+        if (durationDays === 1) isHours = true;
+      }
+    }
+
+    const createdAtMs = new Date(order.created_at).getTime();
+    const expiresAtMs = order.expires_at ? new Date(order.expires_at).getTime() : createdAtMs + durationDays * 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const diffMs = expiresAtMs - nowMs;
+    const diffHours = Math.ceil(diffMs / (60 * 60 * 1000));
+    const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+
+    if (diffMs <= 0) {
+      return {
+        label: 'Hết hạn BH',
+        badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/60',
+        icon: '🔴',
+      };
+    }
+
+    if (isHours && diffHours <= 24) {
+      return {
+        label: `BH: Còn ${diffHours}h`,
+        badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
+        icon: '⚡',
+      };
+    }
+
+    if (diffDays <= 3) {
+      return {
+        label: `BH: Còn ${diffDays} ngày`,
+        badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/60 animate-pulse',
+        icon: '🟡',
+      };
+    }
+
+    return {
+      label: `BH: Còn ${diffDays} ngày`,
+      badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
+      icon: '🛡️',
+    };
+  };
+
+  const expiryInfo = calcExpiryInfo();
+  const warranty = calcWarranty();
+
   return (
     <div className="rounded-2xl border border-slate-100 p-4 hover:shadow-xs transition">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -179,10 +376,49 @@ function OrderCard({
         </div>
       )}
 
-      {order.status === 'completed' && order.account_details && (
-        <div className="mt-3 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3 text-xs text-emerald-800 leading-relaxed">
-          <strong className="block text-emerald-900 font-extrabold text-sm mb-1">🎁 Thông tin bàn giao dịch vụ:</strong>
-          <pre className="font-mono whitespace-pre-wrap">{order.account_details}</pre>
+      {/* ⏰ Subscription Countdown & Warranty & Conditional Renewal */}
+      {order.status === 'completed' && expiryInfo && (
+        <div className="mt-3 rounded-2xl border border-blue-200/80 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/80 to-indigo-50/50 dark:from-blue-950/40 dark:to-indigo-950/20 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          {/* Cụm Thời hạn bên trái */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <span>⏰</span> Thời hạn:
+            </span>
+            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${expiryInfo.badgeClass}`}>
+              <span>{expiryInfo.icon}</span>
+              <span>{expiryInfo.label}</span>
+            </span>
+            <span className="text-slate-500 dark:text-slate-400 font-medium text-[11px]">
+              • {expiryInfo.daysText}
+            </span>
+          </div>
+
+          {/* Cụm Bảo hành & Nút gia hạn bên phải */}
+          <div className="flex items-center gap-3 flex-wrap self-start sm:self-auto">
+            {warranty && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 flex items-center gap-1">
+                  <span>🛡️</span> Bảo hành:
+                </span>
+                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${warranty.badgeClass}`}>
+                  <span>{warranty.icon}</span>
+                  <span>{warranty.label}</span>
+                </span>
+              </div>
+            )}
+
+            {/* Chỉ hiển thị nút gia hạn khi đơn sắp hết hạn (<= 5 ngày) hoặc đã hết hạn */}
+            {(expiryInfo.isExpiringSoon || expiryInfo.isExpired) && (
+              <button
+                type="button"
+                onClick={() => setShowRenewalModal(true)}
+                className="rounded-xl bg-gradient-to-r from-[#19A7FF] to-[#2563EB] hover:from-[#19A7FF] hover:to-[#1D4ED8] text-white px-3.5 py-1.5 text-xs font-black transition shadow-xs cursor-pointer shrink-0 flex items-center justify-center gap-1.5 animate-pulse"
+              >
+                <span>🔄 Gia hạn ngay</span>
+                <span className="text-[10px] bg-white/20 px-1 py-0.2 rounded-md font-bold">-10%</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -223,14 +459,14 @@ function OrderCard({
       <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800/60 pt-2.5 text-xs">
         {order.status === 'completed' ? (
           hasReviewed ? (
-            <span className="inline-flex items-center gap-1 font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg">
+            <span className="inline-flex items-center gap-1 font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/50 dark:border-emerald-900/30 px-2.5 py-1 rounded-xl">
               ✓ Đã đánh giá
             </span>
           ) : (
             <button
               type="button"
               onClick={() => setShowReviewModal(true)}
-              className="inline-flex items-center gap-1 font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/50 dark:border-amber-900/40 px-3 py-1 rounded-xl hover:scale-102 transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 font-black text-[#2563EB] dark:text-[#35A8FF] bg-blue-50 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-3 py-1.5 rounded-xl transition cursor-pointer"
             >
               <span>⭐</span>
               <span>Đánh giá sản phẩm</span>
@@ -253,7 +489,18 @@ function OrderCard({
         <ReviewModal
           order={order}
           onClose={() => setShowReviewModal(false)}
-          onSuccess={() => setHasReviewed(true)}
+          onSuccess={() => onReviewSuccess(order.id)}
+        />
+      )}
+
+      {showRenewalModal && (
+        <OrderRenewalModal
+          order={order}
+          onClose={() => setShowRenewalModal(false)}
+          onRenewalSuccess={() => {
+            setShowRenewalModal(false);
+            onCancelSuccess();
+          }}
         />
       )}
 
@@ -335,6 +582,11 @@ export default function Dashboard() {
 
   // Order Detail Modal State
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<Order | null>(null);
+  const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
+
+  const handleReviewSuccess = useCallback((orderId: string) => {
+    setReviewedOrderIds((prev) => new Set(prev).add(orderId));
+  }, []);
 
   // Deposit State
   const [depositAmount, setDepositAmount] = useState<number>(50000);
@@ -357,14 +609,23 @@ export default function Dashboard() {
     setLoadingOrders(true);
     setErrorOrders(null);
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false });
+      const [ordersRes, reviewsRes] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('product_reviews')
+          .select('order_id')
+          .eq('user_id', session.user.id),
+      ]);
 
-      if (error) throw error;
-      setOrders((data || []) as Order[]);
+      if (ordersRes.error) throw ordersRes.error;
+      setOrders((ordersRes.data || []) as Order[]);
+      
+      const revSet = new Set<string>((reviewsRes.data || []).map((r: any) => String(r.order_id)));
+      setReviewedOrderIds(revSet);
       setCurrentPage(1);
     } catch (err: any) {
       console.error('Error fetching orders:', err);
@@ -660,6 +921,8 @@ export default function Dashboard() {
                       <OrderCard
                         key={o.id}
                         order={o}
+                        hasReviewed={reviewedOrderIds.has(o.id)}
+                        onReviewSuccess={handleReviewSuccess}
                         onPay={(payOrder) => setSelectedPayOrder(payOrder)}
                         onCancelSuccess={fetchOrders}
                         onOpenDetail={(detailOrder) => setSelectedDetailOrder(detailOrder)}
@@ -1113,6 +1376,8 @@ export default function Dashboard() {
       {/* User Order Detail Modal */}
       <UserOrderDetailModal
         order={selectedDetailOrder}
+        hasReviewed={selectedDetailOrder ? reviewedOrderIds.has(selectedDetailOrder.id) : false}
+        onReviewSuccess={handleReviewSuccess}
         onClose={() => setSelectedDetailOrder(null)}
         onRequestSupport={(orderId) => {
           setSupportOrderIdForModal(orderId);

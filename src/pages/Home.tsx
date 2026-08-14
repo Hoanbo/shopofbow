@@ -99,7 +99,7 @@ export default function Home() {
                 className="flex overflow-x-auto gap-2.5 snap-x snap-mandatory px-0.5 pb-2 no-scrollbar scroll-smooth"
               >
                 {displayAiTools.map((item) => (
-                  <div key={item.id} className="w-[calc(33.333%-7px)] min-w-[110px] xs:min-w-[124px] shrink-0 snap-start">
+                  <div key={item.id} className="w-[calc(33.333%-7px)] min-w-[105px] xs:min-w-[118px] shrink-0 snap-start">
                     <AIToolCard item={item} />
                   </div>
                 ))}
@@ -136,7 +136,7 @@ export default function Home() {
         to="/premium-apps"
       >
         {/* Mobile: 3 Columns. Desktop: 6 Columns */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4 lg:gap-5">
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-4 lg:gap-5">
           {loadingApps ? (
             <Skeleton count={6} variant="app" />
           ) : (

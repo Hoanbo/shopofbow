@@ -1,6 +1,6 @@
 // api/telegram-notify.ts — Vercel Serverless Function & Netlify Function Compatibility
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -10,6 +10,17 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 type OrderEvent = 'new_order' | 'order_paid' | 'order_processing' | 'order_completed' | 'order_cancelled' | 'order_refunded';
+type TicketEvent = 'ticket_created' | 'ticket_user_message' | 'ticket_resolved' | 'ticket_closed';
+
+async function checkIsAdmin(supabase: SupabaseClient, userId: string, email?: string): Promise<boolean> {
+  if (email?.toLowerCase() === 'hoankb4@gmail.com') return true;
+  const { data } = await supabase
+    .from('admins')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return !!data;
+}
 
 async function processTelegramNotify(headers: Record<string, string | string[] | undefined>, body: any) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
@@ -27,28 +38,24 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
 
   const authHeaderRaw = headers['authorization'] || headers['Authorization'] || '';
   const authHeader = Array.isArray(authHeaderRaw) ? authHeaderRaw[0] : authHeaderRaw;
-  let isAuthorized = false;
+  
+  let isInternalKey = false;
+  let authenticatedUser: any = null;
+  let isAdmin = false;
 
   if (INTERNAL_API_KEY && authHeader === `Apikey ${INTERNAL_API_KEY}`) {
-    isAuthorized = true;
+    isInternalKey = true;
+    isAdmin = true;
   } else if (authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (user && !error) {
-      if (user.email?.toLowerCase() === 'hoankb4@gmail.com') {
-        isAuthorized = true;
-      } else {
-        const { data: isAdmin } = await supabase
-          .from('admins')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (isAdmin) isAuthorized = true;
-      }
+      authenticatedUser = user;
+      isAdmin = await checkIsAdmin(supabase, user.id, user.email);
     }
   }
 
-  if (!isAuthorized) {
+  if (!isInternalKey && !authenticatedUser) {
     console.error('[telegram-notify] Unauthorized request header:', authHeader);
     return { statusCode: 401, body: { error: 'Unauthorized' } };
   }
@@ -64,12 +71,138 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
     payload = body;
   }
 
-  const orderId: unknown = payload.order_id;
-  const evt: unknown = payload.event;
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+  // ─────────────────────────────────────────────────────────────
+  // 1. TICKET NOTIFICATIONS
+  // ─────────────────────────────────────────────────────────────
+  if (payload.ticket_id) {
+    const ticketId = payload.ticket_id;
+    if (typeof ticketId !== 'string' || !UUID_RE.test(ticketId)) {
+      return { statusCode: 400, body: { error: 'Missing or invalid ticket_id' } };
+    }
+
+    const ticketEvent = (payload.event || 'ticket_created') as TicketEvent;
+    const { data: ticket, error: tErr } = await supabase
+      .from('support_tickets')
+      .select('*, profiles:profiles!support_tickets_user_id_fkey(full_name, email), orders:orders(payment_code)')
+      .eq('id', ticketId)
+      .maybeSingle();
+
+    if (tErr || !ticket) {
+      console.error('[telegram-notify] Ticket lookup failed:', tErr);
+      return { statusCode: 404, body: { error: 'Ticket not found' } };
+    }
+
+    // 🔒 BẢO MẬT: Kiểm tra quyền sở hữu Ticket và loại event
+    if (!isAdmin) {
+      // User thường CHỈ được thông báo trên ticket của chính mình
+      if (ticket.user_id !== authenticatedUser.id) {
+        console.error(`[telegram-notify] Forbidden: User ${authenticatedUser.id} tried to notify for ticket owned by ${ticket.user_id}`);
+        return { statusCode: 403, body: { error: 'Forbidden: You do not own this ticket' } };
+      }
+      // User thường chỉ được gửi các event của user, không được gửi ticket_resolved
+      if (ticketEvent === 'ticket_resolved') {
+        return { statusCode: 403, body: { error: 'Forbidden: Only admin can resolve tickets' } };
+      }
+    }
+
+    const profile: any = ticket.profiles;
+    const customerName = profile?.full_name || 'Khách hàng';
+    const customerEmail = profile?.email || 'N/A';
+    const customMsg = payload.message ? String(payload.message).trim() : '';
+
+    const dateStr = new Date().toLocaleString('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const priorityLabel = ticket.priority === 'urgent'
+      ? '🔴 KHẨN CẤP'
+      : ticket.priority === 'high'
+      ? '🟠 Cao'
+      : ticket.priority === 'low'
+      ? '🟢 Thấp'
+      : '🔵 Bình thường';
+
+    let text = '';
+    if (ticketEvent === 'ticket_created') {
+      text = `🎫 <b>YÊU CẦU HỖ TRỢ MỚI (TICKET)</b>\n\n` +
+        `📋 <b>Mã Ticket:</b> <code>#${escapeHtml(ticket.ticket_number)}</code>\n` +
+        `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+        `📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n` +
+        `🔥 <b>Độ ưu tiên:</b> ${priorityLabel}\n` +
+        `📌 <b>Chủ đề:</b> ${escapeHtml(ticket.subject)}\n` +
+        (ticket.orders?.payment_code ? `📦 <b>Đơn hàng liên quan:</b> <code>#${ticket.orders.payment_code}</code>\n` : '') +
+        (customMsg ? `💬 <b>Nội dung:</b>\n<i>${escapeHtml(customMsg)}</i>\n\n` : '\n') +
+        `🕐 <b>Thời gian:</b> ${dateStr}\n\n` +
+        `👉 Vào <b>Admin > Ticket hỗ trợ</b> trên website để chat và phản hồi cho khách.`;
+    } else if (ticketEvent === 'ticket_user_message') {
+      text = `💬 <b>KHÁCH HÀNG NHẮN TIN TICKET</b>\n\n` +
+        `📋 <b>Mã Ticket:</b> <code>#${escapeHtml(ticket.ticket_number)}</code>\n` +
+        `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)} (<code>${escapeHtml(customerEmail)}</code>)\n` +
+        `📌 <b>Chủ đề:</b> ${escapeHtml(ticket.subject)}\n` +
+        `💬 <b>Tin nhắn mới:</b>\n<i>${escapeHtml(customMsg || 'Có tin nhắn mới từ khách hàng')}</i>\n\n` +
+        `🕐 <b>Thời gian:</b> ${dateStr}\n\n` +
+        `👉 Vào <b>Admin > Ticket hỗ trợ</b> để trả lời.`;
+    } else if (ticketEvent === 'ticket_resolved') {
+      text = `🟢 <b>TICKET ĐÃ GIẢI QUYẾT XONG</b>\n\n` +
+        `📋 <b>Mã Ticket:</b> <code>#${escapeHtml(ticket.ticket_number)}</code>\n` +
+        `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+        `📌 <b>Chủ đề:</b> ${escapeHtml(ticket.subject)}\n` +
+        `✅ <b>Trạng thái:</b> Đã giải quyết (Đang chờ khách hàng kiểm tra & xác nhận)\n` +
+        `🕐 <b>Thời gian:</b> ${dateStr}`;
+    } else {
+      text = `🔒 <b>KHÁCH HÀNG ĐÃ ĐÓNG TICKET</b>\n\n` +
+        `📋 <b>Mã Ticket:</b> <code>#${escapeHtml(ticket.ticket_number)}</code>\n` +
+        `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+        `📌 <b>Chủ đề:</b> ${escapeHtml(ticket.subject)}\n` +
+        `✅ <b>Trạng thái:</b> Khách hàng đã xác nhận hài lòng và đóng vé hỗ trợ!\n` +
+        `🕐 <b>Thời gian:</b> ${dateStr}`;
+    }
+
+    try {
+      const res = await fetch(TELEGRAM_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CHAT_ID,
+          text,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        }),
+      });
+
+      const data = (await res.json()) as any;
+      if (!data.ok) {
+        console.error('[telegram-notify] Ticket Telegram API error:', data);
+        return { statusCode: 502, body: { error: 'Telegram API error' } };
+      }
+
+      return { statusCode: 200, body: { success: true, ticket_number: ticket.ticket_number } };
+    } catch (err: any) {
+      console.error('[telegram-notify] Ticket Fetch error:', err);
+      return { statusCode: 500, body: { error: 'Internal error' } };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. ORDER NOTIFICATIONS (🔒 BẢO MẬT: Chỉ Admin hoặc Internal API Key)
+  // ─────────────────────────────────────────────────────────────
+  if (!isAdmin) {
+    console.error('[telegram-notify] Non-admin tried to trigger order notification');
+    return { statusCode: 403, body: { error: 'Forbidden: Admin access required for order notifications' } };
+  }
+
+  const orderId: unknown = payload.order_id;
+  const evt: unknown = payload.event;
+
   if (typeof orderId !== 'string' || !UUID_RE.test(orderId)) {
-    return { statusCode: 400, body: { error: 'Missing or invalid order_id' } };
+    return { statusCode: 400, body: { error: 'Missing or invalid order_id or ticket_id' } };
   }
   const validEvents = ['new_order', 'order_paid', 'order_processing', 'order_completed', 'order_cancelled', 'order_refunded'];
   if (typeof evt !== 'string' || !validEvents.includes(evt)) {
@@ -115,28 +248,89 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
 
   if (orderEvent === 'new_order') {
     const isQrPending = (order as any).status === 'pending_payment';
-    text = `🔔 <b>ĐƠN HÀNG MỚI</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n📋 <b>Gói:</b> ${escapeHtml((order as any).plan_label || 'N/A')}\n💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n💳 <b>Thanh toán:</b> ${isQrPending ? '⏳ Chuyển khoản ngân hàng (chờ xác nhận)' : '✅ Đã trừ tiền từ Ví'}\n📝 <b>Ghi chú:</b> ${(order as any).notes ? escapeHtml((order as any).notes) : '—'}\n🕐 <b>Thời gian:</b> ${dateStr}\n\n${isQrPending ? '👉 SePay sẽ tự xác nhận khi tiền vào. Nếu cần, bấm nút bên dưới để duyệt thủ công.' : '👉 Vào <b>Admin Dashboard</b> để bàn giao tài khoản.'}`;
+    text = `🔔 <b>ĐƠN HÀNG MỚI</b>\n\n` +
+      `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
+      `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+      `📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n` +
+      `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
+      `📋 <b>Gói:</b> ${escapeHtml((order as any).plan_label || 'N/A')}\n` +
+      `💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n` +
+      `💳 <b>Thanh toán:</b> ${isQrPending ? '⏳ Chuyển khoản ngân hàng' : '✅ Đã trừ tiền từ Ví'}\n` +
+      `📝 <b>Ghi chú:</b> ${(order as any).notes ? escapeHtml((order as any).notes) : '—'}\n` +
+      `🕐 <b>Thời gian:</b> ${dateStr}\n\n` +
+      `⚡ <b>BÀN GIAO 1-CHẠM:</b> <i>Reply tin nhắn này kèm nội dung tài khoản để giao ngay cho khách!</i>`;
 
-    if (isQrPending) {
-      replyMarkup = {
-        inline_keyboard: [
-          [
-            { text: '✅ Xác nhận đã nhận tiền', callback_data: `confirm:${(order as any).id}` },
-            { text: '❌ Hủy đơn', callback_data: `cancel:${(order as any).id}` },
-          ],
+    replyMarkup = {
+      inline_keyboard: [
+        [
+          { text: '⚙️ Đang xử lý', callback_data: `processing:${(order as any).id}` },
+          { text: '🎁 Bàn giao', callback_data: `deliver_guide:${(order as any).id}` },
         ],
-      };
-    }
+        [
+          { text: '💸 Hoàn tiền ví', callback_data: `refund:${(order as any).id}` },
+        ],
+      ],
+    };
   } else if (orderEvent === 'order_paid') {
-    text = `🟢 <b>XÁC NHẬN ĐÃ NHẬN TIỀN</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n💳 <b>Trạng thái:</b> ✅ Đã nhận thanh toán từ Ngân hàng (SePay)\n\n👉 Đơn hàng đang ở trạng thái <b>Chờ bàn giao</b>. Vui lòng vào Admin Dashboard để bàn giao tài khoản.`;
+    text = `🟢 <b>ĐƠN HÀNG ĐÃ THANH TOÁN THÀNH CÔNG</b>\n\n` +
+      `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
+      `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+      `📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n` +
+      `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
+      `📋 <b>Gói:</b> ${escapeHtml((order as any).plan_label || 'N/A')}\n` +
+      `💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n` +
+      `💳 <b>Trạng thái:</b> ✅ Đã nhận thanh toán từ Ngân hàng (SePay)\n\n` +
+      `⚡ <b>BÀN GIAO 1-CHẠM:</b>\n👉 <i>Reply tin nhắn này kèm nội dung tài khoản/mật khẩu/link để tự động bàn giao ngay cho khách!</i>`;
+
+    replyMarkup = {
+      inline_keyboard: [
+        [
+          { text: '⚙️ Đang xử lý', callback_data: `processing:${(order as any).id}` },
+          { text: '🎁 Bàn giao', callback_data: `deliver_guide:${(order as any).id}` },
+        ],
+        [
+          { text: '💸 Hoàn tiền ví', callback_data: `refund:${(order as any).id}` },
+        ],
+      ],
+    };
   } else if (orderEvent === 'order_processing') {
-    text = `⚙️ <b>ĐƠN HÀNG ĐANG ĐƯỢC THIẾT LẬP / XỬ LÝ</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n⚙️ <b>Trạng thái:</b> Đã chuyển sang <b>Đang xử lý / Thiết lập tài khoản</b>.`;
+    text = `⚙️ <b>ĐƠN HÀNG ĐANG ĐƯỢC THIẾT LẬP / XỬ LÝ</b>\n\n` +
+      `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
+      `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+      `📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n` +
+      `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
+      `💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n` +
+      `⚙️ <b>Trạng thái:</b> Đã chuyển sang <b>Đang xử lý / Thiết lập tài khoản</b>.\n\n` +
+      `⚡ <i>Reply tin nhắn này kèm thông tin tài khoản khi hoàn tất để bàn giao ngay!</i>`;
+
+    replyMarkup = {
+      inline_keyboard: [
+        [
+          { text: '🎁 Bàn giao', callback_data: `deliver_guide:${(order as any).id}` },
+          { text: '💸 Hoàn tiền ví', callback_data: `refund:${(order as any).id}` },
+        ],
+      ],
+    };
   } else if (orderEvent === 'order_completed') {
-    text = `🎉 <b>ĐƠN HÀNG ĐÃ BÀN GIAO HOÀN TẤT</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n✅ <b>Trạng thái:</b> Đã bàn giao tài khoản thành công cho khách hàng!`;
+    text = `🎉 <b>ĐƠN HÀNG ĐÃ BÀN GIAO HOÀN TẤT</b>\n\n` +
+      `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
+      `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+      `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
+      `💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n` +
+      `✅ <b>Trạng thái:</b> Đã bàn giao tài khoản thành công cho khách hàng!`;
   } else if (orderEvent === 'order_refunded') {
-    text = `💸 <b>ĐÃ HOÀN TIỀN ĐƠN HÀNG VỀ VÍ</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n💰 <b>Số tiền hoàn:</b> ${vnd((order as any).price)}\n🔄 <b>Trạng thái:</b> Đã cộng lại tiền vào Số dư ví khách hàng.`;
+    text = `💸 <b>ĐÃ HOÀN TIỀN ĐƠN HÀNG VỀ VÍ</b>\n\n` +
+      `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
+      `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+      `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
+      `💰 <b>Số tiền hoàn:</b> ${vnd((order as any).price)}\n` +
+      `🔄 <b>Trạng thái:</b> Đã cộng lại tiền vào Số dư ví khách hàng.`;
   } else {
-    text = `❌ <b>ĐƠN HÀNG BỊ HỦY</b>\n\n📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n💰 <b>Giá trị:</b> ${vnd((order as any).price)}`;
+    text = `❌ <b>ĐƠN HÀNG BỊ HỦY</b>\n\n` +
+      `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
+      `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
+      `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+      `💰 <b>Giá trị:</b> ${vnd((order as any).price)}`;
   }
 
   try {

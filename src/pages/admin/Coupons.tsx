@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import { SearchIcon, CloseIcon } from '../../components/icons';
@@ -832,7 +833,6 @@ export default function AdminCoupons() {
 
                   {/* Compact Right Actions */}
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Pause / Activate */}
                     <button
                       type="button"
                       onClick={() => setToggleTarget(c)}
@@ -880,13 +880,13 @@ export default function AdminCoupons() {
       {/* ────────────────────────────────────────────────────────
           MODAL: TẠO / SỬA MÃ GIẢM GIÁ
       ──────────────────────────────────────────────────────── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {isModalOpen && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 overflow-hidden">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => !saving && setIsModalOpen(false)} />
 
-          <div className="relative z-50 w-full max-w-xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] p-6 sm:p-7 shadow-2xl space-y-5 animate-scale-up text-slate-900 dark:text-white">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div className="relative z-[100000] w-full max-w-xl max-h-[90dvh] flex flex-col overflow-hidden rounded-[24px] sm:rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] shadow-2xl animate-scale-up text-slate-900 dark:text-white">
+            {/* Header (Fixed) */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 p-4 sm:p-6 shrink-0">
               <div className="flex items-center gap-3">
                 <span className="h-10 w-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-[#2563EB] dark:text-[#35A8FF] flex items-center justify-center text-xl shrink-0">
                   🎟️
@@ -910,231 +910,223 @@ export default function AdminCoupons() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSaveCoupon} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
-                    Mã Coupon * (Tự động viết hoa)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                    placeholder="VD: WELCOME20, BOW10..."
-                    className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-mono font-bold uppercase text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
-                    Tên chiến dịch *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="VD: Khuyến mãi khai trương..."
-                    className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-semibold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
-                  Mô tả chi tiết (tùy chọn)
-                </label>
-                <input
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="VD: Giảm 20K cho khách hàng mới mua đơn đầu tiên..."
-                  className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-medium text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
-                />
-              </div>
-
-              {/* 🌟 CẤU HÌNH MỨC GIẢM — SÁNG RÕ & TRỰC QUAN */}
-              <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-[#18243E] p-4 space-y-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">💰</span>
-                  <span className="font-black uppercase text-xs tracking-wider text-slate-800 dark:text-slate-100">
-                    Cấu hình mức giảm
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <label className={`flex items-center gap-2.5 rounded-xl border-2 p-3 cursor-pointer transition ${
-                    formData.discount_type === 'fixed_amount'
-                      ? 'border-[#2563EB] dark:border-[#35A8FF] bg-white dark:bg-blue-950/70 text-[#2563EB] dark:text-[#35A8FF] font-black shadow-xs'
-                      : 'border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold hover:border-blue-300 dark:hover:border-blue-700'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="discount_type"
-                      checked={formData.discount_type === 'fixed_amount'}
-                      onChange={() => setFormData({ ...formData, discount_type: 'fixed_amount' })}
-                      className="hidden"
-                    />
-                    <span className="text-base">💵</span>
-                    <span className="text-xs">Số tiền cố định (VNĐ)</span>
-                  </label>
-
-                  <label className={`flex items-center gap-2.5 rounded-xl border-2 p-3 cursor-pointer transition ${
-                    formData.discount_type === 'percentage'
-                      ? 'border-[#2563EB] dark:border-[#35A8FF] bg-white dark:bg-blue-950/70 text-[#2563EB] dark:text-[#35A8FF] font-black shadow-xs'
-                      : 'border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold hover:border-blue-300 dark:hover:border-blue-700'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="discount_type"
-                      checked={formData.discount_type === 'percentage'}
-                      onChange={() => setFormData({ ...formData, discount_type: 'percentage' })}
-                      className="hidden"
-                    />
-                    <span className="text-base">📊</span>
-                    <span className="text-xs">Phần trăm (%)</span>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-1">
+            <form onSubmit={handleSaveCoupon} className="flex flex-col flex-1 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                      Giá trị giảm * ({formData.discount_type === 'percentage' ? '%' : 'VNĐ'})
+                    <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                      Mã Coupon * (Tự động viết hoa)
                     </label>
                     <input
-                      type="number"
+                      type="text"
                       required
-                      min={1}
-                      max={formData.discount_type === 'percentage' ? 100 : 10000000}
-                      value={formData.discount_value}
-                      onChange={(e) => setFormData({ ...formData, discount_value: Number(e.target.value) })}
-                      className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 font-black text-sm text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
+                      value={formData.code}
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                      placeholder="VD: WELCOME20, BOW10..."
+                      className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-mono font-bold uppercase text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
                     />
                   </div>
 
-                  {formData.discount_type === 'percentage' && (
+                  <div>
+                    <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                      Tên chiến dịch *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="VD: Khuyến mãi khai trương..."
+                      className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-semibold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                    Mô tả chi tiết (tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="VD: Giảm 20K cho khách hàng mới mua đơn đầu tiên..."
+                    className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-medium text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
+                  />
+                </div>
+
+                {/* 🌟 CẤU HÌNH MỨC GIẢM — SÁNG RÕ & TRỰC QUAN */}
+                <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-[#18243E] p-4 space-y-3.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">💰</span>
+                    <span className="font-black uppercase text-xs tracking-wider text-slate-800 dark:text-slate-100">
+                      Cấu hình mức giảm
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <label className={`flex items-center gap-2.5 rounded-xl border-2 p-3 cursor-pointer transition ${
+                      formData.discount_type === 'fixed_amount'
+                        ? 'border-[#2563EB] dark:border-[#35A8FF] bg-white dark:bg-blue-950/70 text-[#2563EB] dark:text-[#35A8FF] font-black shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold hover:border-blue-300 dark:hover:border-blue-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="discount_type"
+                        checked={formData.discount_type === 'fixed_amount'}
+                        onChange={() => setFormData({ ...formData, discount_type: 'fixed_amount' })}
+                        className="hidden"
+                      />
+                      <span className="text-base">💵</span>
+                      <span className="text-xs">Số tiền cố định (VNĐ)</span>
+                    </label>
+
+                    <label className={`flex items-center gap-2.5 rounded-xl border-2 p-3 cursor-pointer transition ${
+                      formData.discount_type === 'percentage'
+                        ? 'border-[#2563EB] dark:border-[#35A8FF] bg-white dark:bg-blue-950/70 text-[#2563EB] dark:text-[#35A8FF] font-black shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold hover:border-blue-300 dark:hover:border-blue-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="discount_type"
+                        checked={formData.discount_type === 'percentage'}
+                        onChange={() => setFormData({ ...formData, discount_type: 'percentage' })}
+                        className="hidden"
+                      />
+                      <span className="text-base">📊</span>
+                      <span className="text-xs">Phần trăm (%)</span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <div>
-                      <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                        Mức giảm tối đa (VNĐ, để trống = không giới hạn)
+                      <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                        {formData.discount_type === 'fixed_amount' ? 'Số tiền giảm (VNĐ) *' : 'Phần trăm giảm (%) *'}
                       </label>
                       <input
                         type="number"
-                        min={0}
-                        placeholder="VD: 50000"
-                        value={formData.maximum_discount_amount}
-                        onChange={(e) => setFormData({ ...formData, maximum_discount_amount: e.target.value })}
-                        className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 font-black text-sm text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
+                        min={1}
+                        max={formData.discount_type === 'percentage' ? 100 : undefined}
+                        required
+                        value={formData.discount_value || ''}
+                        onChange={(e) => setFormData({ ...formData, discount_value: Number(e.target.value) })}
+                        placeholder={formData.discount_type === 'fixed_amount' ? 'VD: 20000, 50000...' : 'VD: 10, 20, 50...'}
+                        className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 font-bold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
                       />
                     </div>
-                  )}
-                </div>
-              </div>
 
-              {/* Conditions */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
-                    Đơn tối thiểu (VNĐ)
+                    {formData.discount_type === 'percentage' && (
+                      <div>
+                        <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                          Số tiền giảm tối đa (VNĐ) (tùy chọn)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={formData.maximum_discount_amount || ''}
+                          onChange={(e) => setFormData({ ...formData, maximum_discount_amount: e.target.value ? Number(e.target.value) : '' })}
+                          placeholder="VD: 50000 (để trống = không giới hạn)"
+                          className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 font-bold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 🌟 ĐIỀU KIỆN ÁP DỤNG & GIỚI HẠN */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                      Giá trị đơn hàng tối thiểu (VNĐ)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formData.minimum_order_amount || ''}
+                      onChange={(e) => setFormData({ ...formData, minimum_order_amount: Number(e.target.value) })}
+                      placeholder="0 = Không yêu cầu"
+                      className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-bold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                      Tổng số lượt dùng tối đa (Toàn hệ thống)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={formData.usage_limit || ''}
+                      onChange={(e) => setFormData({ ...formData, usage_limit: e.target.value ? Number(e.target.value) : '' })}
+                      placeholder="Để trống = Không giới hạn"
+                      className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-bold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* 🌟 THỜI GIAN ÁP DỤNG */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                      Thời gian bắt đầu (tùy chọn)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.start_at}
+                      onChange={(e) => setFormData({ ...formData, start_at: e.target.value })}
+                      className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-medium text-slate-900 dark:text-white focus:border-[#2563EB] outline-none text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
+                      Thời gian hết hạn (tùy chọn)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.expires_at}
+                      onChange={(e) => setFormData({ ...formData, expires_at: e.target.value })}
+                      className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-medium text-slate-900 dark:text-white focus:border-[#2563EB] outline-none text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* 🌟 TÙY CHỌN NÂNG CAO */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3 bg-slate-50/50 dark:bg-slate-800/40">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.first_order_only}
+                      onChange={(e) => setFormData({ ...formData, first_order_only: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 rounded text-[#2563EB] focus:ring-blue-500"
+                    />
+                    <div>
+                      <span className="font-extrabold text-slate-900 dark:text-white block">
+                        ⭐ Chỉ áp dụng cho đơn hàng đầu tiên của khách hàng
+                      </span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">
+                        Khách hàng đã từng mua bất kỳ đơn hàng thành công nào trước đây sẽ không thể áp dụng mã này.
+                      </span>
+                    </div>
                   </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={formData.minimum_order_amount}
-                    onChange={(e) => setFormData({ ...formData, minimum_order_amount: Number(e.target.value) })}
-                    className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-bold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
-                  />
                 </div>
 
-                <div>
-                  <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
-                    Tổng lượt dùng (Trống = ∞)
-                  </label>
+                <label className="flex items-center gap-3 cursor-pointer pt-1">
                   <input
-                    type="number"
-                    min={1}
-                    placeholder="Không giới hạn"
-                    value={formData.usage_limit}
-                    onChange={(e) => setFormData({ ...formData, usage_limit: e.target.value })}
-                    className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-bold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="h-4 w-4 rounded text-[#2563EB] focus:ring-blue-500"
                   />
-                </div>
-
-                <div>
-                  <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
-                    Lượt / Mỗi User
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={formData.per_user_limit}
-                    onChange={(e) => setFormData({ ...formData, per_user_limit: Number(e.target.value) })}
-                    className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-bold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* ⭐ First Order Only Checkbox */}
-              <label className="flex items-center gap-3 rounded-2xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-950/30 p-3.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.first_order_only}
-                  onChange={(e) => setFormData({ ...formData, first_order_only: e.target.checked })}
-                  className="h-4 w-4 rounded accent-purple-600"
-                />
-                <div>
-                  <span className="font-black text-purple-900 dark:text-purple-200 block">
-                    ⭐ Chỉ áp dụng cho đơn hàng đầu tiên của khách hàng
+                  <span className="font-extrabold text-slate-800 dark:text-slate-200">
+                    Kích hoạt mã giảm giá này ngay
                   </span>
-                  <span className="text-[11px] text-purple-700/90 dark:text-purple-300 block mt-0.5">
-                    Hệ thống sẽ tự động kiểm tra xem user đã từng có đơn hàng thành công nào trước đây chưa.
-                  </span>
-                </div>
-              </label>
-
-              {/* Validity Dates */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
-                    Ngày bắt đầu
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.start_at}
-                    onChange={(e) => setFormData({ ...formData, start_at: e.target.value })}
-                    className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-mono font-medium text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-black uppercase text-[10px] text-slate-500 dark:text-slate-300 mb-1">
-                    Ngày kết thúc (Để trống = Vô thời hạn)
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.expires_at}
-                    onChange={(e) => setFormData({ ...formData, expires_at: e.target.value })}
-                    className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-mono font-medium text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
-                  />
-                </div>
+                </label>
               </div>
 
-              {/* Active Switch */}
-              <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.is_active}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="h-4 w-4 rounded accent-emerald-500"
-                />
-                <span className="font-extrabold text-slate-800 dark:text-slate-200">
-                  Kích hoạt mã giảm giá này ngay
-                </span>
-              </label>
-
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              {/* Submit Buttons (Fixed Footer) */}
+              <div className="flex items-center justify-end gap-3 p-4 sm:p-6 border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-[#18243E]/50 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -1153,100 +1145,129 @@ export default function AdminCoupons() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ────────────────────────────────────────────────────────
           MODAL: XEM LỊCH SỬ SỬ DỤNG COUPON
       ──────────────────────────────────────────────────────── */}
-      {selectedUsageCoupon && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {selectedUsageCoupon && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 overscroll-contain overflow-y-auto">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => setSelectedUsageCoupon(null)} />
 
-          <div className="relative z-50 w-full max-w-2xl max-h-[85dvh] overflow-y-auto overscroll-contain rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] p-6 shadow-2xl space-y-4 animate-scale-up text-slate-900 dark:text-white">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-base font-black flex items-center gap-2">
+          <div className="relative z-[100000] w-full max-w-2xl max-h-[85dvh] sm:max-h-[90dvh] my-auto flex flex-col overflow-hidden rounded-[24px] sm:rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] shadow-2xl animate-scale-up text-slate-900 dark:text-white">
+            {/* Header (Fixed) */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 p-4 sm:p-5 shrink-0">
+              <div className="min-w-0 flex-1 pr-2">
+                <h3 className="text-base font-black flex items-center gap-2 truncate">
                   <span>📊</span>
-                  <span>Lịch sử dùng mã: <span className="font-mono text-[#2563EB] dark:text-[#35A8FF]">{selectedUsageCoupon.code}</span></span>
+                  <span className="truncate">Lịch sử dùng mã: <span className="font-mono text-[#2563EB] dark:text-[#35A8FF]">{selectedUsageCoupon.code}</span></span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-400 mt-0.5 truncate">
                   Chiến dịch: <strong>{selectedUsageCoupon.name}</strong> • Tổng lượt đã dùng: <strong>{selectedUsageCoupon.used_count}</strong>
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedUsageCoupon(null)}
-                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0"
               >
                 <CloseIcon className="h-5 w-5" />
               </button>
             </div>
 
-            {loadingUsages ? (
-              <div className="py-12 text-center text-slate-400 font-bold">
-                <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent mb-2" />
-                <p>Đang tải lịch sử...</p>
-              </div>
-            ) : usages.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 font-bold">
-                Mã này chưa được sử dụng trong đơn hàng nào.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 font-black uppercase text-slate-400">
-                    <tr>
-                      <th className="px-3.5 py-3">Khách hàng</th>
-                      <th className="px-3.5 py-3">Mã đơn hàng</th>
-                      <th className="px-3.5 py-3">Giá trị đơn</th>
-                      <th className="px-3.5 py-3">Giảm giá</th>
-                      <th className="px-3.5 py-3">Thanh toán</th>
-                      <th className="px-3.5 py-3 text-right">Thời gian</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-700 dark:text-slate-300">
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              {loadingUsages ? (
+                <div className="py-12 text-center text-slate-400 font-bold">
+                  <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-[#2563EB] border-t-transparent mb-2" />
+                  <p>Đang tải lịch sử...</p>
+                </div>
+              ) : usages.length === 0 ? (
+                <div className="py-10 text-center text-slate-400 font-bold space-y-2">
+                  <span className="text-3xl block">🎟️</span>
+                  <p className="text-xs sm:text-sm">Mã này chưa được sử dụng trong đơn hàng nào.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Mobile Cards (< 640px) */}
+                  <div className="sm:hidden space-y-2.5">
                     {usages.map((u) => (
-                      <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                        <td className="px-3.5 py-2.5">
-                          <span className="font-extrabold text-slate-900 dark:text-white block">
-                            {u.profiles?.full_name || 'Khách hàng'}
-                          </span>
-                          <span className="font-mono text-[10px] text-slate-400 block">{u.profiles?.email || u.user_id.slice(0, 8)}</span>
-                        </td>
-                        <td className="px-3.5 py-2.5 font-mono font-bold text-[#2563EB] dark:text-[#35A8FF]">
-                          #{u.orders?.payment_code || u.order_id?.slice(0, 8) || 'N/A'}
-                        </td>
-                        <td className="px-3.5 py-2.5 font-medium text-slate-500 dark:text-slate-400">
-                          {u.original_amount.toLocaleString('vi-VN')}đ
-                        </td>
-                        <td className="px-3.5 py-2.5 font-black text-emerald-600 dark:text-emerald-400">
-                          -{u.discount_amount.toLocaleString('vi-VN')}đ
-                        </td>
-                        <td className="px-3.5 py-2.5 font-bold text-slate-900 dark:text-white">
-                          {u.final_amount.toLocaleString('vi-VN')}đ
-                        </td>
-                        <td className="px-3.5 py-2.5 text-right font-mono text-[11px] text-slate-400">
+                      <div key={u.id} className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-3 space-y-2 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-extrabold text-slate-900 dark:text-white truncate">{u.profiles?.full_name || 'Khách hàng'}</span>
+                          <span className="font-mono font-bold text-[#2563EB] dark:text-[#35A8FF]">#{u.orders?.payment_code || u.order_id?.slice(0, 8) || 'N/A'}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                          <span>Giảm: <strong className="text-emerald-600 dark:text-emerald-400">-{u.discount_amount.toLocaleString('vi-VN')}đ</strong></span>
+                          <span>Thanh toán: <strong className="text-slate-900 dark:text-white">{u.final_amount.toLocaleString('vi-VN')}đ</strong></span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono text-right">
                           {new Date(u.created_at).toLocaleString('vi-VN')}
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  </div>
+
+                  {/* Desktop Table (Hidden on mobile < 640px) */}
+                  <div className="hidden sm:block overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 font-black uppercase text-slate-400">
+                        <tr>
+                          <th className="px-3.5 py-3 whitespace-nowrap min-w-[130px]">Khách hàng</th>
+                          <th className="px-3.5 py-3 whitespace-nowrap min-w-[120px]">Mã đơn hàng</th>
+                          <th className="px-3.5 py-3 whitespace-nowrap min-w-[100px]">Giá trị đơn</th>
+                          <th className="px-3.5 py-3 whitespace-nowrap min-w-[90px]">Giảm giá</th>
+                          <th className="px-3.5 py-3 whitespace-nowrap min-w-[100px]">Thanh toán</th>
+                          <th className="px-3.5 py-3 text-right whitespace-nowrap min-w-[120px]">Thời gian</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold text-slate-700 dark:text-slate-300">
+                        {usages.map((u) => (
+                          <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                            <td className="px-3.5 py-2.5">
+                              <span className="font-extrabold text-slate-900 dark:text-white block truncate max-w-[150px]">
+                                {u.profiles?.full_name || 'Khách hàng'}
+                              </span>
+                              <span className="font-mono text-[10px] text-slate-400 block truncate max-w-[150px]">{u.profiles?.email || u.user_id.slice(0, 8)}</span>
+                            </td>
+                            <td className="px-3.5 py-2.5 font-mono font-bold text-[#2563EB] dark:text-[#35A8FF] whitespace-nowrap">
+                              #{u.orders?.payment_code || u.order_id?.slice(0, 8) || 'N/A'}
+                            </td>
+                            <td className="px-3.5 py-2.5 font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                              {u.original_amount.toLocaleString('vi-VN')}đ
+                            </td>
+                            <td className="px-3.5 py-2.5 font-black text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                              -{u.discount_amount.toLocaleString('vi-VN')}đ
+                            </td>
+                            <td className="px-3.5 py-2.5 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                              {u.final_amount.toLocaleString('vi-VN')}đ
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                              {new Date(u.created_at).toLocaleString('vi-VN')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ────────────────────────────────────────────────────────
           MODAL: XÁC NHẬN TẠM DỪNG / KÍCH HOẠT
       ──────────────────────────────────────────────────────── */}
-      {toggleTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {toggleTarget && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 overflow-hidden">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => !toggling && setToggleTarget(null)} />
 
-          <div className="relative z-50 w-full max-w-md rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] p-6 shadow-2xl space-y-4 animate-scale-up text-slate-900 dark:text-white">
+          <div className="relative z-[100000] w-full max-w-md max-h-[90dvh] flex flex-col overflow-hidden rounded-[24px] sm:rounded-[28px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] p-5 sm:p-6 shadow-2xl space-y-4 animate-scale-up text-slate-900 dark:text-white">
             <div className="flex items-center gap-3">
               <span className={`h-10 w-10 rounded-2xl flex items-center justify-center text-xl shrink-0 ${
                 toggleTarget.is_active ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'
@@ -1290,17 +1311,18 @@ export default function AdminCoupons() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ────────────────────────────────────────────────────────
           MODAL: XÁC NHẬN XÓA COUPON
       ──────────────────────────────────────────────────────── */}
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {deleteTarget && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 overflow-hidden">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => !deleting && setDeleteTarget(null)} />
 
-          <div className="relative z-50 w-full max-w-md rounded-[28px] border border-rose-200 dark:border-rose-900/50 bg-white dark:bg-[#131C32] p-6 shadow-2xl space-y-4 animate-scale-up text-slate-900 dark:text-white">
+          <div className="relative z-[100000] w-full max-w-md max-h-[90dvh] flex flex-col overflow-hidden rounded-[24px] sm:rounded-[28px] border border-rose-200 dark:border-rose-900/50 bg-white dark:bg-[#131C32] p-5 sm:p-6 shadow-2xl space-y-4 animate-scale-up text-slate-900 dark:text-white">
             <div className="flex items-center gap-3">
               <span className="h-10 w-10 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-xl shrink-0">
                 🗑️
@@ -1334,7 +1356,8 @@ export default function AdminCoupons() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

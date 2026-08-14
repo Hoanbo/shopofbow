@@ -19,7 +19,11 @@ interface ActivityItem {
   id: string;
   text: string;
   tag: string;
+  category: 'ticket' | 'order' | 'review' | 'coupon' | 'user' | 'system';
+  role: 'admin' | 'user' | 'system';
+  link: string;
   iconBg: string;
+  icon: string;
   time: string;
 }
 
@@ -67,6 +71,7 @@ function formatRelativeTime(dateStr: string): string {
 function formatAuditDescription(desc: string | null | undefined): string {
   if (!desc) return '';
   return desc
+    // Order & Delivery statuses
     .replace(/"pending_payment"/g, '"Chờ thanh toán"')
     .replace(/"pending_delivery"/g, '"Chờ bàn giao"')
     .replace(/"processing"/g, '"Đang thiết lập"')
@@ -75,10 +80,33 @@ function formatAuditDescription(desc: string | null | undefined): string {
     .replace(/"refunded"/g, '"Đã hoàn tiền"')
     .replace(/\bpending_payment\b/g, 'Chờ thanh toán')
     .replace(/\bpending_delivery\b/g, 'Chờ bàn giao')
-    .replace(/\bprocessing\b/g, 'Đang thiết lập')
     .replace(/\bcompleted\b/g, 'Hoàn tất')
     .replace(/\bcancelled\b/g, 'Đã hủy')
-    .replace(/\brefunded\b/g, 'Đã hoàn tiền');
+    .replace(/\brefunded\b/g, 'Đã hoàn tiền')
+
+    // Ticket Statuses
+    .replace(/"pending"/g, '"Chờ phản hồi"')
+    .replace(/"resolved"/g, '"Đã giải quyết"')
+    .replace(/"closed"/g, '"Đã đóng"')
+    .replace(/\bstatus:?\s*pending\b/gi, 'Trạng thái: Chờ phản hồi')
+    .replace(/\bstatus:?\s*resolved\b/gi, 'Trạng thái: Đã giải quyết')
+    .replace(/\bstatus:?\s*closed\b/gi, 'Trạng thái: Đã đóng')
+
+    // Ticket Priorities
+    .replace(/"low"/g, '"Thấp"')
+    .replace(/"normal"/g, '"Bình thường"')
+    .replace(/"high"/g, '"Cao"')
+    .replace(/"urgent"/g, '"Khẩn cấp"')
+    .replace(/\bpriority:?\s*urgent\b/gi, 'Mức ưu tiên: Khẩn cấp')
+    .replace(/\bpriority:?\s*high\b/gi, 'Mức ưu tiên: Cao')
+    .replace(/\bpriority:?\s*normal\b/gi, 'Mức ưu tiên: Bình thường')
+    .replace(/\bpriority:?\s*low\b/gi, 'Mức ưu tiên: Thấp')
+
+    // Review Statuses
+    .replace(/"approved"/g, '"Đã duyệt"')
+    .replace(/"rejected"/g, '"Đã từ chối"')
+    .replace(/\bapproved\b/g, 'Đã duyệt')
+    .replace(/\brejected\b/g, 'Đã từ chối');
 }
 
 function calcPercentageChange(current: number, previous: number): StatChange {
@@ -131,6 +159,13 @@ export default function Dashboard() {
     contactMessages: 0,
   });
 
+  // Operational KPIs for Command Center Widget
+  const [operationalKPIs, setOperationalKPIs] = useState({
+    totalUserBalance: 0,
+    pendingReviewsCount: 0,
+    activeCouponsCount: 0,
+  });
+
   const [recentOrders, setRecentOrders] = useState<OrderRow[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
 
@@ -174,17 +209,37 @@ export default function Dashboard() {
         contactMessages,
       });
 
-      // 2. Fetch profiles
-      const { data: profilesData } = await (supabase
-        .from('profiles')
-        .select('id, created_at') as any);
-      const allProfiles: ProfileRow[] = profilesData || [];
+      // 2. Fetch profiles & operational KPIs
+      const [
+        { data: profilesData },
+        { data: productsData },
+        { data: pendingReviewsData },
+        { data: couponsData },
+      ] = await Promise.all([
+        supabase.from('profiles').select('id, created_at, balance') as any,
+        supabase.from('products').select('id, created_at') as any,
+        supabase.from('product_reviews').select('id').eq('status', 'pending') as any,
+        supabase.from('coupons').select('id, is_active, expires_at') as any,
+      ]);
 
-      // 3. Fetch products
-      const { data: productsData } = await (supabase
-        .from('products')
-        .select('id, created_at') as any);
+      const allProfiles: ProfileRow[] = profilesData || [];
       const allProducts: ProductRow[] = productsData || [];
+
+      const totalUserBalance = (profilesData || []).reduce(
+        (sum: number, p: any) => sum + Number(p.balance || 0),
+        0
+      );
+      const pendingReviewsCount = pendingReviewsData?.length || 0;
+      const nowDate = new Date();
+      const activeCouponsCount = (couponsData || []).filter(
+        (c: any) => c.is_active && (!c.expires_at || new Date(c.expires_at) >= nowDate)
+      ).length;
+
+      setOperationalKPIs({
+        totalUserBalance,
+        pendingReviewsCount,
+        activeCouponsCount,
+      });
 
       // Filter paid revenue
       const paidOrders = allOrders.filter((o) => isPaidStatus(o.status));
@@ -260,15 +315,53 @@ export default function Dashboard() {
       const acts: ActivityItem[] = [];
       if (auditData && auditData.length > 0 && !auditErr) {
         auditData.forEach((log: any) => {
+          const rawDesc = log.description || '';
+          const descLower = rawDesc.toLowerCase();
+          const actorRole: 'admin' | 'user' | 'system' =
+            log.actor_role === 'admin' ? 'admin' : log.actor_role === 'user' ? 'user' : 'system';
+
+          let category: 'ticket' | 'order' | 'review' | 'coupon' | 'user' | 'system' = 'system';
+          let icon = '⚡';
+          let iconBg = 'bg-gradient-to-tr from-slate-600 to-slate-800 text-white';
+          let link = '/admin/activity';
+
+          if (descLower.includes('ticket') || rawDesc.includes('BOW-')) {
+            category = 'ticket';
+            icon = '🎫';
+            iconBg = 'bg-gradient-to-tr from-blue-500 to-indigo-600 text-white shadow-blue-500/20';
+            const ticketMatch = rawDesc.match(/BOW-\d+/i);
+            link = ticketMatch ? `/admin/tickets?ticket=${ticketMatch[0].toUpperCase()}` : '/admin/tickets';
+          } else if (descLower.includes('đánh giá') || descLower.includes('review') || descLower.includes('sao')) {
+            category = 'review';
+            icon = '⭐';
+            iconBg = 'bg-gradient-to-tr from-amber-400 to-orange-500 text-white shadow-amber-500/20';
+            link = '/admin/reviews';
+          } else if (descLower.includes('đơn') || descLower.includes('order') || rawDesc.includes('#BOW')) {
+            category = 'order';
+            icon = '📦';
+            iconBg = 'bg-gradient-to-tr from-emerald-400 to-teal-600 text-white shadow-emerald-500/20';
+            link = '/admin/orders';
+          } else if (descLower.includes('coupon') || descLower.includes('mã giảm') || descLower.includes('voucher')) {
+            category = 'coupon';
+            icon = '🎟️';
+            iconBg = 'bg-gradient-to-tr from-purple-500 to-pink-600 text-white shadow-purple-500/20';
+            link = '/admin/coupons';
+          } else if (descLower.includes('ví') || descLower.includes('nạp tiền') || descLower.includes('balance') || descLower.includes('khóa') || descLower.includes('tài khoản')) {
+            category = 'user';
+            icon = '👤';
+            iconBg = 'bg-gradient-to-tr from-sky-400 to-blue-600 text-white shadow-sky-500/20';
+            link = '/admin/users';
+          }
+
           acts.push({
             id: log.id,
             text: formatAuditDescription(log.description),
-            tag: log.actor_name || log.actor_role || 'Nhật ký',
-            iconBg: log.actor_role === 'admin'
-              ? 'bg-purple-500 text-white'
-              : log.actor_role === 'user'
-              ? 'bg-[#2563EB] text-white'
-              : 'bg-emerald-500 text-white',
+            tag: log.actor_name || (actorRole === 'admin' ? 'Admin' : actorRole === 'user' ? 'Khách hàng' : 'Hệ thống'),
+            category,
+            role: actorRole,
+            link,
+            iconBg,
+            icon,
             time: formatRelativeTime(log.created_at),
           });
         });
@@ -284,7 +377,11 @@ export default function Dashboard() {
               id: n.id,
               text: n.message || n.title,
               tag: n.type === 'new_order' ? 'Đơn hàng' : n.type === 'order_cancelled' ? 'Hủy đơn' : 'Thông báo',
+              category: 'order',
+              role: 'system',
+              link: '/admin/orders',
               iconBg: n.type === 'new_order' ? 'bg-emerald-500 text-white' : n.type === 'order_cancelled' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white',
+              icon: n.type === 'new_order' ? '📦' : n.type === 'order_cancelled' ? '❌' : '🔔',
               time: formatRelativeTime(n.created_at),
             });
           });
@@ -538,11 +635,10 @@ export default function Dashboard() {
               key={r.key}
               type="button"
               onClick={() => setActiveRange(r.key as RangeMode)}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
-                activeRange === r.key
-                  ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs font-black'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${activeRange === r.key
+                ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs font-black'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
             >
               {r.label}
             </button>
@@ -612,11 +708,10 @@ export default function Dashboard() {
                 </span>
               </div>
 
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black shrink-0 ${
-                c.isPos
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40'
-                  : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400 border border-red-200/50 dark:border-red-800/40'
-              }`}>
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black shrink-0 ${c.isPos
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40'
+                : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400 border border-red-200/50 dark:border-red-800/40'
+                }`}>
                 {c.change}
               </span>
             </div>
@@ -686,7 +781,7 @@ export default function Dashboard() {
               <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Doanh thu dòng tiền</h3>
               <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Biểu đồ tổng hợp doanh số từ các đơn hàng thực tế ({activeRange}).</p>
             </div>
-            
+
             <div className="flex gap-1 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl">
               {[
                 { key: '7d', label: '7 ngày' },
@@ -698,11 +793,10 @@ export default function Dashboard() {
                   key={r.key}
                   type="button"
                   onClick={() => setActiveRange(r.key as RangeMode)}
-                  className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${
-                    activeRange === r.key
-                      ? 'bg-white dark:bg-[#131C32] text-[#2563EB] dark:text-[#35A8FF] shadow-xs font-extrabold'
-                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-                  }`}
+                  className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${activeRange === r.key
+                    ? 'bg-white dark:bg-[#131C32] text-[#2563EB] dark:text-[#35A8FF] shadow-xs font-extrabold'
+                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                    }`}
                 >
                   {r.label}
                 </button>
@@ -719,14 +813,14 @@ export default function Dashboard() {
                   <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
-              
+
               <line x1="0" y1={chartHeight - 15} x2={chartWidth} y2={chartHeight - 15} stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/40" />
               <line x1="0" y1={chartHeight / 2} x2={chartWidth} y2={chartHeight / 2} stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/40" strokeDasharray="4" />
               <line x1="0" y1="15" x2={chartWidth} y2="15" stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/40" />
-              
+
               <path d={areaD} fill="url(#chartGradient)" />
               <path d={pathD} fill="none" stroke="#2563EB" strokeWidth={3} strokeLinecap="round" />
-              
+
               {points.map((p, idx) => {
                 const [x, y] = p.split(',');
                 const val = currentChart.values[idx] || 0;
@@ -811,7 +905,7 @@ export default function Dashboard() {
               >
                 <div className="flex items-center gap-2.5">
                   <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Yêu cầu liên hệ</span>
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Ticket cần phản hồi</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-black text-[#2563EB] dark:text-[#35A8FF] bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-lg">
@@ -860,15 +954,14 @@ export default function Dashboard() {
                   <div key={p.name} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className={`h-5 w-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${
-                          idx === 0
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
-                            : idx === 1
+                        <span className={`h-5 w-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${idx === 0
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                          : idx === 1
                             ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
                             : idx === 2
-                            ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
-                            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                        }`}>
+                              ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          }`}>
                           #{idx + 1}
                         </span>
                         <span className="font-bold text-slate-800 dark:text-slate-200 truncate" title={p.name}>
@@ -896,44 +989,109 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* HIỆU SUẤT DANH MỤC & GIÁ TRỊ ĐƠN HÀNG (6 Cols) */}
-        <div className="lg:col-span-6 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between">
+        {/* TRUNG TÂM ĐIỀU HÀNH & CƠ CẤU DOANH THU (6 Cols) */}
+        <div className="lg:col-span-6 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
               <div>
                 <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                  <span>📊</span> DANH MỤC & GIÁ TRỊ ĐƠN (AOV)
+                  <span>⚡</span> TRUNG TÂM ĐIỀU HÀNH & CƠ CẤU DOANH MỤC
                 </h3>
-                <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Phân tích cơ cấu doanh số AI Tools, Apps & AOV ({activeRange}).</p>
+                <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Tổng hợp chỉ số vận hành tức thì & cơ cấu doanh thu ({activeRange}).</p>
               </div>
             </div>
 
+            {/* ⚡ Bộ 3 Chỉ số Nhanh (3-in-1 Quick KPI Badges) */}
+            <div className="mt-3.5 grid grid-cols-3 gap-2">
+              {/* 1. Dòng tiền ví người dùng */}
+              <Link
+                to="/admin/users"
+                className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5 sm:p-3 hover:border-emerald-400 dark:hover:border-emerald-600 transition group flex flex-col justify-between shadow-2xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <span>💰</span> <span className="hidden xs:inline">Tổng ví</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-500 opacity-70 group-hover:translate-x-0.5 transition-transform">→</span>
+                </div>
+                <div className="mt-1.5">
+                  <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white block truncate">
+                    {operationalKPIs.totalUserBalance.toLocaleString('vi-VN')}đ
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-semibold block truncate">Số dư ví người dùng</span>
+                </div>
+              </Link>
+
+              {/* 2. Đánh giá chờ duyệt */}
+              <Link
+                to="/admin/reviews"
+                className="rounded-2xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 sm:p-3 hover:border-amber-400 dark:hover:border-amber-600 transition group flex flex-col justify-between shadow-2xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <span>⭐</span> <span className="hidden xs:inline">Đánh giá</span>
+                  </span>
+                  <span className="text-[10px] text-amber-500 opacity-70 group-hover:translate-x-0.5 transition-transform">→</span>
+                </div>
+                <div className="mt-1.5">
+                  <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white block truncate">
+                    {operationalKPIs.pendingReviewsCount > 0 ? (
+                      <span className="text-amber-600 dark:text-amber-400 font-black">{operationalKPIs.pendingReviewsCount} chờ duyệt</span>
+                    ) : (
+                      <span className="text-slate-700 dark:text-slate-200">Đã duyệt hết</span>
+                    )}
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-semibold block truncate">Kiểm duyệt review</span>
+                </div>
+              </Link>
+
+              {/* 3. Mã giảm giá đang chạy */}
+              <Link
+                to="/admin/coupons"
+                className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/20 p-2.5 sm:p-3 hover:border-blue-400 dark:hover:border-blue-600 transition group flex flex-col justify-between shadow-2xs"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#2563EB] dark:text-[#35A8FF] flex items-center gap-1">
+                    <span>🎟️</span> <span className="hidden xs:inline">Voucher</span>
+                  </span>
+                  <span className="text-[10px] text-blue-500 opacity-70 group-hover:translate-x-0.5 transition-transform">→</span>
+                </div>
+                <div className="mt-1.5">
+                  <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white block truncate">
+                    {operationalKPIs.activeCouponsCount} mã đang chạy
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-semibold block truncate">Chiến dịch khuyến mãi</span>
+                </div>
+              </Link>
+            </div>
+
             {/* AOV & Completion Rate KPI Chips */}
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-[#18243E] p-3.5">
+            <div className="mt-3 grid grid-cols-2 gap-2.5">
+              <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-[#18243E] p-3">
                 <span className="text-[10px] font-black uppercase text-[#2563EB] dark:text-[#35A8FF] block">Giá trị đơn TB (AOV)</span>
-                <span className="text-lg font-black text-slate-900 dark:text-white mt-1 block">
+                <span className="text-base font-black text-slate-900 dark:text-white mt-0.5 block">
                   {categoryAnalytics.aov.toLocaleString('vi-VN')}đ
                 </span>
-                <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">Doanh thu TB trên mỗi đơn</span>
+                <span className="text-[9px] font-semibold text-slate-400 block mt-0.5">Doanh thu TB mỗi đơn</span>
               </div>
 
-              <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-[#18243E] p-3.5">
-                <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block">Tỷ lệ đơn thành công</span>
-                <span className="text-lg font-black text-slate-900 dark:text-white mt-1 block">
+              <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-[#18243E] p-3">
+                <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block">Tỷ lệ hoàn thành</span>
+                <span className="text-base font-black text-slate-900 dark:text-white mt-0.5 block">
                   {categoryAnalytics.completionRate}%
                 </span>
-                <span className="text-[10px] font-semibold text-slate-400 block mt-0.5">Tỷ lệ đơn bàn giao thành công</span>
+                <span className="text-[9px] font-semibold text-slate-400 block mt-0.5">Tỷ lệ đơn bàn giao thành công</span>
               </div>
             </div>
 
             {/* Category Revenue Breakdown */}
-            <div className="mt-4 space-y-3">
+            <div className="mt-3 space-y-2.5">
               {/* Category 1: AI Tools */}
-              <div className="rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#18243E] p-3.5 space-y-2">
+              <div className="rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#18243E] p-3 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🤖</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">🤖</span>
                     <span className="font-extrabold text-slate-900 dark:text-white">AI Tools</span>
                   </div>
                   <div className="flex items-center gap-2 font-mono text-xs">
@@ -949,7 +1107,7 @@ export default function Dashboard() {
                   <span className="font-mono text-slate-700 dark:text-slate-200">{categoryAnalytics.aiRevPct}%</span>
                 </div>
 
-                <div className="h-2 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-sky-400 to-[#2563EB] rounded-full transition-all duration-500"
                     style={{ width: `${Math.max(categoryAnalytics.aiRevPct, categoryAnalytics.aiToolsCount > 0 ? 8 : 0)}%` }}
@@ -958,10 +1116,10 @@ export default function Dashboard() {
               </div>
 
               {/* Category 2: Premium Apps */}
-              <div className="rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#18243E] p-3.5 space-y-2">
+              <div className="rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#18243E] p-3 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">📱</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">📱</span>
                     <span className="font-extrabold text-slate-900 dark:text-white">Premium Apps</span>
                   </div>
                   <div className="flex items-center gap-2 font-mono text-xs">
@@ -977,7 +1135,7 @@ export default function Dashboard() {
                   <span className="font-mono text-slate-700 dark:text-slate-200">{categoryAnalytics.appRevPct}%</span>
                 </div>
 
-                <div className="h-2 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-purple-400 to-indigo-600 rounded-full transition-all duration-500"
                     style={{ width: `${Math.max(categoryAnalytics.appRevPct, categoryAnalytics.premiumAppsCount > 0 ? 8 : 0)}%` }}
@@ -1049,39 +1207,68 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* HOẠT ĐỘNG GẦN ĐÂY */}
+      {/* HOẠT ĐỘNG GẦN ĐÂY - TIMELINE HIỆN ĐẠI */}
       <div className="rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
           <div>
-            <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Hoạt động gần đây</h3>
+            <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+              <span>⚡</span> HOẠT ĐỘNG GẦN ĐÂY
+            </h3>
             <p className="text-[11px] text-slate-400 font-semibold mt-0.5">5 thao tác mới nhất được ghi nhận từ hệ thống Nhật ký hoạt động.</p>
           </div>
           <Link
             to="/admin/activity"
             className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition shadow-2xs shrink-0"
           >
-            <span>Xem tất cả →</span>
+            <span>Xem tất cả nhật ký →</span>
           </Link>
         </div>
-        
+
         {activities.length === 0 ? (
           <p className="mt-4 text-xs font-medium text-slate-400 text-center py-4">Chưa có hoạt động nào được ghi nhận.</p>
         ) : (
-          <div className="mt-4 relative before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800 space-y-4">
+          <div className="mt-4 relative before:absolute before:left-4.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800/80 space-y-2.5">
             {activities.map((act) => (
-              <div key={act.id} className="flex gap-4 items-start pl-1 relative">
-                <span className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] shrink-0 font-bold shadow-xs relative z-10 ${act.iconBg}`}>
-                  {act.tag.charAt(0)}
+              <Link
+                key={act.id}
+                to={act.link}
+                className="group flex gap-3.5 items-center p-2.5 sm:p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/40 border border-transparent hover:border-slate-200/60 dark:hover:border-slate-700/50 transition relative"
+              >
+                {/* Semantic Icon with Gradient */}
+                <span className={`h-9 w-9 rounded-2xl flex items-center justify-center text-sm shrink-0 font-bold shadow-xs relative z-10 transition-transform group-hover:scale-110 ${act.iconBg}`}>
+                  {act.icon}
                 </span>
-                <div className="flex-1 text-xs">
-                  <p className="font-bold text-slate-800 dark:text-slate-200 leading-snug">{act.text}</p>
-                  <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-400 font-semibold">
-                    <span>{act.time}</span>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug group-hover:text-[#2563EB] dark:group-hover:text-[#35A8FF] transition-colors truncate">
+                    {act.text}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-semibold flex-wrap">
+                    <span className="font-mono">{act.time}</span>
                     <span>•</span>
-                    <span className="text-[#2563EB] dark:text-[#35A8FF]">{act.tag}</span>
+                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+                      act.role === 'admin'
+                        ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-200/40'
+                        : act.role === 'user'
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] border border-blue-200/40'
+                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/40'
+                    }`}>
+                      {act.role === 'admin' ? '🛡️ Admin' : act.role === 'user' ? '👤 Khách hàng' : '⚙️ Hệ thống'}
+                    </span>
+                    {act.tag && act.tag !== act.role && (
+                      <span className="text-slate-500 dark:text-slate-400 truncate max-w-[150px]">
+                        {act.tag}
+                      </span>
+                    )}
                   </div>
                 </div>
-              </div>
+
+                {/* Action Arrow */}
+                <span className="text-slate-300 dark:text-slate-600 group-hover:text-[#2563EB] dark:group-hover:text-[#35A8FF] group-hover:translate-x-1 transition-all text-xs font-bold shrink-0">
+                  →
+                </span>
+              </Link>
             ))}
           </div>
         )}
