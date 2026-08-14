@@ -261,6 +261,7 @@ export default function Prompts() {
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 6;
 
@@ -444,17 +445,46 @@ export default function Prompts() {
                     className="rounded-[28px] border border-[#E8F1FF] dark:border-[#1E2A4A]/60 bg-white dark:bg-[#131C32] p-5 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col justify-between group space-y-4 hover:-translate-y-1"
                   >
                     <div className="space-y-3">
-                      {/* Thumbnail Image if present */}
-                      {item.image_url && (
+                      {/* Thumbnail Image or Gradient Visual Header */}
+                      {item.image_url && !imgErrors[item.id] ? (
                         <div className="relative h-44 w-full overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-100 dark:bg-slate-800">
                           <img
                             src={item.image_url}
                             alt={item.title}
+                            referrerPolicy="no-referrer"
+                            onError={() => setImgErrors((prev) => ({ ...prev, [item.id]: true }))}
                             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                             loading="lazy"
                           />
                           {item.is_featured && (
-                            <span className="absolute top-2.5 right-2.5 rounded-full bg-amber-500 text-white px-2.5 py-0.5 text-[10px] font-black shadow-md flex items-center gap-1">
+                            <span className="absolute top-2.5 right-2.5 rounded-full bg-amber-500 text-white px-2.5 py-0.5 text-[10px] font-black shadow-md flex items-center gap-1 z-10">
+                              <span>⭐</span> Nổi bật
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className={`relative h-28 w-full overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-gradient-to-br ${
+                          item.category.toLowerCase() === 'chatgpt' ? 'from-emerald-600/20 via-teal-900/30 to-slate-900' :
+                          item.category.toLowerCase() === 'midjourney' ? 'from-purple-600/20 via-indigo-900/30 to-slate-900' :
+                          item.category.toLowerCase() === 'claude' ? 'from-amber-600/20 via-orange-900/30 to-slate-900' :
+                          item.category.toLowerCase() === 'capcut' ? 'from-sky-600/20 via-blue-900/30 to-slate-900' :
+                          'from-blue-600/20 via-indigo-900/30 to-slate-900'
+                        } flex items-center justify-between p-4`}>
+                          <div className="flex items-center gap-3">
+                            <span className="text-3xl p-2.5 rounded-2xl bg-white/10 backdrop-blur-md shadow-xs">
+                              {CATEGORIES.find((c) => c.id === item.category.toLowerCase())?.icon || '🤖'}
+                            </span>
+                            <div>
+                              <span className="text-xs font-black text-white uppercase tracking-wider block">
+                                {item.category} Prompt
+                              </span>
+                              <span className="text-[11px] text-slate-300 font-medium line-clamp-1">
+                                {item.title}
+                              </span>
+                            </div>
+                          </div>
+                          {item.is_featured && (
+                            <span className="rounded-full bg-amber-500 text-white px-2.5 py-0.5 text-[10px] font-black shadow-md flex items-center gap-1 shrink-0">
                               <span>⭐</span> Nổi bật
                             </span>
                           )}

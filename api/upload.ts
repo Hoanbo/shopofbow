@@ -16,7 +16,7 @@ const ALLOWED_MIME_TYPES = [
   'image/vnd.microsoft.icon',
 ];
 
-const ALLOWED_FOLDERS = ['logos', 'products', 'categories', 'avatars', 'banners'];
+const ALLOWED_FOLDERS = ['logos', 'products', 'categories', 'avatars', 'banners', 'prompts'];
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

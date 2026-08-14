@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import { Pagination } from '../../components/admin/Pagination';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { uploadImage } from '../../data/admin';
 
 interface PromptRow {
   id: string;
@@ -53,6 +54,8 @@ export default function AdminPrompts() {
   const [editingItem, setEditingItem] = useState<PromptRow | null>(null);
   const [deletingItem, setDeletingItem] = useState<PromptRow | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -64,6 +67,27 @@ export default function AdminPrompts() {
     tags: '',
     is_featured: false,
   });
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Kích thước ảnh tối đa là 5MB!');
+      return;
+    }
+    setUploadingImage(true);
+    try {
+      const publicUrl = await uploadImage(file, 'prompts');
+      setFormData((prev) => ({ ...prev, image_url: publicUrl }));
+      toast.success('Tải ảnh lên thành công!');
+    } catch (err: any) {
+      console.error('Error uploading prompt image:', err);
+      toast.error('Lỗi khi tải ảnh: ' + (err.message || 'Thất bại'));
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   useEffect(() => {
     fetchAdminPrompts();
@@ -512,14 +536,44 @@ export default function AdminPrompts() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-bold text-slate-700 dark:text-slate-300">Link ảnh minh họa</label>
-                    <input
-                      type="url"
-                      value={formData.image_url}
-                      onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                      placeholder="https://images.unsplash..."
-                      className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 text-xs font-medium focus:border-[#2563EB] focus:outline-none transition"
-                    />
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-700 dark:text-slate-300">Ảnh minh họa</label>
+                      <button
+                        type="button"
+                        disabled={uploadingImage}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <span>📁</span>
+                        <span>{uploadingImage ? 'Đang tải lên...' : 'Tải ảnh từ máy'}</span>
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileChange}
+                        className="hidden"
+                      />
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="url"
+                        value={formData.image_url}
+                        onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                        placeholder="Dán link ảnh hoặc bấm Tải ảnh từ máy..."
+                        className="flex-1 h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 text-xs font-medium focus:border-[#2563EB] focus:outline-none transition"
+                      />
+                      {formData.image_url && (
+                        <div className="h-10 w-10 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0 bg-slate-100 dark:bg-slate-800 relative group">
+                          <img
+                            src={formData.image_url}
+                            alt="Preview"
+                            referrerPolicy="no-referrer"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
