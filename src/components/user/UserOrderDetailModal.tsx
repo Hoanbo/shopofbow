@@ -149,10 +149,29 @@ export default function UserOrderDetailModal({
     }
   };
 
+  const getFormattedPlanLabel = (ord: { product_name?: string; plan_label?: string; price?: number; notes?: string }) => {
+    const pName = (ord.product_name || '').trim();
+    const pLabel = (ord.plan_label || '').trim();
+
+    if (pLabel && pLabel.toLowerCase() !== pName.toLowerCase()) {
+      return pLabel;
+    }
+
+    if (pName.toLowerCase().includes('capcut')) {
+      if ((ord.price || 0) <= 20000) return 'Gói 1 tuần (7 ngày)';
+      if ((ord.price || 0) <= 70000) return 'Gói 1 tháng (30 ngày)';
+      if ((ord.price || 0) <= 200000) return 'Gói 6 tháng (180 ngày)';
+      return 'Gói 1 năm (365 ngày)';
+    }
+
+    return pLabel || pName;
+  };
+
   const calcExpiryInfo = () => {
     if (activeOrder.status !== 'completed') return null;
 
-    const planStr = `${activeOrder.product_name || ''} ${activeOrder.plan_label || ''} ${activeOrder.notes || ''}`.toLowerCase();
+    const displayPlan = getFormattedPlanLabel(activeOrder);
+    const planStr = `${activeOrder.product_name || ''} ${activeOrder.plan_label || ''} ${displayPlan} ${activeOrder.notes || ''}`.toLowerCase();
 
     // 1. Gói vĩnh viễn
     if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
@@ -177,9 +196,9 @@ export default function UserOrderDetailModal({
       durationDays = 2;
     } else if (planStr.includes('3 ngày')) {
       durationDays = 3;
-    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần') || planStr.includes('1 week') || planStr.includes('7 days') || planStr.includes('7d') || (activeOrder.price <= 20000 && planStr.includes('capcut'))) {
       durationDays = 7;
-    } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
+    } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần') || planStr.includes('2 weeks') || planStr.includes('14 days')) {
       durationDays = 14;
     } else if (planStr.includes('15 ngày')) {
       durationDays = 15;
@@ -194,10 +213,25 @@ export default function UserOrderDetailModal({
     } else if (planStr.includes('1 năm') || planStr.includes('12 tháng') || planStr.includes('1 year') || planStr.includes('365 ngày')) {
       durationDays = 365;
     } else {
-      const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
-      if (dayMatch) {
-        durationDays = parseInt(dayMatch[1], 10);
-        if (durationDays === 1) isHours = true;
+      const weekMatch = planStr.match(/(\d+)\s*(tuần|week|weeks|w)/);
+      if (weekMatch) {
+        durationDays = parseInt(weekMatch[1], 10) * 7;
+      } else {
+        const monthMatch = planStr.match(/(\d+)\s*(tháng|month|months|m)/);
+        if (monthMatch) {
+          durationDays = parseInt(monthMatch[1], 10) * 30;
+        } else {
+          const yearMatch = planStr.match(/(\d+)\s*(năm|year|years|y)/);
+          if (yearMatch) {
+            durationDays = parseInt(yearMatch[1], 10) * 365;
+          } else {
+            const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
+            if (dayMatch) {
+              durationDays = parseInt(dayMatch[1], 10);
+              if (durationDays === 1) isHours = true;
+            }
+          }
+        }
       }
     }
 
@@ -254,7 +288,8 @@ export default function UserOrderDetailModal({
   const calcWarranty = () => {
     if (activeOrder.status !== 'completed') return null;
 
-    const planStr = `${activeOrder.product_name || ''} ${activeOrder.plan_label || ''} ${activeOrder.notes || ''}`.toLowerCase();
+    const displayPlan = getFormattedPlanLabel(activeOrder);
+    const planStr = `${activeOrder.product_name || ''} ${activeOrder.plan_label || ''} ${displayPlan} ${activeOrder.notes || ''}`.toLowerCase();
 
     // 1. Gói không bảo hành
     if (planStr.includes('kbh') || planStr.includes('không bảo hành') || planStr.includes('no warranty')) {
@@ -268,7 +303,7 @@ export default function UserOrderDetailModal({
     // 2. Gói vĩnh viễn
     if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
       return {
-        label: 'Bảo hành trọn đời',
+        label: 'Trọn đời',
         badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200/60',
         icon: '👑',
       };
@@ -284,7 +319,7 @@ export default function UserOrderDetailModal({
       durationDays = 2;
     } else if (planStr.includes('3 ngày')) {
       durationDays = 3;
-    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần') || planStr.includes('1 week') || planStr.includes('7 days') || planStr.includes('7d') || (activeOrder.price <= 20000 && planStr.includes('capcut'))) {
       durationDays = 7;
     } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
       durationDays = 14;
@@ -317,7 +352,7 @@ export default function UserOrderDetailModal({
 
     if (diffMs <= 0) {
       return {
-        label: 'Hết hạn BH',
+        label: 'Hết hạn',
         badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/60',
         icon: '🔴',
       };
@@ -325,7 +360,7 @@ export default function UserOrderDetailModal({
 
     if (isHours && diffHours <= 24) {
       return {
-        label: `BH: Còn ${diffHours}h`,
+        label: `Còn ${diffHours}h`,
         badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
         icon: '⚡',
       };
@@ -333,14 +368,14 @@ export default function UserOrderDetailModal({
 
     if (diffDays <= 3) {
       return {
-        label: `BH: Còn ${diffDays} ngày`,
+        label: `Còn ${diffDays} ngày`,
         badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/60 animate-pulse',
         icon: '🟡',
       };
     }
 
     return {
-      label: `BH: Còn ${diffDays} ngày`,
+      label: `Còn ${diffDays} ngày`,
       badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
       icon: '🛡️',
     };
@@ -368,7 +403,7 @@ export default function UserOrderDetailModal({
                 </h3>
                 {getStatusBadge(activeOrder.status)}
               </div>
-              <p className="text-xs text-slate-400 font-medium">Gói: {activeOrder.plan_label}</p>
+              <p className="text-xs text-slate-400 font-medium">Gói: <span className="font-extrabold text-[#2563EB] dark:text-[#35A8FF]">{getFormattedPlanLabel(activeOrder)}</span></p>
             </div>
           </div>
           <button
@@ -480,7 +515,6 @@ export default function UserOrderDetailModal({
                       <span>🛡️</span> Bảo hành:
                     </span>
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${warranty.badgeClass}`}>
-                      <span>{warranty.icon}</span>
                       <span>{warranty.label}</span>
                     </span>
                   </div>

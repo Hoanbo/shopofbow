@@ -50,6 +50,11 @@ export interface Database {
           is_active: boolean;
           is_featured: boolean;
           sort_order: number;
+          affiliate_enabled?: boolean;
+          affiliate_type?: 'fixed' | 'percent';
+          affiliate_reward?: number;
+          affiliate_discount?: number;
+          price_ctv?: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -76,6 +81,7 @@ export interface Database {
           short_description?: string | null;
           features?: string[] | null;
           notes?: string | null;
+          price_ctv?: number | null;
         };
         Insert: Partial<Database['public']['Tables']['product_plans']['Row']>;
         Update: Partial<Database['public']['Tables']['product_plans']['Row']>;
@@ -143,6 +149,10 @@ export interface Database {
           phone: string | null;
           email: string | null;
           balance: number;
+          role?: 'member' | 'ctv' | 'admin';
+          referral_code?: string | null;
+          referred_by?: string | null;
+          affiliate_earnings?: number;
           created_at: string;
           updated_at: string;
         };
@@ -303,6 +313,26 @@ export interface Database {
           attachments?: any | null;
           created_at?: string;
         };
+        Relationships: [];
+      };
+      affiliate_conversions: {
+        Row: {
+          id: string;
+          referrer_id: string | null;
+          referee_id: string | null;
+          order_id: string | null;
+          product_id: string | null;
+          product_name: string | null;
+          order_amount: number;
+          commission_amount: number;
+          discount_amount: number;
+          is_ctv_order: boolean;
+          status: 'pending' | 'completed' | 'cancelled';
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: Partial<Database['public']['Tables']['affiliate_conversions']['Row']>;
+        Update: Partial<Database['public']['Tables']['affiliate_conversions']['Row']>;
         Relationships: [];
       };
     };

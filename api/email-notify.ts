@@ -70,14 +70,145 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
     payload = body;
   }
 
-  const { order_id, ticket_id, type, message } = payload;
+  const { order_id, ticket_id, user_id, type, message } = payload;
 
-  if (!order_id && !ticket_id) {
-    return { statusCode: 400, body: { error: 'order_id or ticket_id is required' } };
+  if (!order_id && !ticket_id && !user_id) {
+    return { statusCode: 400, body: { error: 'order_id, ticket_id, or user_id is required' } };
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 1. TICKET EMAIL NOTIFICATIONS
+  // 1. USER ROLE CHANGE EMAIL NOTIFICATIONS (🔒 BẢO MẬT: Chỉ Admin)
+  // ─────────────────────────────────────────────────────────────
+  if (user_id) {
+    if (!isAdmin) {
+      return { statusCode: 403, body: { error: 'Forbidden: Admin access required for role change emails' } };
+    }
+
+    try {
+      const { data: userProfile, error: pErr } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .eq('id', user_id)
+        .maybeSingle();
+
+      let targetEmail = userProfile?.email;
+      if (!targetEmail) {
+        const { data: uData } = await supabase.auth.admin.getUserById(user_id);
+        targetEmail = uData.user?.email;
+      }
+
+      if (!targetEmail) {
+        return { statusCode: 404, body: { error: 'User email not found' } };
+      }
+
+      const isCtv = type === 'role_ctv' || userProfile?.role === 'ctv';
+      const emailSubject = isCtv
+        ? `👑 [BOW] Chúc mừng bạn đã trở thành Cộng Tác Viên (Giá Sỉ)!`
+        : `ℹ️ [BOW] Thông báo thay đổi cấp bậc tài khoản`;
+
+      const badgeText = isCtv ? 'CỘNG TÁC VIÊN SỈ' : 'THÀNH VIÊN';
+      const badgeColor = isCtv
+        ? 'background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);'
+        : 'background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);';
+
+      const titleText = isCtv
+        ? '🎉 Chúc mừng bạn đã được nâng cấp lên CTV Sỉ!'
+        : 'Tài khoản của bạn đã được chuyển về Thành viên thường';
+
+      const descHtml = isCtv
+        ? `Tài khoản <strong style="color: #ffffff;">${escapeHtml(userProfile?.full_name || targetEmail)}</strong> vừa được Ban Quản Trị BOW nâng cấp lên cấp bậc <strong>Cộng Tác Viên (CTV Giá Sỉ)</strong>. Bạn có thể mua tất cả các sản phẩm/dịch vụ trên hệ thống với Giá Sỉ ưu đãi đặc quyền!`
+        : `Tài khoản của bạn đã được cập nhật về cấp bậc <strong>Thành viên thường</strong> trên hệ thống BOW.`;
+
+      const btnText = isCtv ? '🛍️ XEM SẢN PHẨM GIÁ SỈ TRÊN WEB' : '🌐 TRUY CẬP WEBSITE BOW';
+      const btnUrl = isCtv ? `${SITE_URL}/products` : `${SITE_URL}`;
+
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b1120; color: #e2e8f0; margin: 0; padding: 24px; }
+            .card { max-width: 540px; margin: 0 auto; background: linear-gradient(180deg, #15233e 0%, #0f172a 100%); border: 1px solid #1e293b; border-radius: 24px; padding: 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+            .badge { display: inline-block; ${badgeColor} font-size: 11px; font-weight: 900; text-transform: uppercase; padding: 6px 14px; border-radius: 99px; letter-spacing: 1px; }
+            .title { font-size: 22px; font-weight: 900; color: #ffffff; margin-top: 16px; margin-bottom: 8px; }
+            .text { font-size: 14px; color: #94a3b8; line-height: 1.6; }
+            .info-box { background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 16px; padding: 16px; margin: 24px 0; text-align: left; }
+            .row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+            .row:last-child { margin-bottom: 0; }
+            .label { color: #64748b; font-weight: 600; }
+            .value { color: #f8fafc; font-weight: 800; }
+            .btn { display: inline-block; background: linear-gradient(90deg, #00A3FF 0%, #2563EB 100%); color: #ffffff; font-weight: 900; font-size: 14px; text-decoration: none; padding: 14px 28px; border-radius: 14px; margin-top: 8px; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 8px 20px rgba(37, 99, 235, 0.4); }
+            .footer { font-size: 11px; color: #475569; margin-top: 24px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="badge">${badgeText}</div>
+            <div class="title">${titleText}</div>
+            <div class="text">${descHtml}</div>
+
+            ${isCtv ? `
+            <div class="info-box">
+              <div class="row">
+                <span class="label">Cấp bậc:</span>
+                <span class="value" style="color: #fbbf24;">👑 Cộng Tác Viên (Giá Sỉ)</span>
+              </div>
+              <div class="row">
+                <span class="label">Đặc quyền:</span>
+                <span class="value" style="color: #10b981;">Mua giá sỉ rẻ hơn giá bán lẻ</span>
+              </div>
+              <div class="row">
+                <span class="label">Tài khoản:</span>
+                <span class="value">${escapeHtml(targetEmail)}</span>
+              </div>
+            </div>
+            ` : ''}
+
+            <a href="${btnUrl}" class="btn" target="_blank">
+              ${btnText}
+            </a>
+
+            <div class="footer">
+              BOW • Nền tảng tài khoản số & AI cao cấp • Hotline 24/7: 0966 821 315
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      if (SMTP_PASS) {
+        const transporter = nodemailer.createTransport({
+          host: SMTP_HOST,
+          port: SMTP_PORT,
+          secure: SMTP_PORT === 465,
+          auth: {
+            user: SMTP_USER,
+            pass: SMTP_PASS,
+          },
+        });
+
+        const info = await transporter.sendMail({
+          from: `"BOW Shop" <${SMTP_USER}>`,
+          to: targetEmail,
+          subject: emailSubject,
+          html: emailHtml,
+        });
+
+        console.log(`[email-notify] Role Email (${type}) sent to ${targetEmail}, messageId: ${info.messageId}`);
+        return { statusCode: 200, body: { status: 'sent', type, messageId: info.messageId } };
+      }
+
+      console.log(`[email-notify] SMTP_PASS not set, logged role email for ${targetEmail} (${type})`);
+      return { statusCode: 200, body: { status: 'logged_no_smtp_pass', email: targetEmail } };
+    } catch (err: any) {
+      console.error('[email-notify] Role change email error:', err);
+      return { statusCode: 500, body: { error: err.message || 'Internal server error' } };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 2. TICKET EMAIL NOTIFICATIONS
   // ─────────────────────────────────────────────────────────────
   if (ticket_id) {
     try {

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { Pagination } from '../components/admin/Pagination';
+import PromptDetailModal from '../components/user/PromptDetailModal';
 
 interface PromptItem {
   id: string;
@@ -260,14 +260,10 @@ export default function Prompts() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedPrompt, setSelectedPrompt] = useState<PromptItem | null>(null);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 6;
-
-  const toggleExpand = (id: string) => {
-    setExpandedId((prev) => (prev === id ? null : id));
-  };
 
   useEffect(() => {
     setCurrentPage(1);
@@ -447,15 +443,23 @@ export default function Prompts() {
                     <div className="space-y-3">
                       {/* Thumbnail Image or Gradient Visual Header */}
                       {item.image_url && !imgErrors[item.id] ? (
-                        <div className="relative h-44 w-full overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-100 dark:bg-slate-800">
+                        <div
+                          onClick={() => setSelectedPrompt(item)}
+                          className="relative h-44 w-full overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 cursor-pointer group/img"
+                        >
                           <img
                             src={item.image_url}
                             alt={item.title}
                             referrerPolicy="no-referrer"
                             onError={() => setImgErrors((prev) => ({ ...prev, [item.id]: true }))}
-                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover/img:scale-105"
                             loading="lazy"
                           />
+                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                            <span className="text-xs font-black text-white bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20">
+                              🔍 Xem chi tiết
+                            </span>
+                          </div>
                           {item.is_featured && (
                             <span className="absolute top-2.5 right-2.5 rounded-full bg-amber-500 text-white px-2.5 py-0.5 text-[10px] font-black shadow-md flex items-center gap-1 z-10">
                               <span>⭐</span> Nổi bật
@@ -463,15 +467,17 @@ export default function Prompts() {
                           )}
                         </div>
                       ) : (
-                        <div className={`relative h-28 w-full overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-gradient-to-br ${
+                        <div
+                          onClick={() => setSelectedPrompt(item)}
+                          className={`relative h-28 w-full overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-gradient-to-br ${
                           item.category.toLowerCase() === 'chatgpt' ? 'from-emerald-600/20 via-teal-900/30 to-slate-900' :
                           item.category.toLowerCase() === 'midjourney' ? 'from-purple-600/20 via-indigo-900/30 to-slate-900' :
                           item.category.toLowerCase() === 'claude' ? 'from-amber-600/20 via-orange-900/30 to-slate-900' :
                           item.category.toLowerCase() === 'capcut' ? 'from-sky-600/20 via-blue-900/30 to-slate-900' :
                           'from-blue-600/20 via-indigo-900/30 to-slate-900'
-                        } flex items-center justify-between p-4`}>
+                        } flex items-center justify-between p-4 cursor-pointer group/banner`}>
                           <div className="flex items-center gap-3">
-                            <span className="text-3xl p-2.5 rounded-2xl bg-white/10 backdrop-blur-md shadow-xs">
+                            <span className="text-3xl p-2.5 rounded-2xl bg-white/10 backdrop-blur-md shadow-xs transition-transform group-hover/banner:scale-110">
                               {CATEGORIES.find((c) => c.id === item.category.toLowerCase())?.icon || '🤖'}
                             </span>
                             <div>
@@ -503,35 +509,39 @@ export default function Prompts() {
 
                       {/* Title & Description */}
                       <div>
-                        <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white group-hover:text-[#2563EB] dark:group-hover:text-[#35A8FF] transition-colors leading-snug">
+                        <h3
+                          onClick={() => setSelectedPrompt(item)}
+                          className="text-sm sm:text-base font-black text-slate-900 dark:text-white hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition-colors leading-snug cursor-pointer"
+                        >
                           {item.title}
                         </h3>
                         {item.description && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                          <p
+                            onClick={() => setSelectedPrompt(item)}
+                            className="text-xs text-slate-600 dark:text-slate-300 mt-1 line-clamp-2 leading-relaxed cursor-pointer hover:text-slate-900 dark:hover:text-white transition"
+                          >
                             {item.description}
                           </p>
                         )}
                       </div>
 
-                      {/* Prompt Box with Expand Toggle */}
+                      {/* Prompt Box with Quick Detail Link */}
                       <div className="relative">
                         <div
-                          className={`rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-[#18243E] p-3.5 font-mono text-xs text-slate-800 dark:text-slate-200 leading-relaxed overflow-y-auto select-all transition-all duration-300 ${
-                            expandedId === item.id ? 'max-h-[380px] ring-2 ring-blue-500/20' : 'max-h-36'
-                          }`}
+                          onClick={() => setSelectedPrompt(item)}
+                          className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-[#18243E] p-3 font-mono text-xs text-slate-800 dark:text-slate-200 leading-relaxed max-h-24 overflow-hidden select-all cursor-pointer relative group/code"
                         >
-                          <p className="whitespace-pre-wrap">{item.prompt_content}</p>
+                          <p className="whitespace-pre-wrap line-clamp-3">{item.prompt_content}</p>
+                          <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-slate-50 dark:from-[#18243E] to-transparent pointer-events-none" />
                         </div>
 
-                        {item.prompt_content.length > 200 && (
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(item.id)}
-                            className="mt-1 text-[10px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline flex items-center gap-1 cursor-pointer"
-                          >
-                            <span>{expandedId === item.id ? '📕 Thu gọn câu lệnh' : '📖 Xem toàn bộ Prompt chi tiết →'}</span>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPrompt(item)}
+                          className="w-full mt-2 py-1.5 px-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/40 text-xs font-bold text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-100 dark:hover:bg-blue-900/60 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <span>🔍 Xem chi tiết, mục đích & kết quả mẫu →</span>
+                        </button>
                       </div>
 
                       {/* Tags */}
@@ -542,7 +552,7 @@ export default function Prompts() {
                               key={tag}
                               type="button"
                               onClick={() => setSearchQuery(tag)}
-                              className="text-[10px] font-semibold text-slate-400 hover:text-[#2563EB] bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-md transition"
+                              className="text-[10px] font-semibold text-slate-400 hover:text-[#2563EB] bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-md transition cursor-pointer"
                             >
                               #{tag}
                             </button>
@@ -551,8 +561,8 @@ export default function Prompts() {
                       )}
                     </div>
 
-                    {/* Actions & Smart CTA */}
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2.5">
+                    {/* Actions */}
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80">
                       <button
                         type="button"
                         onClick={() => handleCopyPrompt(item)}
@@ -563,9 +573,7 @@ export default function Prompts() {
                         }`}
                       >
                         {isCopied ? (
-                          <>
-                            <span>✓ Đã sao chép câu lệnh!</span>
-                          </>
+                          <span>✓ Đã sao chép câu lệnh!</span>
                         ) : (
                           <>
                             <span>📋 Sao chép Prompt</span>
@@ -573,14 +581,6 @@ export default function Prompts() {
                           </>
                         )}
                       </button>
-
-                      {/* CTA Link to BOW Product */}
-                      <Link
-                        to="/products"
-                        className="block text-center text-[10px] font-extrabold text-slate-400 hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition py-1 hover:underline truncate"
-                      >
-                        🛒 {catStyle.ctaText} →
-                      </Link>
                     </div>
                   </div>
                 );
@@ -605,6 +605,15 @@ export default function Prompts() {
             )}
           </>
         )}
+
+        {/* Prompt Detail Modal */}
+        <PromptDetailModal
+          prompt={selectedPrompt}
+          onClose={() => setSelectedPrompt(null)}
+          onCopy={handleCopyPrompt}
+          isCopied={copiedId === selectedPrompt?.id}
+          onTagClick={(tag) => setSearchQuery(tag)}
+        />
       </div>
     </div>
   );

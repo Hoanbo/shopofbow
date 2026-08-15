@@ -31,10 +31,30 @@ type Order = {
   };
 };
 
+export const getFormattedPlanLabel = (order: { product_name?: string; plan_label?: string; price?: number; notes?: string }) => {
+  const pName = (order.product_name || '').trim();
+  const pLabel = (order.plan_label || '').trim();
+
+  if (pLabel && pLabel.toLowerCase() !== pName.toLowerCase()) {
+    return pLabel;
+  }
+
+  // If plan_label is identical to product_name or generic, infer from price/product
+  if (pName.toLowerCase().includes('capcut')) {
+    if ((order.price || 0) <= 20000) return 'Gói 1 tuần (7 ngày)';
+    if ((order.price || 0) <= 70000) return 'Gói 1 tháng (30 ngày)';
+    if ((order.price || 0) <= 200000) return 'Gói 6 tháng (180 ngày)';
+    return 'Gói 1 năm (365 ngày)';
+  }
+
+  return pLabel || pName;
+};
+
 const calcOrderExpiry = (order: Order) => {
   if (order.status !== 'completed') return null;
 
-  const planStr = `${order.product_name || ''} ${order.plan_label || ''}`.toLowerCase();
+  const displayPlan = getFormattedPlanLabel(order);
+  const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${displayPlan} ${order.notes || ''}`.toLowerCase();
 
   if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
     return {
@@ -55,9 +75,9 @@ const calcOrderExpiry = (order: Order) => {
     durationDays = 2;
   } else if (planStr.includes('3 ngày')) {
     durationDays = 3;
-  } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+  } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần') || planStr.includes('1 week') || planStr.includes('7 days') || planStr.includes('7d') || (order.price <= 20000 && planStr.includes('capcut'))) {
     durationDays = 7;
-  } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
+  } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần') || planStr.includes('2 weeks') || planStr.includes('14 days')) {
     durationDays = 14;
   } else if (planStr.includes('15 ngày')) {
     durationDays = 15;
@@ -65,17 +85,32 @@ const calcOrderExpiry = (order: Order) => {
     durationDays = 30;
   } else if (planStr.includes('2 tháng') || planStr.includes('60 ngày')) {
     durationDays = 60;
-  } else if (planStr.includes('3 tháng') || planStr.includes('90 ngày')) {
+  } else if (planStr.includes('3 tháng') || planStr.includes('90 ngày') || planStr.includes('3 months')) {
     durationDays = 90;
-  } else if (planStr.includes('6 tháng') || planStr.includes('180 ngày')) {
+  } else if (planStr.includes('6 tháng') || planStr.includes('180 ngày') || planStr.includes('6 months')) {
     durationDays = 180;
   } else if (planStr.includes('1 năm') || planStr.includes('12 tháng') || planStr.includes('1 year') || planStr.includes('365 ngày')) {
     durationDays = 365;
   } else {
-    const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
-    if (dayMatch) {
-      durationDays = parseInt(dayMatch[1], 10);
-      if (durationDays === 1) isHours = true;
+    const weekMatch = planStr.match(/(\d+)\s*(tuần|week|weeks|w)/);
+    if (weekMatch) {
+      durationDays = parseInt(weekMatch[1], 10) * 7;
+    } else {
+      const monthMatch = planStr.match(/(\d+)\s*(tháng|month|months|m)/);
+      if (monthMatch) {
+        durationDays = parseInt(monthMatch[1], 10) * 30;
+      } else {
+        const yearMatch = planStr.match(/(\d+)\s*(năm|year|years|y)/);
+        if (yearMatch) {
+          durationDays = parseInt(yearMatch[1], 10) * 365;
+        } else {
+          const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
+          if (dayMatch) {
+            durationDays = parseInt(dayMatch[1], 10);
+            if (durationDays === 1) isHours = true;
+          }
+        }
+      }
     }
   }
 
@@ -124,7 +159,8 @@ const calcOrderExpiry = (order: Order) => {
 const calcAdminWarranty = (order: Order) => {
   if (order.status !== 'completed') return null;
 
-  const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${order.notes || ''}`.toLowerCase();
+  const displayPlan = getFormattedPlanLabel(order);
+  const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${displayPlan} ${order.notes || ''}`.toLowerCase();
 
   // 1. Gói không bảo hành
   if (planStr.includes('kbh') || planStr.includes('không bảo hành') || planStr.includes('no warranty')) {
@@ -139,7 +175,7 @@ const calcAdminWarranty = (order: Order) => {
   // 2. Gói vĩnh viễn
   if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
     return {
-      label: 'Bảo hành trọn đời',
+      label: 'Trọn đời',
       badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200/60',
       icon: '👑',
       daysText: 'Bảo hành trọn đời dịch vụ',
@@ -156,9 +192,9 @@ const calcAdminWarranty = (order: Order) => {
     durationDays = 2;
   } else if (planStr.includes('3 ngày')) {
     durationDays = 3;
-  } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+  } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần') || planStr.includes('1 week') || planStr.includes('7 days') || planStr.includes('7d') || (order.price <= 20000 && planStr.includes('capcut'))) {
     durationDays = 7;
-  } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
+  } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần') || planStr.includes('2 weeks') || planStr.includes('14 days')) {
     durationDays = 14;
   } else if (planStr.includes('15 ngày')) {
     durationDays = 15;
@@ -189,16 +225,16 @@ const calcAdminWarranty = (order: Order) => {
 
   if (diffMs <= 0) {
     return {
-      label: 'Hết hạn BH',
+      label: 'Hết hạn',
       badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/60',
       icon: '🔴',
-      daysText: `Hết hạn BH: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+      daysText: `Hết hạn bảo hành: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
     };
   }
 
   if (isHours && diffHours <= 24) {
     return {
-      label: `BH: Còn ${diffHours}h`,
+      label: `Còn ${diffHours}h`,
       badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
       icon: '⚡',
       daysText: `Đến ${new Date(expiresAtMs).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
@@ -207,15 +243,15 @@ const calcAdminWarranty = (order: Order) => {
 
   if (diffDays <= 3) {
     return {
-      label: `BH: Còn ${diffDays} ngày`,
+      label: `Còn ${diffDays} ngày`,
       badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/60 animate-pulse',
       icon: '🟡',
-      daysText: `Hết hạn BH: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
+      daysText: `Hết hạn bảo hành: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
     };
   }
 
   return {
-    label: `BH: Còn ${diffDays} ngày`,
+    label: `Còn ${diffDays} ngày`,
     badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
     icon: '🛡️',
     daysText: `Bảo hành đến: ${new Date(expiresAtMs).toLocaleDateString('vi-VN')}`,
@@ -247,7 +283,7 @@ export default function AdminOrders() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const toast = useToast();
-  
+
   // Delivery details modal state
   const [deliveryOrder, setDeliveryOrder] = useState<Order | null>(null);
   const [deliveryDetails, setDeliveryDetails] = useState('');
@@ -330,7 +366,7 @@ export default function AdminOrders() {
     confirmText: 'Xác nhận',
     variant: 'primary',
     loading: false,
-    onConfirm: async () => {},
+    onConfirm: async () => { },
   });
 
   const fetchOrders = async () => {
@@ -425,7 +461,7 @@ export default function AdminOrders() {
 
           if (error) throw error;
 
-          if (data === 'refunded_success') {
+          if (data === 'refunded_success' || data === 'success') {
             await sendOrderEmail(orderId, 'refunded');
             toast.success('Đã hoàn tiền vào ví khách hàng thành công!');
             fetchOrders();
@@ -433,7 +469,7 @@ export default function AdminOrders() {
               setSelectedOrderDetail((prev) => prev ? { ...prev, status: 'refunded' } : null);
             }
           } else {
-            throw new Error('Không thể hoàn tiền cho đơn hàng này.');
+            throw new Error(`Không thể hoàn tiền cho đơn hàng này (${data || 'Lỗi không xác định'}).`);
           }
           setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
         } catch (err: any) {
@@ -454,8 +490,8 @@ export default function AdminOrders() {
       message: isCancel
         ? 'Bạn có chắc chắn muốn HỦY đơn hàng này?'
         : isProcessing
-        ? 'Xác nhận chuyển đơn hàng sang trạng thái ĐANG THIẾT LẬP / XỬ LÝ?'
-        : `Chuyển trạng thái đơn sang "${newStatus}"?`,
+          ? 'Xác nhận chuyển đơn hàng sang trạng thái ĐANG THIẾT LẬP / XỬ LÝ?'
+          : `Chuyển trạng thái đơn sang "${newStatus}"?`,
       confirmText: isCancel ? 'Hủy đơn' : isProcessing ? 'Xác nhận xử lý' : 'Cập nhật',
       variant: isCancel ? 'danger' : 'primary',
       loading: false,
@@ -467,13 +503,13 @@ export default function AdminOrders() {
             .eq('id', orderId);
 
           if (error) throw error;
-          
+
           if (newStatus === 'processing') {
             await sendOrderEmail(orderId, 'processing');
           } else if (newStatus === 'cancelled') {
             await sendOrderEmail(orderId, 'cancelled');
           }
-          
+
           toast.success('Cập nhật trạng thái đơn hàng thành công!');
           fetchOrders();
           if (selectedOrderDetail && selectedOrderDetail.id === orderId) {
@@ -628,11 +664,10 @@ export default function AdminOrders() {
             <button
               key={st.key}
               onClick={() => setFilterStatus(st.key)}
-              className={`rounded-full px-3.5 py-2 text-xs font-bold transition-all ${
-                filterStatus === st.key
-                  ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs'
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-[#F4F8FF] dark:hover:bg-slate-850'
-              }`}
+              className={`rounded-full px-3.5 py-2 text-xs font-bold transition-all ${filterStatus === st.key
+                ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-[#F4F8FF] dark:hover:bg-slate-850'
+                }`}
             >
               {st.label}
             </button>
@@ -673,7 +708,7 @@ export default function AdminOrders() {
                   <div>
                     <h3 className="font-extrabold text-slate-950 dark:text-white text-sm sm:text-base leading-tight">{o.product_name}</h3>
                     <p className="text-xs text-slate-400 font-bold mt-1">
-                      Gói: {o.plan_label} — Mã đơn: <span className="font-bold text-slate-900 dark:text-white">{o.payment_code}</span>
+                      Gói: <span className="text-[#2563EB] dark:text-[#38bdf8] font-extrabold">{getFormattedPlanLabel(o)}</span> — Mã đơn: <span className="font-bold text-slate-900 dark:text-white">{o.payment_code}</span>
                     </p>
                   </div>
                   <div className="flex flex-col sm:items-end gap-1">
@@ -732,7 +767,6 @@ export default function AdminOrders() {
                           <span>🛡️</span> Bảo hành:
                         </span>
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${warranty.badgeClass}`}>
-                          <span>{warranty.icon}</span>
                           <span>{warranty.label}</span>
                         </span>
                       </div>
@@ -773,7 +807,7 @@ export default function AdminOrders() {
                       🚀 Bàn giao tài khoản
                     </button>
                   )}
-                  
+
                   {/* Allow refund ONLY for pending_delivery or processing (before completed) */}
                   {(o.status === 'pending_delivery' || o.status === 'processing') && (
                     <button
@@ -783,7 +817,7 @@ export default function AdminOrders() {
                       💸 Hoàn tiền về ví
                     </button>
                   )}
-                  
+
                   {/* Allow cancel if pending payment */}
                   {o.status === 'pending_payment' && (
                     <button
@@ -814,7 +848,7 @@ export default function AdminOrders() {
       {selectedOrderDetail && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => setSelectedOrderDetail(null)} />
-          
+
           <div className="relative z-[100000] w-full max-w-2xl max-h-[90vh] overflow-y-auto transform rounded-[30px] border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#131C32] p-5 sm:p-7 shadow-2xl transition-all text-left space-y-5">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
@@ -942,7 +976,7 @@ export default function AdminOrders() {
                         </div>
                         <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800">
                           <span className="text-slate-400">Gói thời hạn:</span>
-                          <span className="font-bold text-slate-900 dark:text-white">{selectedOrderDetail.plan_label}</span>
+                          <span className="font-bold text-slate-900 dark:text-white">{getFormattedPlanLabel(selectedOrderDetail)}</span>
                         </div>
                         {selectedOrderDetail.status === 'completed' && modalExpiry && (
                           <div className="flex justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 items-center flex-wrap gap-2">
@@ -1107,7 +1141,7 @@ export default function AdminOrders() {
       {deliveryOrder && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
           <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => setDeliveryOrder(null)} />
-          
+
           <form onSubmit={handleDeliver} className="relative z-[100000] w-full max-w-md transform overflow-hidden rounded-[28px] border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#18243E] p-6 sm:p-8 shadow-2xl transition-all text-left space-y-4">
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">

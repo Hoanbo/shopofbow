@@ -20,6 +20,32 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const TG = (method: string) => `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
 
+async function sendTelegramMessage(chatId: number | string, text: string, replyToMessageId?: number) {
+  try {
+    const body: any = {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    };
+    if (replyToMessageId) {
+      body.reply_to_message_id = replyToMessageId;
+    }
+
+    const res = await fetch(TG('sendMessage'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      console.error('[telegram-callback] sendTelegramMessage failed:', errJson);
+    }
+  } catch (err) {
+    console.error('[telegram-callback] sendTelegramMessage error:', err);
+  }
+}
+
 async function processTelegramCallback(
   headers: Record<string, string | string[] | undefined>,
   body: any,

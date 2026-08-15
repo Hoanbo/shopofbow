@@ -40,6 +40,11 @@ const emptyForm = {
   accent: '#06b6d4',
   badge: '',
   base_price: 0,
+  price_ctv: 0,
+  affiliate_enabled: true,
+  affiliate_type: 'fixed' as 'fixed' | 'percent',
+  affiliate_reward: 0,
+  affiliate_discount: 0,
   rating: 5,
   sold: 0,
   is_active: true,
@@ -109,6 +114,11 @@ export default function ProductEditor() {
           accent: p.accent ?? '#06b6d4',
           badge: p.badge ?? '',
           base_price: Number(p.base_price ?? 0),
+          price_ctv: Number(p.price_ctv ?? 0),
+          affiliate_enabled: p.affiliate_enabled !== false,
+          affiliate_type: (p.affiliate_type as 'fixed' | 'percent') || 'fixed',
+          affiliate_reward: Number(p.affiliate_reward ?? 0),
+          affiliate_discount: Number(p.affiliate_discount ?? 0),
           rating: Number(p.rating ?? 5),
           sold: p.sold ?? 0,
           is_active: p.is_active,
@@ -133,6 +143,11 @@ export default function ProductEditor() {
     accent: form.accent || null,
     badge: form.badge || null,
     base_price: Number(form.base_price) || 0,
+    price_ctv: Number(form.price_ctv) > 0 ? Number(form.price_ctv) : null,
+    affiliate_enabled: form.affiliate_enabled,
+    affiliate_type: form.affiliate_type,
+    affiliate_reward: Number(form.affiliate_reward) || 0,
+    affiliate_discount: Number(form.affiliate_discount) || 0,
     original_price: null,
     rating: Number(form.rating) || null,
     sold: Number(form.sold) || 0,
@@ -401,14 +416,22 @@ export default function ProductEditor() {
             </div>
           </AdminCard>
 
-          <AdminCard title="Giá & đánh giá">
+          <AdminCard title="Giá & Đánh giá">
             <div className="space-y-4">
               <Field
-                label="Giá bán (₫)"
+                label="Giá bán lẻ (₫)"
                 type="number"
                 min="0"
                 value={form.base_price}
                 onChange={(e) => set('base_price', Math.max(0, Number(e.target.value) || 0))}
+              />
+              <Field
+                label="👑 Giá Sỉ CTV (₫)"
+                type="number"
+                min="0"
+                value={form.price_ctv || ''}
+                onChange={(e) => set('price_ctv', Math.max(0, Number(e.target.value) || 0))}
+                hint="Giá ưu đãi khi tài khoản CTV đăng nhập (0 hoặc để trống = dùng giá bán lẻ)"
               />
               <Field
                 label="Đánh giá (0-5)"
@@ -426,6 +449,69 @@ export default function ProductEditor() {
                 value={form.sold}
                 onChange={(e) => set('sold', Math.max(0, Number(e.target.value) || 0))}
               />
+            </div>
+          </AdminCard>
+
+          <AdminCard title="🤝 Tiếp thị liên kết (Affiliate)">
+            <div className="space-y-4">
+              <Toggle
+                label="Bật Affiliate cho sản phẩm này"
+                checked={form.affiliate_enabled}
+                onChange={(v) => set('affiliate_enabled', v)}
+              />
+              {form.affiliate_enabled && (
+                <div className="space-y-3.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-200 leading-tight">
+                      Loại hoa hồng & Giảm giá
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-[#0B132B] border border-slate-200/80 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => set('affiliate_type', 'fixed')}
+                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition cursor-pointer ${
+                          form.affiliate_type === 'fixed'
+                            ? 'bg-white dark:bg-[#1E293B] text-[#2563EB] dark:text-[#35A8FF] shadow-sm border border-slate-200/80 dark:border-slate-700 ring-1 ring-blue-500/10'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <span className="text-sm">💰</span>
+                        <span>Cố định (VNĐ)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => set('affiliate_type', 'percent')}
+                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black transition cursor-pointer ${
+                          form.affiliate_type === 'percent'
+                            ? 'bg-white dark:bg-[#1E293B] text-[#2563EB] dark:text-[#35A8FF] shadow-sm border border-slate-200/80 dark:border-slate-700 ring-1 ring-blue-500/10'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <span className="text-sm">📊</span>
+                        <span>Theo phần trăm (%)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <Field
+                    label={form.affiliate_type === 'percent' ? 'Giảm giá chào mừng đơn đầu (%)' : 'Giảm giá chào mừng đơn đầu (₫)'}
+                    type="number"
+                    min="0"
+                    value={form.affiliate_discount || ''}
+                    onChange={(e) => set('affiliate_discount', Math.max(0, Number(e.target.value) || 0))}
+                    hint="Ưu đãi tự động cho mọi khách hàng mới ở đơn đầu tiên"
+                  />
+
+                  <Field
+                    label={form.affiliate_type === 'percent' ? 'Hoa hồng người giới thiệu (%)' : 'Hoa hồng người giới thiệu (₫)'}
+                    type="number"
+                    min="0"
+                    value={form.affiliate_reward || ''}
+                    onChange={(e) => set('affiliate_reward', Math.max(0, Number(e.target.value) || 0))}
+                    hint="Cộng thẳng vào ví tiền web của người giới thiệu khi đơn hoàn thành"
+                  />
+                </div>
+              )}
             </div>
           </AdminCard>
 
@@ -732,6 +818,7 @@ function PlansEditor({
     name: '',
     duration: '',
     price: 0,
+    price_ctv: 0,
     warranty: '',
     is_highlight: false,
     badge: '',
@@ -747,6 +834,7 @@ function PlansEditor({
       name: '',
       duration: '',
       price: 0,
+      price_ctv: 0,
       warranty: '',
       is_highlight: false,
       badge: '',
@@ -762,6 +850,7 @@ function PlansEditor({
       name: p.name,
       duration: p.duration ?? '',
       price: Number(p.price) || 0,
+      price_ctv: Number(p.price_ctv) || 0,
       warranty: p.notes ?? '',
       is_highlight: p.is_highlight ?? false,
       badge: p.badge ?? '',
@@ -806,6 +895,7 @@ function PlansEditor({
                   name: draft.name.trim(),
                   duration: draft.duration.trim() || null,
                   price: Number(draft.price) || 0,
+                  price_ctv: Number(draft.price_ctv) > 0 ? Number(draft.price_ctv) : null,
                   notes: draft.warranty.trim() || null,
                   is_highlight: draft.is_highlight,
                   badge: draft.badge.trim() || null,
@@ -825,6 +915,7 @@ function PlansEditor({
           name: draft.name.trim(),
           duration: draft.duration.trim() || null,
           price: Number(draft.price) || 0,
+          price_ctv: Number(draft.price_ctv) > 0 ? Number(draft.price_ctv) : null,
           notes: draft.warranty.trim() || null,
           is_highlight: draft.is_highlight,
           badge: draft.badge.trim() || null,
@@ -847,6 +938,7 @@ function PlansEditor({
           name: draft.name.trim(),
           duration: draft.duration.trim() || null,
           price: Number(draft.price) || 0,
+          price_ctv: Number(draft.price_ctv) > 0 ? Number(draft.price_ctv) : null,
           original_price: null,
           description: null,
           notes: draft.warranty.trim() || null,
@@ -869,6 +961,7 @@ function PlansEditor({
           name: draft.name.trim(),
           duration: draft.duration.trim() || null,
           price: Number(draft.price) || 0,
+          price_ctv: Number(draft.price_ctv) > 0 ? Number(draft.price_ctv) : null,
           original_price: null,
           notes: draft.warranty.trim() || null,
           is_highlight: draft.is_highlight,
@@ -935,6 +1028,11 @@ function PlansEditor({
                   <span className="font-extrabold text-slate-900 dark:text-white text-xs">{p.name}</span>
                   {p.duration && <span className="text-xs text-slate-400 font-semibold">({p.duration})</span>}
                   <span className="text-xs font-black text-[#2563EB] dark:text-[#35A8FF]">{Number(p.price).toLocaleString('vi-VN')}₫</span>
+                  {p.price_ctv != null && Number(p.price_ctv) > 0 && (
+                    <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/50 border border-amber-200/60 dark:border-amber-800/40 px-2 py-0.5 text-[9px] font-black text-amber-700 dark:text-amber-300">
+                      👑 Sỉ CTV: {Number(p.price_ctv).toLocaleString('vi-VN')}₫
+                    </span>
+                  )}
                   {p.notes && (
                     <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300">
                       🛡️ {p.notes}
@@ -1011,18 +1109,26 @@ function PlansEditor({
           )}
         </div>
 
-        <div className="grid gap-3.5 sm:grid-cols-4 items-end">
-          <Field label="Tên gói *" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Ví dụ: Netflix Farm, 1 tháng..." />
+        <div className="grid gap-3.5 sm:grid-cols-5 items-start">
+          <Field label="Tên gói *" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Ví dụ: 1 tháng..." />
           <Field label="Thời hạn *" value={draft.duration} onChange={(e) => setDraft((d) => ({ ...d, duration: e.target.value }))} placeholder="Ví dụ: 30 ngày..." />
           <Field
-            label="Giá (₫) *"
+            label="Giá lẻ (₫) *"
             type="number"
             min="0"
             value={draft.price || ''}
             onChange={(e) => setDraft((d) => ({ ...d, price: Math.max(0, Number(e.target.value) || 0) }))}
             placeholder="0"
           />
-          <Field label="Nhãn / Badge" value={draft.badge} onChange={(e) => setDraft((d) => ({ ...d, badge: e.target.value }))} placeholder="Ví dụ: 5 THÀNH VIÊN, PROFILE RIÊNG..." />
+          <Field
+            label="👑 Giá Sỉ (₫)"
+            type="number"
+            min="0"
+            value={draft.price_ctv || ''}
+            onChange={(e) => setDraft((d) => ({ ...d, price_ctv: Math.max(0, Number(e.target.value) || 0) }))}
+            placeholder="Để trống = Giá lẻ"
+          />
+          <Field label="Nhãn / Badge" value={draft.badge} onChange={(e) => setDraft((d) => ({ ...d, badge: e.target.value }))} placeholder="Ví dụ: HOT..." />
         </div>
 
         {/* Bảo hành input & Quick Suggestion Pills */}

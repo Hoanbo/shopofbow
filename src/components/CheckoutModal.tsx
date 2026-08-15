@@ -10,8 +10,13 @@ import {
   type CouponValidationResult,
   type Coupon,
 } from '../data/coupons';
+import {
+  getStoredReferralCode,
+  calculateFirstOrderDiscount,
+} from '../utils/affiliate';
 
 interface Plan {
+  id?: string;
   label: string;
   duration: string;
   price: number;
@@ -33,7 +38,7 @@ const BANK_CONFIG = {
 };
 
 export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuccess }: Props) {
-  const { session, balance, refreshBalance } = useAuth();
+  const { session, balance, refreshBalance, isCtv } = useAuth();
   const [method, setMethod] = useState<'wallet' | 'vietqr'>('vietqr');
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
@@ -52,8 +57,26 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
   const [suggestedCoupons, setSuggestedCoupons] = useState<Coupon[]>([]);
   const [isFirstOrderUser, setIsFirstOrderUser] = useState(false);
 
-  const rawTotalPrice = plan.price * quantity;
-  const discountAmount = appliedCoupon?.valid ? (appliedCoupon.discount_amount ?? 0) : 0;
+  // Determine CTV vs Retail unit price
+  const matchedPlan = item.plans?.find((p) => p.label === plan.label) || plan;
+  const planCtvPrice = (isCtv && matchedPlan && (matchedPlan as any).priceCtv != null && (matchedPlan as any).priceCtv > 0)
+    ? (matchedPlan as any).priceCtv
+    : (isCtv && item.priceCtv != null && item.priceCtv > 0)
+    ? item.priceCtv
+    : null;
+
+  const isCtvDiscountApplied = Boolean(isCtv && planCtvPrice != null && planCtvPrice < plan.price);
+  const unitPrice = isCtvDiscountApplied ? Number(planCtvPrice) : plan.price;
+  const rawTotalPrice = unitPrice * quantity;
+
+  // First-order universal welcome discount (for non-CTV orders on products with discount configured)
+  const isAutoWelcomeDiscount = !isCtv && isFirstOrderUser && (item.affiliateDiscount != null && item.affiliateDiscount > 0);
+  const autoWelcomeDiscountAmount = isAutoWelcomeDiscount
+    ? calculateFirstOrderDiscount(item, rawTotalPrice, isFirstOrderUser)
+    : 0;
+
+  const couponDiscountAmount = appliedCoupon?.valid ? (appliedCoupon.discount_amount ?? 0) : 0;
+  const discountAmount = Math.max(autoWelcomeDiscountAmount, couponDiscountAmount);
   const finalPrice = Math.max(0, rawTotalPrice - discountAmount);
 
   // Generate unique payment code & reset on open
@@ -182,6 +205,18 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
     setCouponError(null);
   };
 
+  const trackAffiliateConversion = async (createdOrderId: string) => {
+    try {
+      const storedRefCode = getStoredReferralCode();
+      await (supabase as any).rpc('record_affiliate_conversion', {
+        p_order_id: createdOrderId,
+        p_referral_code: storedRefCode || null,
+      });
+    } catch (e) {
+      console.warn('[trackAffiliateConversion] note:', e);
+    }
+  };
+
   // Handle Wallet Payment
   const handleWalletPayment = async () => {
     if (submittingRef.current) return;
@@ -189,14 +224,19 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
     setError(null);
     setLoading(true);
     try {
+      const fullPlanLabel = plan.duration && !plan.label.toLowerCase().includes(plan.duration.toLowerCase())
+        ? `${plan.label} (${plan.duration})`
+        : plan.label;
+
       const { data, error: rpcErr } = await (supabase as any).rpc('buy_with_wallet', {
         p_user_id: session.user.id,
         p_product_name: quantity > 1 ? `${item.name} (x${quantity})` : item.name,
-        p_plan_label: plan.label,
+        p_plan_label: fullPlanLabel,
         p_price: rawTotalPrice,
         p_payment_code: paymentCode,
         p_notes: notes.trim(),
         p_product_id: item.id.length === 36 ? item.id : undefined,
+        p_plan_id: plan.id && plan.id.length === 36 ? plan.id : undefined,
         p_quantity: quantity,
         p_coupon_code: appliedCoupon?.code || null,
       });
@@ -206,6 +246,15 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
         const paidAmount = finalPrice;
         const paidQty = quantity;
         const paidCode = paymentCode;
+
+        // Track affiliate conversion
+        const { data: createdOrd } = await (supabase.from('orders') as any)
+          .select('id')
+          .eq('payment_code', paidCode)
+          .maybeSingle();
+        if (createdOrd?.id) {
+          await trackAffiliateConversion(createdOrd.id);
+        }
 
         await refreshBalance();
         onWalletSuccess({ code: paidCode, amount: paidAmount, qty: paidQty });
@@ -238,14 +287,19 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
     setError(null);
     setLoading(true);
     try {
+      const fullPlanLabel = plan.duration && !plan.label.toLowerCase().includes(plan.duration.toLowerCase())
+        ? `${plan.label} (${plan.duration})`
+        : plan.label;
+
       const { data, error: rpcErr } = await (supabase as any).rpc('create_order_with_coupon', {
         p_user_id: session.user.id,
         p_product_name: quantity > 1 ? `${item.name} (x${quantity})` : item.name,
-        p_plan_label: plan.label,
+        p_plan_label: fullPlanLabel,
         p_price: rawTotalPrice,
         p_payment_code: paymentCode,
         p_notes: notes.trim(),
         p_product_id: item.id.length === 36 ? item.id : undefined,
+        p_plan_id: plan.id && plan.id.length === 36 ? plan.id : undefined,
         p_quantity: quantity,
         p_coupon_code: appliedCoupon?.code || null,
       });
@@ -255,7 +309,11 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
         throw new Error(data?.message || 'Không thể tạo đơn hàng thanh toán.');
       }
 
-      setOrderId(data.order_id ?? null);
+      const createdOrderId = data.order_id ?? null;
+      setOrderId(createdOrderId);
+      if (createdOrderId) {
+        await trackAffiliateConversion(createdOrderId);
+      }
       setStep('payment');
     } catch (err: any) {
       setError(err?.message || err?.details || 'Lỗi tạo đơn hàng thanh toán.');
@@ -308,7 +366,14 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
         {step === 'checkout' && (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Đơn hàng của bạn</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Đơn hàng của bạn</span>
+                {isCtvDiscountApplied && (
+                  <span className="rounded-md bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 text-[10px] font-black text-amber-700 dark:text-amber-300">
+                    👑 Giá Sỉ CTV
+                  </span>
+                )}
+              </div>
               <div className="mt-2 flex items-center gap-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 p-3.5 border border-slate-100 dark:border-slate-800">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 shrink-0">
                   <img src={item.image} alt={item.name} className="h-full w-full object-contain" />
@@ -322,7 +387,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                 <div className="text-right shrink-0">
                   {quantity > 1 && (
                     <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 line-through mb-0.5">
-                      {plan.price.toLocaleString('vi-VN')}đ / cái
+                      {unitPrice.toLocaleString('vi-VN')}đ / cái
                     </p>
                   )}
                   <span className="text-sm font-black text-[#2563EB] dark:text-[#35A8FF]">
@@ -364,6 +429,16 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                 )}
               </div>
 
+              {/* Auto Welcome Discount Alert */}
+              {isAutoWelcomeDiscount && !appliedCoupon?.valid && (
+                <div className="flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 p-2.5 text-xs text-emerald-800 dark:text-emerald-300">
+                  <span className="text-base">🎉</span>
+                  <span className="font-semibold">
+                    Đã tự động áp dụng ưu đãi chào mừng đơn đầu tiên: <strong>-{autoWelcomeDiscountAmount.toLocaleString('vi-VN')}đ</strong>
+                  </span>
+                </div>
+              )}
+
               {/* Coupon Suggestion for First-Order user */}
               {showWelcomeSuggestion && (
                 <div className="flex items-center justify-between gap-2 rounded-xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-800 dark:text-amber-300 animate-pulse">
@@ -396,7 +471,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                           {appliedCoupon.code}
                         </span>
                         <span className="text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400">
-                          (-{discountAmount.toLocaleString('vi-VN')}đ)
+                          (-{couponDiscountAmount.toLocaleString('vi-VN')}đ)
                         </span>
                       </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
@@ -452,7 +527,12 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
               {discountAmount > 0 && (
                 <div className="flex justify-between font-semibold text-emerald-600 dark:text-emerald-400">
                   <span className="flex items-center gap-1">
-                    <span>Mã giảm giá ({appliedCoupon?.code}):</span>
+                    <span>
+                      {appliedCoupon?.valid
+                        ? `Mã giảm giá (${appliedCoupon.code})`
+                        : 'Ưu đãi chào mừng đơn đầu'}
+                      :
+                    </span>
                   </span>
                   <span className="font-black">-{discountAmount.toLocaleString('vi-VN')}đ</span>
                 </div>

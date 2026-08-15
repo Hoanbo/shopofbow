@@ -14,6 +14,9 @@ interface UserRow {
   avatar_url?: string;
   phone?: string;
   balance: number;
+  role?: 'member' | 'ctv' | 'admin';
+  referral_code?: string;
+  affiliate_earnings?: number;
   created_at: string;
   total_orders: number;
   is_admin_user?: boolean;
@@ -33,9 +36,9 @@ export default function AdminUsers() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'member' | 'ctv'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const toast = useToast();
-
 
   // Edit User modal state
   const [editUser, setEditUser] = useState<UserRow | null>(null);
@@ -55,40 +58,34 @@ export default function AdminUsers() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await (supabase as any).rpc('admin_get_users_list');
-      if (error) {
-        console.error('[AdminUsers] rpc admin_get_users_list failed:', error);
-        toast.error(`RPC Error: ${error.message || error.details || 'Vui lòng chạy lại file SQL 0014'}`);
-        // Fallback if migration 0013 / 0014 has not been run in Supabase yet
-        const { data: profs, error: profErr } = await (supabase.from('profiles') as any)
-          .select('id, full_name, avatar_url, balance, created_at, phone')
-          .order('created_at', { ascending: false });
+      // Fetch directly from profiles for complete fields
+      const { data: profs, error: profErr } = await (supabase.from('profiles') as any)
+        .select('id, full_name, avatar_url, balance, created_at, phone, email, role, referral_code, affiliate_earnings')
+        .order('created_at', { ascending: false });
 
-        if (profErr) throw profErr;
+      if (profErr) throw profErr;
 
-        // Fetch orders count per user in fallback
-        const { data: ords } = await (supabase.from('orders') as any).select('user_id');
-        const orderCounts: Record<string, number> = {};
-        if (ords) {
-          ords.forEach((o: any) => {
-            if (o.user_id) {
-              orderCounts[o.user_id] = (orderCounts[o.user_id] || 0) + 1;
-            }
-          });
-        }
-
-        setUsers(
-          (profs || []).map((p: any) => ({
-            ...p,
-            phone: p.phone || '',
-            email: p.email || 'N/A',
-            total_orders: orderCounts[p.id] || 0,
-            is_admin_user: false,
-          })) as UserRow[],
-        );
-      } else {
-        setUsers((data || []) as UserRow[]);
+      // Fetch orders count per user
+      const { data: ords } = await (supabase.from('orders') as any).select('user_id');
+      const orderCounts: Record<string, number> = {};
+      if (ords) {
+        ords.forEach((o: any) => {
+          if (o.user_id) {
+            orderCounts[o.user_id] = (orderCounts[o.user_id] || 0) + 1;
+          }
+        });
       }
+
+      setUsers(
+        (profs || []).map((p: any) => ({
+          ...p,
+          phone: p.phone || '',
+          email: p.email || 'N/A',
+          role: p.role || 'member',
+          total_orders: orderCounts[p.id] || 0,
+          is_admin_user: (p.email?.toLowerCase() === 'hoankb4@gmail.com') || p.role === 'admin',
+        })) as UserRow[],
+      );
     } catch (err: any) {
       console.error('Error fetching users:', err);
       toast.error(err.message || 'Lỗi khi tải danh sách người dùng.');
@@ -180,14 +177,77 @@ export default function AdminUsers() {
     }
   };
 
+  // Toggle CTV role
+  const handleToggleCtvRole = async (user: UserRow) => {
+    if (user.is_admin_user) {
+      toast.error('Không thể thay đổi quyền tài khoản Admin');
+      return;
+    }
+    const newRole = user.role === 'ctv' ? 'member' : 'ctv';
+    try {
+      const { data, error } = await (supabase as any).rpc('admin_set_user_role', {
+        p_user_id: user.id,
+        p_role: newRole,
+      });
+
+      if (error) throw error;
+      if (data === 'unauthorized') {
+        throw new Error('Bạn không có quyền Admin để thực hiện thao tác này.');
+      }
+      if (data !== 'success') {
+        throw new Error(`Cập nhật thất bại (${data}).`);
+      }
+
+      // Optimistic update
+      setUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, role: newRole } : u))
+      );
+
+      toast.success(
+        newRole === 'ctv'
+          ? `👑 Đã nâng cấp ${user.full_name || user.email} lên CTV Sỉ!`
+          : `Đã chuyển ${user.full_name || user.email} về Thành viên thường!`
+      );
+      fetchUsers();
+
+      // Trigger email notification to user
+      (async () => {
+        try {
+          const sess = (await supabase.auth.getSession()).data.session;
+          if (sess?.access_token) {
+            await fetch('/api/email-notify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sess.access_token}`,
+              },
+              body: JSON.stringify({
+                user_id: user.id,
+                type: newRole === 'ctv' ? 'role_ctv' : 'role_member',
+              }),
+            });
+          }
+        } catch (e) {
+          console.warn('[email-notify] Could not send role email:', e);
+        }
+      })();
+    } catch (err: any) {
+      console.error('[handleToggleCtvRole] error:', err);
+      toast.error(err.message || 'Lỗi khi cập nhật quyền người dùng');
+    }
+  };
+
   // Filter users
   const filteredUsers = users.filter((u) => {
+    if (roleFilter === 'member' && u.role === 'ctv') return false;
+    if (roleFilter === 'ctv' && u.role !== 'ctv') return false;
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
       (u.full_name || '').toLowerCase().includes(q) ||
       (u.email || '').toLowerCase().includes(q) ||
       (u.phone || '').toLowerCase().includes(q) ||
+      (u.referral_code || '').toLowerCase().includes(q) ||
       (u.id || '').toLowerCase().includes(q)
     );
   });
@@ -196,9 +256,10 @@ export default function AdminUsers() {
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * USERS_PER_PAGE, currentPage * USERS_PER_PAGE);
 
   // Reset page when search changes
-  useEffect(() => { setCurrentPage(1); }, [searchQuery]);
+  useEffect(() => { setCurrentPage(1); }, [searchQuery, roleFilter]);
 
   const totalBalance = users.reduce((sum, u) => sum + Number(u.balance || 0), 0);
+  const totalCtvs = users.filter((u) => u.role === 'ctv').length;
 
 
   return (
@@ -220,34 +281,72 @@ export default function AdminUsers() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 shadow-xs">
+      <div className="grid gap-4 sm:grid-cols-4">
+        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
           <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Tổng thành viên</span>
-          <p className="mt-1 text-3xl font-black text-[#0F172A] dark:text-white">{users.length}</p>
+          <p className="mt-1 text-2xl font-black text-[#0F172A] dark:text-white">{users.length}</p>
         </div>
-        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 shadow-xs">
-          <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">Tổng số dư ví hệ thống</span>
-          <p className="mt-1 text-3xl font-black text-emerald-600 dark:text-emerald-400">
+        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
+          <span className="text-xs font-extrabold uppercase tracking-wider text-amber-500">👑 CTV Sỉ</span>
+          <p className="mt-1 text-2xl font-black text-amber-600 dark:text-amber-400">{totalCtvs}</p>
+        </div>
+        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
+          <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">Tổng số dư ví</span>
+          <p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">
             {totalBalance.toLocaleString('vi-VN')}đ
           </p>
         </div>
-        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-6 shadow-xs">
-          <span className="text-xs font-extrabold uppercase tracking-wider text-blue-500">Đơn hàng đã đặt</span>
-          <p className="mt-1 text-3xl font-black text-[#2563EB] dark:text-[#35A8FF]">
+        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
+          <span className="text-xs font-extrabold uppercase tracking-wider text-blue-500">Đơn đã đặt</span>
+          <p className="mt-1 text-2xl font-black text-[#2563EB] dark:text-[#35A8FF]">
             {users.reduce((sum, u) => sum + Number(u.total_orders || 0), 0)}
           </p>
         </div>
       </div>
 
       {/* Filter / Search Bar */}
-      <div className="flex items-center gap-3 rounded-[22px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-4 shadow-xs">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row items-center gap-3 rounded-[22px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-3.5 shadow-xs">
+        {/* Role tabs */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl w-full sm:w-auto">
+          <button
+            onClick={() => setRoleFilter('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              roleFilter === 'all'
+                ? 'bg-white dark:bg-[#1E2A4A] text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+            }`}
+          >
+            Tất cả ({users.length})
+          </button>
+          <button
+            onClick={() => setRoleFilter('ctv')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+              roleFilter === 'ctv'
+                ? 'bg-white dark:bg-[#1E2A4A] text-amber-600 dark:text-amber-400 shadow-xs'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+            }`}
+          >
+            👑 CTV Sỉ ({totalCtvs})
+          </button>
+          <button
+            onClick={() => setRoleFilter('member')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              roleFilter === 'member'
+                ? 'bg-white dark:bg-[#1E2A4A] text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
+            }`}
+          >
+            Khách thường ({users.length - totalCtvs})
+          </button>
+        </div>
+
+        <div className="relative flex-1 w-full">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search theo Tên, Email, SĐT hoặc User ID..."
-            className="w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-4 py-3 text-sm font-semibold outline-none focus:border-[#2563EB] dark:focus:border-[#35A8FF] text-slate-900 dark:text-white placeholder:text-slate-400"
+            placeholder="Search theo Tên, Email, SĐT, Mã Ref hoặc ID..."
+            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3.5 py-2 text-xs font-semibold outline-none focus:border-[#2563EB] dark:focus:border-[#35A8FF] text-slate-900 dark:text-white placeholder:text-slate-400"
           />
         </div>
       </div>
@@ -265,86 +364,111 @@ export default function AdminUsers() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs table-auto">
+            <table className="w-full text-left text-xs">
               <thead className="border-b border-[#E8F1FF] dark:border-slate-800 bg-[#F8FBFF] dark:bg-slate-800/50 text-[11px] uppercase tracking-wider text-slate-400 font-black">
                 <tr>
-                  <th className="px-4 py-3.5">Khách hàng</th>
-                  <th className="px-4 py-3.5">Email / SĐT</th>
-                  <th className="px-4 py-3.5">Số dư ví</th>
-                  <th className="px-4 py-3.5">Đơn đã đặt</th>
-                  <th className="px-4 py-3.5">Ngày tham gia</th>
-                  <th className="px-4 py-3.5 text-right">Thao tác</th>
+                  <th className="px-3.5 py-3">Khách hàng / Liên hệ</th>
+                  <th className="px-3 py-3">Cấp tài khoản</th>
+                  <th className="px-3 py-3">Số dư ví</th>
+                  <th className="px-3 py-3">Đơn hàng</th>
+                  <th className="px-3 py-3">Ngày tham gia</th>
+                  <th className="px-3.5 py-3 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8F1FF] dark:divide-slate-800">
                 {paginatedUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition">
-                    {/* KHÁCH HÀNG */}
-                    <td className="px-4 py-3.5">
+                    {/* KHÁCH HÀNG / LIÊN HỆ */}
+                    <td className="px-3.5 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#00A3FF] to-[#2563EB] text-xs font-black text-white shadow-xs shrink-0">
                           {(u.full_name || 'U').charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-extrabold text-xs text-slate-900 dark:text-white truncate max-w-[130px] lg:max-w-[160px]" title={u.full_name || 'Thành viên'}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-extrabold text-xs text-slate-900 dark:text-white truncate" title={u.full_name || 'Thành viên'}>
                               {u.full_name || 'Thành viên'}
                             </span>
                             {u.is_admin_user && (
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-black shrink-0">
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0.2 text-[9px] font-black shrink-0">
                                 👑 Admin
                               </span>
                             )}
                           </div>
-                          <span className="block text-[10px] font-mono text-slate-400 dark:text-slate-500 truncate max-w-[120px] mt-0.5">
-                            {u.id}
-                          </span>
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex-wrap">
+                            <span className="truncate max-w-[180px]" title={u.email}>{u.email}</span>
+                            {u.phone && <span className="text-slate-400 shrink-0">• 📞 {u.phone}</span>}
+                          </div>
+                          {u.referral_code && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                              Ref: {u.referral_code}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
 
-                    {/* EMAIL / SĐT */}
-                    <td className="px-4 py-3.5">
-                      <div className="font-bold text-xs text-slate-800 dark:text-slate-200 truncate max-w-[150px] lg:max-w-[190px]" title={u.email}>
-                        {u.email}
-                      </div>
-                      {u.phone && (
-                        <div className="text-[10px] text-slate-400 font-medium mt-0.5">
-                          📞 {u.phone}
-                        </div>
+                    {/* CẤP TÀI KHOẢN */}
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {u.is_admin_user ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 px-2.5 py-0.5 text-[10px] font-extrabold">
+                          🛡️ Quản trị viên
+                        </span>
+                      ) : u.role === 'ctv' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950/50 border border-amber-300/80 dark:border-amber-800 text-amber-700 dark:text-amber-300 px-2.5 py-0.5 text-[10px] font-black shadow-xs">
+                          👑 CTV Sỉ
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 text-[10px] font-bold">
+                          Thành viên
+                        </span>
                       )}
                     </td>
 
                     {/* SỐ DƯ VÍ */}
-                    <td className="px-4 py-3.5 font-black text-emerald-600 dark:text-emerald-400 text-xs whitespace-nowrap">
+                    <td className="px-3 py-3 font-black text-emerald-600 dark:text-emerald-400 text-xs whitespace-nowrap">
                       {Number(u.balance || 0).toLocaleString('vi-VN')}đ
                     </td>
 
                     {/* ĐƠN ĐÃ ĐẶT */}
-                    <td className="px-4 py-3.5 font-extrabold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                    <td className="px-3 py-3 font-extrabold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                       <button
                         onClick={() => handleOpenUserOrders(u)}
-                        className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-100 transition"
+                        className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-100 transition cursor-pointer"
                       >
                         {u.total_orders || 0} đơn
                       </button>
                     </td>
 
                     {/* NGÀY THAM GIA */}
-                    <td className="px-4 py-3.5 font-medium text-[11px] text-slate-400 whitespace-nowrap">
+                    <td className="px-3 py-3 font-medium text-[11px] text-slate-400 whitespace-nowrap">
                       {new Date(u.created_at).toLocaleDateString('vi-VN')}
                     </td>
 
                     {/* THAO TÁC */}
-                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                    <td className="px-3.5 py-3 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        {!u.is_admin_user && (
+                          <button
+                            onClick={() => handleToggleCtvRole(u)}
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black transition shadow-xs cursor-pointer ${
+                              u.role === 'ctv'
+                                ? 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                                : 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100'
+                            }`}
+                            title={u.role === 'ctv' ? 'Chuyển về Thành viên thường' : 'Nâng cấp lên CTV Giá Sỉ'}
+                          >
+                            {u.role === 'ctv' ? 'Hạ Member' : '👑 Cấp CTV'}
+                          </button>
+                        )}
+
                         <button
                           onClick={() => {
                             setEditUser(u);
                             setEditFullName(u.full_name || '');
                             setEditPhone(u.phone || '');
                           }}
-                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-100 transition shadow-xs"
+                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 dark:border-blue-900/60 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-100 transition shadow-xs cursor-pointer"
                         >
                           ✏️ Sửa
                         </button>
@@ -358,7 +482,7 @@ export default function AdminUsers() {
                         ) : (
                           <button
                             onClick={() => setDeleteUser(u)}
-                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100 transition shadow-xs"
+                            className="inline-flex items-center gap-1 rounded-full border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-100 transition shadow-xs cursor-pointer"
                           >
                             🗑️ Ban
                           </button>

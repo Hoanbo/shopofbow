@@ -9,8 +9,6 @@ import { useAuth } from '../context/AuthContext';
 import CheckoutModal from '../components/CheckoutModal';
 import ProductReviewsSection from '../components/user/ProductReviewsSection';
 import AppLogo from '../components/AppLogo';
-import AIToolCard from '../components/AIToolCard';
-import PremiumAppCard from '../components/PremiumAppCard';
 import FeaturedBannerCard from '../components/FeaturedBannerCard';
 import {
   StarIcon,
@@ -22,6 +20,8 @@ import {
 } from '../components/icons';
 
 import { useFavorites } from '../context/FavoritesContext';
+import { useToast } from '../components/Toast';
+import { generateReferralLink } from '../utils/affiliate';
 
 interface Props {
   category: CatalogItem['category'] | 'all';
@@ -38,9 +38,11 @@ const perks = [
 export default function Detail({ category, base, crumb }: Props) {
   const { slug } = useParams();
   const { isFavorite, toggleFavorite } = useFavorites();
-  const { session } = useAuth();
+  const { session, isCtv, profile } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
+  const [copiedRef, setCopiedRef] = useState(false);
+  const toast = useToast();
 
   const { data: item, loading } = useAsync(
     () => (slug ? fetchBySlug(slug) : Promise.resolve(null)),
@@ -107,6 +109,25 @@ export default function Detail({ category, base, crumb }: Props) {
   const relatedItems = related.slice(0, 4);
   const active = item.plans[plan] ?? item.plans[0];
   const fav = item ? (isFavorite(item.id) || isFavorite(item.slug)) : false;
+
+  const activeRetailPrice = Number(active?.price ?? item.price ?? 0);
+  const activeCtvPrice = active?.priceCtv != null && active.priceCtv > 0
+    ? active.priceCtv
+    : item.priceCtv != null && item.priceCtv > 0
+    ? item.priceCtv
+    : null;
+
+  const isCtvDiscountApplied = Boolean(isCtv && activeCtvPrice != null && activeCtvPrice < activeRetailPrice);
+  const displayPrice = isCtvDiscountApplied ? Number(activeCtvPrice) : activeRetailPrice;
+
+  const handleCopyReferral = () => {
+    const code = profile?.referral_code || (session?.user?.id ? `BOW${session.user.id.substring(0, 5).toUpperCase()}` : 'BOW');
+    const link = generateReferralLink(code, `/products/${item.slug}`);
+    navigator.clipboard.writeText(link);
+    setCopiedRef(true);
+    toast.success('Đã sao chép liên kết giới thiệu sản phẩm!');
+    setTimeout(() => setCopiedRef(false), 2500);
+  };
 
   return (
     <div className="container-bow py-4 sm:py-6 space-y-6">
@@ -193,14 +214,41 @@ export default function Detail({ category, base, crumb }: Props) {
             </div>
 
             {/* Price Tag */}
-            <div className="mt-5 flex items-baseline gap-3 rounded-[22px] bg-[#EEF6FF] dark:bg-blue-950/20 border border-[#D8E9FF] dark:border-blue-900/40 p-4 sm:p-5">
-              <span className="text-3xl font-black text-[#2563EB] dark:text-[#35A8FF]">{formatVND(active.price)}</span>
-              {active.originalPrice && (
-                <span className="text-sm font-medium text-slate-400 dark:text-slate-500 line-through">
-                  {formatVND(active.originalPrice)}
-                </span>
-              )}
-            </div>
+            {isCtvDiscountApplied ? (
+              <div className="mt-5 rounded-[22px] bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-4 sm:p-5 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-amber-500 text-white font-black text-[10px] uppercase px-2.5 py-0.5 shadow-xs">
+                    👑 Giá Sỉ CTV Đặc Quyền
+                  </span>
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                    Tiết kiệm {formatVND(activeRetailPrice - (activeCtvPrice || 0))}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-3xl font-black text-amber-600 dark:text-amber-400">{formatVND(displayPrice)}</span>
+                  <span className="text-sm font-medium text-slate-400 dark:text-slate-500 line-through">
+                    {formatVND(activeRetailPrice)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 space-y-2">
+                <div className="flex items-baseline gap-3 rounded-[22px] bg-[#EEF6FF] dark:bg-blue-950/20 border border-[#D8E9FF] dark:border-blue-900/40 p-4 sm:p-5">
+                  <span className="text-3xl font-black text-[#2563EB] dark:text-[#35A8FF]">{formatVND(displayPrice)}</span>
+                  {active.originalPrice && (
+                    <span className="text-sm font-medium text-slate-400 dark:text-slate-500 line-through">
+                      {formatVND(active.originalPrice)}
+                    </span>
+                  )}
+                </div>
+
+                {item.affiliateDiscount && item.affiliateDiscount > 0 && (
+                  <div className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                    🎉 Giảm ngay {item.affiliateType === 'percent' ? `${item.affiliateDiscount}%` : formatVND(item.affiliateDiscount)} cho đơn hàng đầu tiên của bạn!
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Plan Selector */}
             {item.plans.length > 0 && (
@@ -210,12 +258,16 @@ export default function Detail({ category, base, crumb }: Props) {
                   {item.plans.map((p, i) => {
                     const isSelected = plan === i;
                     const badgeText = p.badge || (p.highlight ? 'Tốt nhất' : null);
+                    const planPrice = (isCtv && p.priceCtv != null && p.priceCtv > 0) ? p.priceCtv : p.price;
+
                     return (
                       <button
                         key={`${p.label}-${i}`}
                         onClick={() => setPlan(i)}
                         className={`relative rounded-[20px] border p-3.5 text-center transition-all duration-300 ${isSelected
-                          ? 'border-[#2563EB] bg-[#EEF6FF] dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-md ring-2 ring-blue-500/20'
+                          ? isCtv
+                            ? 'border-amber-500 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 shadow-md ring-2 ring-amber-500/20'
+                            : 'border-[#2563EB] bg-[#EEF6FF] dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-md ring-2 ring-blue-500/20'
                           : 'border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-blue-300'
                           }`}
                       >
@@ -224,7 +276,7 @@ export default function Detail({ category, base, crumb }: Props) {
                             {badgeText}
                           </span>
                         )}
-                        <span className={`block text-sm font-extrabold ${isSelected ? 'text-[#2563EB] dark:text-[#35A8FF]' : 'text-[#0F172A] dark:text-slate-200'}`}>
+                        <span className={`block text-sm font-extrabold ${isSelected ? (isCtv ? 'text-amber-700 dark:text-amber-300' : 'text-[#2563EB] dark:text-[#35A8FF]') : 'text-[#0F172A] dark:text-slate-200'}`}>
                           {p.label}
                         </span>
                         {p.duration && (
@@ -232,8 +284,8 @@ export default function Detail({ category, base, crumb }: Props) {
                             {p.duration}
                           </span>
                         )}
-                        <span className={`mt-1.5 block text-sm font-black ${isSelected ? 'text-[#2563EB] dark:text-[#35A8FF]' : 'text-[#2563EB] dark:text-blue-400'}`}>
-                          {formatVND(p.price)}
+                        <span className={`mt-1.5 block text-sm font-black ${isSelected ? (isCtv ? 'text-amber-600 dark:text-amber-400' : 'text-[#2563EB] dark:text-[#35A8FF]') : (isCtv ? 'text-amber-600 dark:text-amber-400' : 'text-[#2563EB] dark:text-blue-400')}`}>
+                          {formatVND(planPrice)}
                         </span>
 
                         {/* Optional Meta Chips (Only rendered if data exists) */}
@@ -357,6 +409,31 @@ export default function Detail({ category, base, crumb }: Props) {
           >
             🛒 Mua Ngay dịch vụ
           </button>
+
+          {/* Affiliate Referral Share Prompt */}
+          {item.affiliateEnabled && (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3">
+              <div className="min-w-0 flex-1">
+                <span className="block text-xs font-bold text-[#0F172A] dark:text-white truncate">
+                  🎁 Giới thiệu bạn bè nhận ngay {item.affiliateType === 'percent' ? `${item.affiliateReward}%` : formatVND(item.affiliateReward || 0)} vào ví
+                </span>
+                <span className="block text-[10px] text-slate-400 font-medium">
+                  Cộng thẳng vào Số dư ví BOW khi đơn hoàn tất
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyReferral}
+                className={`rounded-xl px-3.5 py-1.5 text-xs font-black transition cursor-pointer shrink-0 ${
+                  copiedRef
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 text-[#2563EB] dark:text-[#35A8FF] hover:bg-blue-50 dark:hover:bg-slate-700'
+                }`}
+              >
+                {copiedRef ? '✓ Đã copy link!' : '🔗 Copy link giới thiệu'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -400,20 +477,14 @@ export default function Detail({ category, base, crumb }: Props) {
       {relatedItems.length > 0 && (
         <div className="mt-10">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-extrabold text-[#0F172A] sm:text-2xl">Sản phẩm liên quan</h2>
-            <Link to={base} className="text-xs sm:text-sm font-bold text-[#2563EB] hover:underline">
+            <h2 className="text-xl font-extrabold text-[#0F172A] dark:text-white sm:text-2xl">Sản phẩm liên quan</h2>
+            <Link to={base} className="text-xs sm:text-sm font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline">
               Xem tất cả &gt;
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 lg:gap-5">
             {relatedItems.map((r) => (
-              r.category === 'ai-tool' ? (
-                <AIToolCard key={r.id} item={r} />
-              ) : r.category === 'premium-app' ? (
-                <PremiumAppCard key={r.id} item={r} />
-              ) : (
-                <FeaturedBannerCard key={r.id} item={r} base={base} />
-              )
+              <FeaturedBannerCard key={r.id} item={r} base={base} />
             ))}
           </div>
         </div>

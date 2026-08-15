@@ -5,12 +5,26 @@ import { supabase } from '../lib/supabase';
 /** Danh sách email admin — nguồn duy nhất, dùng chung cho toàn app. */
 export const ADMIN_EMAILS = ['hoankb4@gmail.com'];
 
+export interface UserProfile {
+  id: string;
+  role: 'member' | 'ctv' | 'admin';
+  referral_code?: string;
+  referred_by?: string;
+  affiliate_earnings?: number;
+  balance?: number;
+  full_name?: string;
+  email?: string;
+}
+
 interface AuthValue {
   session: Session | null;
   loading: boolean;
   isAdmin: boolean;
+  isCtv: boolean;
   balance: number;
+  profile: UserProfile | null;
   refreshBalance: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   verifyOtp: (email: string, token: string) => Promise<void>;
@@ -22,8 +36,11 @@ const AuthContext = createContext<AuthValue>({
   session: null,
   loading: true,
   isAdmin: false,
+  isCtv: false,
   balance: 0,
+  profile: null,
   refreshBalance: async () => {},
+  refreshProfile: async () => {},
   signIn: async () => {},
   signUp: async () => {},
   verifyOtp: async () => {},
@@ -34,41 +51,53 @@ const AuthContext = createContext<AuthValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [balance, setBalance] = useState<number>(0);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // isAdmin là giá trị DERIVED từ session — luôn đồng bộ trong cùng một render,
-  // không còn cửa sổ race (loading=false, session!=null nhưng isAdmin chưa kịp set).
+  // isAdmin là giá trị DERIVED từ session
   const isAdmin = useMemo(() => {
     const email = session?.user?.email?.toLowerCase();
     return email ? ADMIN_EMAILS.includes(email) : false;
   }, [session]);
 
-  const fetchBalance = async (userId: string) => {
+  const isCtv = useMemo(() => {
+    return profile?.role === 'ctv';
+  }, [profile?.role]);
+
+  const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('balance')
+        .select('*')
         .eq('id', userId)
         .single() as any;
       if (!error && data) {
+        setProfile(data);
         setBalance(data.balance || 0);
       }
     } catch (err) {
-      console.error('Error fetching balance:', err);
+      console.error('Error fetching profile:', err);
     }
   };
 
   const refreshBalance = async () => {
     if (session?.user?.id) {
-      await fetchBalance(session.user.id);
+      await fetchProfile(session.user.id);
     }
   };
 
-  // Nạp số dư theo user hiện tại (chỉ liên quan balance, KHÔNG đụng auth flow).
+  const refreshProfile = async () => {
+    if (session?.user?.id) {
+      await fetchProfile(session.user.id);
+    }
+  };
+
+  // Nạp thông tin profile theo user hiện tại
   useEffect(() => {
     if (session?.user?.id) {
-      fetchBalance(session.user.id);
+      fetchProfile(session.user.id);
     } else {
+      setProfile(null);
       setBalance(0);
     }
   }, [session?.user?.id]);
@@ -167,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, loading, isAdmin, balance, refreshBalance, signIn, signUp, verifyOtp, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, loading, isAdmin, isCtv, balance, profile, refreshBalance, refreshProfile, signIn, signUp, verifyOtp, signInWithGoogle, signOut }}>
       {/* Chỉ render App sau khi auth khởi tạo xong — tránh mọi redirect chạy
           khi session chưa được phục hồi (F5 bị logout, redirect sai). */}
       {loading ? (

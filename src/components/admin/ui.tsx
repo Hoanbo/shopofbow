@@ -9,12 +9,12 @@ export function Field({
 }: { label: string; hint?: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="flex flex-col justify-start w-full">
-      <span className="mb-1.5 block text-xs sm:text-sm font-semibold text-ink leading-tight">{label}</span>
+      <span className="mb-1.5 h-5 flex items-center text-xs font-bold text-slate-700 dark:text-slate-200 leading-none whitespace-nowrap truncate" title={label}>{label}</span>
       <input
         {...props}
-        className="h-11 w-full rounded-xl border border-brand-100 bg-white px-3 text-sm text-ink outline-none transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100 disabled:bg-brand-50/50"
+        className="h-11 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] px-3.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100 dark:disabled:bg-slate-800/50"
       />
-      {hint && <span className="mt-1 block text-xs text-ink-muted">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-slate-400 dark:text-slate-500">{hint}</span>}
     </label>
   );
 }
@@ -25,10 +25,10 @@ export function TextArea({
 }: { label: string } & TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-ink">{label}</span>
+      <span className="mb-1.5 block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 leading-tight">{label}</span>
       <textarea
         {...props}
-        className="w-full rounded-xl border border-brand-100 bg-white px-3 py-2.5 text-sm text-ink outline-none transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100"
+        className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] px-3.5 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] focus:ring-2 focus:ring-blue-500/20"
       />
     </label>
   );
@@ -41,13 +41,20 @@ export function Select({
 }: { label: string; children: ReactNode } & SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-ink">{label}</span>
-      <select
-        {...props}
-        className="h-11 w-full rounded-xl border border-brand-100 bg-white px-3 text-sm text-ink outline-none transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100"
-      >
-        {children}
-      </select>
+      <span className="mb-1.5 block text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 leading-tight">{label}</span>
+      <div className="relative">
+        <select
+          {...props}
+          className="h-11 w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#131C32] px-3.5 pr-10 text-sm font-medium text-slate-900 dark:text-white outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+        >
+          {children}
+        </select>
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-slate-400">
+          <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </div>
+      </div>
     </label>
   );
 }

@@ -6,6 +6,7 @@ export interface PlanTier {
   duration: string;
   price: number;
   originalPrice?: number;
+  priceCtv?: number;
   highlight?: boolean;
   badge?: string;
   usageType?: string;
@@ -31,6 +32,11 @@ export interface CatalogItem {
   accent: string;
   price: number;
   originalPrice?: number;
+  priceCtv?: number;
+  affiliateEnabled?: boolean;
+  affiliateType?: 'fixed' | 'percent';
+  affiliateReward?: number;
+  affiliateDiscount?: number;
   rating: number;
   sold: number;
   featured?: boolean;

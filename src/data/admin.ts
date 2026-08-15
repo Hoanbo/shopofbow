@@ -67,7 +67,7 @@ export async function deleteCategory(id: string) {
 
 // ─────────────── Products ───────────────
 const PRODUCT_COLS =
-  'id, category_id, name, slug, short_description, description, logo_url, banner_url, type, accent, badge, base_price, original_price, rating, sold, is_active, is_featured, sort_order, created_at, updated_at';
+  'id, category_id, name, slug, short_description, description, logo_url, banner_url, type, accent, badge, base_price, original_price, rating, sold, is_active, is_featured, sort_order, affiliate_enabled, affiliate_type, affiliate_reward, affiliate_discount, price_ctv, created_at, updated_at';
 
 export async function listProducts(opts?: {
   type?: ProductType;

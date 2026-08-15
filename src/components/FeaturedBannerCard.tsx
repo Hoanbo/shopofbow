@@ -12,29 +12,29 @@ export default function FeaturedBannerCard({ item, base = '/products' }: Props) 
   return (
     <Link
       to={`${base}/${item.slug}`}
-      className="group relative flex h-[120px] sm:h-[135px] w-full items-center justify-between overflow-hidden rounded-[26px] bg-gradient-to-r from-[#00A3FF] via-[#0088FF] to-[#2563EB] p-5 sm:p-6 text-white shadow-[0_8px_28px_rgba(0,140,255,0.25)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.03] hover:shadow-[0_14px_36px_rgba(0,140,255,0.36)]"
+      className="group relative flex h-[110px] sm:h-[125px] w-full items-center justify-between overflow-hidden rounded-[22px] sm:rounded-[26px] bg-gradient-to-r from-[#00A3FF] via-[#0088FF] to-[#2563EB] p-3.5 sm:p-4.5 xl:p-5 text-white shadow-[0_8px_28px_rgba(0,140,255,0.25)] transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.03] hover:shadow-[0_14px_36px_rgba(0,140,255,0.36)]"
     >
-      <div className="flex items-center gap-4 pr-3 min-w-0 flex-1">
+      <div className="flex items-center gap-3 sm:gap-3.5 pr-2 min-w-0 flex-1">
         {/* Vector App Logo container */}
         <AppLogo
           slug={item.slug}
           name={item.name}
           image={item.image}
-          className="h-[56px] w-[56px] shrink-0 sm:h-[64px] sm:w-[64px]"
+          className="h-[48px] w-[48px] shrink-0 sm:h-[56px] sm:w-[56px] rounded-xl object-contain"
         />
 
         {/* Text content */}
         <div className="min-w-0 flex-1 text-left">
-          <h4 className="line-clamp-1 text-base font-extrabold text-white sm:text-lg">{item.name}</h4>
-          <p className="mt-1 line-clamp-2 text-xs font-normal text-sky-100/90 leading-tight sm:text-sm">
-            {item.tagline || item.description}
+          <h4 className="line-clamp-1 text-sm sm:text-base font-extrabold text-white">{item.name}</h4>
+          <p className="mt-0.5 line-clamp-2 text-[11px] sm:text-xs font-normal text-sky-100/90 leading-tight">
+            {item.tagline || item.description || 'Dịch vụ bản quyền cao cấp'}
           </p>
         </div>
       </div>
 
       {/* Right Circle Arrow Button */}
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#0088FF] shadow-md transition-all duration-300 group-hover:scale-110 group-hover:bg-blue-50 sm:h-11 sm:w-11">
-        <ArrowRight className="h-5 w-5 stroke-[2.5] transition-transform duration-300 group-hover:translate-x-0.5" />
+      <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#0088FF] shadow-md transition-all duration-300 group-hover:scale-110 group-hover:bg-blue-50">
+        <ArrowRight className="h-4 w-4 sm:h-4.5 sm:w-4.5 stroke-[2.5] transition-transform duration-300 group-hover:translate-x-0.5" />
       </div>
     </Link>
   );

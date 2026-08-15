@@ -8,6 +8,7 @@ import { CloseIcon } from '../components/icons';
 import { useToast } from '../components/Toast';
 import OrderDeliveredModal from '../components/OrderDeliveredModal';
 import UserTicketsTab from '../components/user/UserTicketsTab';
+import UserAffiliateTab from '../components/user/UserAffiliateTab';
 import CreateTicketModal from '../components/user/CreateTicketModal';
 import UserOrderDetailModal from '../components/user/UserOrderDetailModal';
 import OrderTimeline from '../components/user/OrderTimeline';
@@ -145,10 +146,29 @@ function OrderCard({
   const isPaidOrder = ['pending_delivery', 'processing'].includes(order.status);
   const canCancel = ['pending_payment', 'pending_delivery', 'processing'].includes(order.status) && !isExpired;
 
+  const getFormattedPlanLabel = (ord: { product_name?: string; plan_label?: string; price?: number; notes?: string }) => {
+    const pName = (ord.product_name || '').trim();
+    const pLabel = (ord.plan_label || '').trim();
+
+    if (pLabel && pLabel.toLowerCase() !== pName.toLowerCase()) {
+      return pLabel;
+    }
+
+    if (pName.toLowerCase().includes('capcut')) {
+      if ((ord.price || 0) <= 20000) return 'Gói 1 tuần (7 ngày)';
+      if ((ord.price || 0) <= 70000) return 'Gói 1 tháng (30 ngày)';
+      if ((ord.price || 0) <= 200000) return 'Gói 6 tháng (180 ngày)';
+      return 'Gói 1 năm (365 ngày)';
+    }
+
+    return pLabel || pName;
+  };
+
   const calcExpiryInfo = () => {
     if (order.status !== 'completed') return null;
 
-    const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${order.notes || ''}`.toLowerCase();
+    const displayPlan = getFormattedPlanLabel(order);
+    const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${displayPlan} ${order.notes || ''}`.toLowerCase();
 
     // 1. Gói vĩnh viễn
     if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
@@ -171,9 +191,9 @@ function OrderCard({
       durationDays = 2;
     } else if (planStr.includes('3 ngày')) {
       durationDays = 3;
-    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần') || planStr.includes('1 week') || planStr.includes('7 days') || planStr.includes('7d') || (order.price <= 20000 && planStr.includes('capcut'))) {
       durationDays = 7;
-    } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
+    } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần') || planStr.includes('2 weeks') || planStr.includes('14 days')) {
       durationDays = 14;
     } else if (planStr.includes('15 ngày')) {
       durationDays = 15;
@@ -188,10 +208,25 @@ function OrderCard({
     } else if (planStr.includes('1 năm') || planStr.includes('12 tháng') || planStr.includes('1 year') || planStr.includes('365 ngày')) {
       durationDays = 365;
     } else {
-      const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
-      if (dayMatch) {
-        durationDays = parseInt(dayMatch[1], 10);
-        if (durationDays === 1) isHours = true;
+      const weekMatch = planStr.match(/(\d+)\s*(tuần|week|weeks|w)/);
+      if (weekMatch) {
+        durationDays = parseInt(weekMatch[1], 10) * 7;
+      } else {
+        const monthMatch = planStr.match(/(\d+)\s*(tháng|month|months|m)/);
+        if (monthMatch) {
+          durationDays = parseInt(monthMatch[1], 10) * 30;
+        } else {
+          const yearMatch = planStr.match(/(\d+)\s*(năm|year|years|y)/);
+          if (yearMatch) {
+            durationDays = parseInt(yearMatch[1], 10) * 365;
+          } else {
+            const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
+            if (dayMatch) {
+              durationDays = parseInt(dayMatch[1], 10);
+              if (durationDays === 1) isHours = true;
+            }
+          }
+        }
       }
     }
 
@@ -248,7 +283,8 @@ function OrderCard({
   const calcWarranty = () => {
     if (order.status !== 'completed') return null;
 
-    const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${order.notes || ''}`.toLowerCase();
+    const displayPlan = getFormattedPlanLabel(order);
+    const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${displayPlan} ${order.notes || ''}`.toLowerCase();
 
     // 1. Gói không bảo hành
     if (planStr.includes('kbh') || planStr.includes('không bảo hành') || planStr.includes('no warranty')) {
@@ -262,7 +298,7 @@ function OrderCard({
     // 2. Gói vĩnh viễn
     if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('trọn đời')) {
       return {
-        label: 'Bảo hành trọn đời',
+        label: 'Trọn đời',
         badgeClass: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200/60',
         icon: '👑',
       };
@@ -278,7 +314,7 @@ function OrderCard({
       durationDays = 2;
     } else if (planStr.includes('3 ngày')) {
       durationDays = 3;
-    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần')) {
+    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần') || planStr.includes('1 week') || planStr.includes('7 days') || planStr.includes('7d') || (order.price <= 20000 && planStr.includes('capcut'))) {
       durationDays = 7;
     } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần')) {
       durationDays = 14;
@@ -311,7 +347,7 @@ function OrderCard({
 
     if (diffMs <= 0) {
       return {
-        label: 'Hết hạn BH',
+        label: 'Hết hạn',
         badgeClass: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200/60',
         icon: '🔴',
       };
@@ -319,7 +355,7 @@ function OrderCard({
 
     if (isHours && diffHours <= 24) {
       return {
-        label: `BH: Còn ${diffHours}h`,
+        label: `Còn ${diffHours}h`,
         badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
         icon: '⚡',
       };
@@ -327,14 +363,14 @@ function OrderCard({
 
     if (diffDays <= 3) {
       return {
-        label: `BH: Còn ${diffDays} ngày`,
+        label: `Còn ${diffDays} ngày`,
         badgeClass: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200/60 animate-pulse',
         icon: '🟡',
       };
     }
 
     return {
-      label: `BH: Còn ${diffDays} ngày`,
+      label: `Còn ${diffDays} ngày`,
       badgeClass: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200/70 dark:border-sky-800/60',
       icon: '🛡️',
     };
@@ -349,7 +385,7 @@ function OrderCard({
         <div>
           <h4 className="text-sm font-extrabold text-[#0F172A]">{order.product_name}</h4>
           <p className="text-xs font-medium text-slate-400 mt-0.5">
-            Gói: {order.plan_label} — Mã: <span className="font-bold text-[#0F172A]">{order.payment_code}</span>
+            Gói: <span className="font-extrabold text-[#2563EB]">{getFormattedPlanLabel(order)}</span> — Mã: <span className="font-bold text-[#0F172A]">{order.payment_code}</span>
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -822,18 +858,18 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="container-bow py-8 sm:py-12">
-      <div className="flex flex-col gap-8 lg:flex-row">
-        {/* SIDEBAR NAVIGATION */}
-        <aside className="w-full lg:w-64 shrink-0">
-          <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-5 shadow-xs">
+    <div className="container-bow py-4 sm:py-8 lg:py-12">
+      <div className="flex flex-col gap-5 lg:gap-8 lg:flex-row">
+        {/* SIDEBAR NAVIGATION (Desktop Only - Mobile is integrated into Avatar Header Dropdown) */}
+        <aside className="hidden lg:block w-64 shrink-0">
+          <div className="rounded-[28px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-xs">
             {/* Header info */}
-            <div className="flex items-center gap-3 border-b border-slate-50 pb-5">
+            <div className="flex items-center gap-3 border-b border-slate-50 dark:border-slate-800 pb-5">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-sm font-black text-white shadow-xs">
                 {(session.user.email || 'U').charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <h4 className="text-sm font-extrabold text-[#0F172A] truncate">
+                <h4 className="text-sm font-extrabold text-[#0F172A] dark:text-white truncate">
                   {session.user.user_metadata.full_name || 'Thành viên'}
                 </h4>
                 <p className="text-[10px] text-slate-400 font-semibold truncate mt-0.5">{session.user.email}</p>
@@ -844,6 +880,7 @@ export default function Dashboard() {
             <nav className="mt-4 space-y-1">
               {[
                 { id: 'orders', label: '📋 Lịch sử đơn hàng' },
+                { id: 'affiliate', label: '🤝 Giới thiệu bạn bè' },
                 { id: 'tickets', label: '🎫 Yêu cầu hỗ trợ' },
                 { id: 'wallet', label: '💳 Ví tiền & Nạp số dư' },
                 { id: 'profile', label: '👤 Hồ sơ của tôi' },
@@ -867,7 +904,33 @@ export default function Dashboard() {
         </aside>
 
         {/* CONTENT AREA */}
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 space-y-4">
+          {/* Compact Mobile Tabs Strip (1-tap quick switch, ultra-compact) */}
+          <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {[
+              { id: 'orders', label: '📋 Đơn hàng' },
+              { id: 'affiliate', label: '🤝 Giới thiệu' },
+              { id: 'tickets', label: '🎫 Hỗ trợ' },
+              { id: 'wallet', label: '💳 Ví tiền' },
+              { id: 'profile', label: '👤 Hồ sơ' },
+              { id: 'favorites', label: '💙 Yêu thích' },
+              { id: 'settings', label: '⚙️ Cài đặt' },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setSearchParams({ tab: t.id })}
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all whitespace-nowrap ${
+                  activeTab === t.id
+                    ? 'bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-white shadow-xs'
+                    : 'bg-white dark:bg-[#18243E] text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
           {/* TAB: ORDERS */}
           {activeTab === 'orders' && (
             <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-6 shadow-xs">
@@ -1282,6 +1345,9 @@ export default function Dashboard() {
               )}
             </div>
           )}
+
+          {/* TAB: AFFILIATE */}
+          {activeTab === 'affiliate' && <UserAffiliateTab />}
 
           {/* TAB: SUPPORT TICKETS */}
           {activeTab === 'tickets' && <UserTicketsTab />}

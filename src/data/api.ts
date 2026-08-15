@@ -68,15 +68,20 @@ const GROUP_LABEL: Record<ProductType, string> = {
 };
 
 const PRODUCT_COLS =
-  'id, category_id, name, slug, short_description, description, logo_url, banner_url, type, accent, badge, base_price, original_price, rating, sold, is_active, is_featured, sort_order, created_at, updated_at';
+  'id, category_id, name, slug, short_description, description, logo_url, banner_url, type, accent, badge, base_price, original_price, rating, sold, is_active, is_featured, sort_order, affiliate_enabled, affiliate_type, affiliate_reward, affiliate_discount, price_ctv, created_at, updated_at';
 
 function mapPlan(p: PlanRow): PlanTier {
+  const planLabel = p.duration && p.name && !p.name.toLowerCase().includes(p.duration.toLowerCase())
+    ? `${p.name} (${p.duration})`
+    : p.name;
+
   return {
     id: p.id,
-    label: p.name,
+    label: planLabel,
     duration: p.duration ?? '',
     price: Number(p.price ?? 0),
     originalPrice: p.original_price != null ? Number(p.original_price) : undefined,
+    priceCtv: p.price_ctv != null ? Number(p.price_ctv) : undefined,
     highlight: p.is_highlight || undefined,
     badge: p.badge || undefined,
     usageType: p.usage_type || undefined,
@@ -107,6 +112,11 @@ function mapProduct(
     accent: row.accent ?? '#06b6d4',
     price: Number(row.base_price ?? 0),
     originalPrice: row.original_price != null ? Number(row.original_price) : undefined,
+    priceCtv: row.price_ctv != null ? Number(row.price_ctv) : undefined,
+    affiliateEnabled: row.affiliate_enabled !== false,
+    affiliateType: row.affiliate_type ?? 'fixed',
+    affiliateReward: row.affiliate_reward != null ? Number(row.affiliate_reward) : undefined,
+    affiliateDiscount: row.affiliate_discount != null ? Number(row.affiliate_discount) : undefined,
     rating: row.rating != null ? Number(row.rating) : 5,
     sold: row.sold ?? 0,
     featured: row.is_featured || undefined,
