@@ -596,13 +596,20 @@ function OrderCard({
 }
 
 export default function Dashboard() {
-  const { session, balance, refreshBalance, loading: authLoading } = useAuth();
+  const { session, balance, refreshBalance, loading: authLoading, isAdmin } = useAuth();
   const { favoriteProducts, loadingFavorites, toggleFavorite } = useFavorites();
   const [searchParams, setSearchParams] = useSearchParams();
   const nav = useNavigate();
 
   // Tab State
   const activeTab = searchParams.get('tab') || 'orders';
+
+  // Auto redirect admin away from user affiliate tab
+  useEffect(() => {
+    if (isAdmin && activeTab === 'affiliate') {
+      setSearchParams({ tab: 'orders' });
+    }
+  }, [isAdmin, activeTab, setSearchParams]);
 
   // Orders State & Pagination
   const [orders, setOrders] = useState<Order[]>([]);
@@ -880,7 +887,7 @@ export default function Dashboard() {
             <nav className="mt-4 space-y-1">
               {[
                 { id: 'orders', label: '📋 Lịch sử đơn hàng' },
-                { id: 'affiliate', label: '🤝 Giới thiệu bạn bè' },
+                ...(!isAdmin ? [{ id: 'affiliate', label: '🤝 Giới thiệu bạn bè' }] : []),
                 { id: 'tickets', label: '🎫 Yêu cầu hỗ trợ' },
                 { id: 'wallet', label: '💳 Ví tiền & Nạp số dư' },
                 { id: 'profile', label: '👤 Hồ sơ của tôi' },
@@ -909,7 +916,7 @@ export default function Dashboard() {
           <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             {[
               { id: 'orders', label: '📋 Đơn hàng' },
-              { id: 'affiliate', label: '🤝 Giới thiệu' },
+              ...(!isAdmin ? [{ id: 'affiliate', label: '🤝 Giới thiệu' }] : []),
               { id: 'tickets', label: '🎫 Hỗ trợ' },
               { id: 'wallet', label: '💳 Ví tiền' },
               { id: 'profile', label: '👤 Hồ sơ' },
@@ -1347,7 +1354,7 @@ export default function Dashboard() {
           )}
 
           {/* TAB: AFFILIATE */}
-          {activeTab === 'affiliate' && <UserAffiliateTab />}
+          {activeTab === 'affiliate' && !isAdmin && <UserAffiliateTab />}
 
           {/* TAB: SUPPORT TICKETS */}
           {activeTab === 'tickets' && <UserTicketsTab />}
