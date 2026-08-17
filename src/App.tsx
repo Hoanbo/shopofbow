@@ -39,6 +39,45 @@ const lazyAdmin = (el: ReactNode) => <Suspense fallback={adminSpinner}>{el}</Sus
 
 const router = createBrowserRouter([
   { path: '/login', element: <Auth /> },
+
+  // ─────────────── Admin ───────────────
+  // Bọc toàn bộ nhánh /admin/* bằng ProtectedRoute. 
+  // Bất kỳ đường dẫn nào bắt đầu bằng /admin (kể cả route chưa có như /admin/wallet)
+  // đều bắt buộc phải qua ProtectedRoute trước; nếu chưa đăng nhập sẽ lập tức bị redirect về /login.
+  {
+    path: '/admin',
+    element: lazyAdmin(<ProtectedRoute />),
+    children: [
+      {
+        element: lazyAdmin(<AdminLayout />),
+        children: [
+          { index: true, element: lazyAdmin(<Dashboard />) },
+          { path: 'products', element: lazyAdmin(<AdminProducts />) },
+          { path: 'products/new', element: lazyAdmin(<ProductEditor />) },
+          { path: 'products/:id', element: lazyAdmin(<ProductEditor />) },
+          { path: 'prompts', element: lazyAdmin(<AdminPrompts />) },
+          { path: 'reviews', element: lazyAdmin(<AdminReviews />) },
+          { path: 'categories', element: lazyAdmin(<AdminCategories />) },
+          { path: 'faqs', element: lazyAdmin(<AdminFaqs />) },
+          { path: 'contact', element: <Navigate to="/admin/tickets" replace /> },
+          { path: 'orders', element: lazyAdmin(<AdminOrders />) },
+          { path: 'coupons', element: lazyAdmin(<AdminCoupons />) },
+          { path: 'affiliates', element: lazyAdmin(<AdminAffiliates />) },
+          { path: 'tickets', element: lazyAdmin(<AdminTickets />) },
+          { path: 'audit-logs', element: lazyAdmin(<AdminAuditLogs />) },
+          { path: 'audit', element: <Navigate to="/admin/audit-logs" replace /> },
+          { path: 'activity', element: lazyAdmin(<AdminAuditLogs />) },
+          { path: 'analytics', element: <Navigate to="/admin" replace /> },
+          { path: 'wallet', element: <Navigate to="/admin/users" replace /> },
+          { path: 'users', element: lazyAdmin(<AdminUsers />) },
+          { path: 'settings', element: lazyAdmin(<AdminSettings />) },
+          { path: '*', element: <Navigate to="/admin" replace /> },
+        ],
+      },
+    ],
+  },
+
+  // ─────────────── Public Pages ───────────────
   {
     element: <Layout />,
     children: [
@@ -63,37 +102,6 @@ const router = createBrowserRouter([
       { path: '/products/:slug', element: <Detail category="all" base="/products" crumb="Sản phẩm" /> },
       { path: '/contact', element: <Contact /> },
       { path: '*', element: <NotFound /> },
-    ],
-  },
-  // ─────────────── Admin ───────────────
-  // Không có trang login riêng cho admin — dùng chung /login với người dùng.
-  // ProtectedRoute sẽ chuyển hướng về /login khi chưa đăng nhập.
-  {
-    element: lazyAdmin(<ProtectedRoute />),
-    children: [
-      {
-        path: '/admin',
-        element: lazyAdmin(<AdminLayout />),
-        children: [
-          { index: true, element: lazyAdmin(<Dashboard />) },
-          { path: 'products', element: lazyAdmin(<AdminProducts />) },
-          { path: 'products/new', element: lazyAdmin(<ProductEditor />) },
-          { path: 'products/:id', element: lazyAdmin(<ProductEditor />) },
-          { path: 'prompts', element: lazyAdmin(<AdminPrompts />) },
-          { path: 'reviews', element: lazyAdmin(<AdminReviews />) },
-          { path: 'categories', element: lazyAdmin(<AdminCategories />) },
-          { path: 'faqs', element: lazyAdmin(<AdminFaqs />) },
-          { path: 'contact', element: <Navigate to="/admin/tickets" replace /> },
-          { path: 'orders', element: lazyAdmin(<AdminOrders />) },
-          { path: 'coupons', element: lazyAdmin(<AdminCoupons />) },
-          { path: 'affiliates', element: lazyAdmin(<AdminAffiliates />) },
-          { path: 'tickets', element: lazyAdmin(<AdminTickets />) },
-          { path: 'audit-logs', element: lazyAdmin(<AdminAuditLogs />) },
-          { path: 'activity', element: lazyAdmin(<AdminAuditLogs />) },
-          { path: 'users', element: lazyAdmin(<AdminUsers />) },
-          { path: 'settings', element: lazyAdmin(<AdminSettings />) },
-        ],
-      },
     ],
   },
 ]);

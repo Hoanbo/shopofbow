@@ -54,11 +54,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // isAdmin là giá trị DERIVED từ session
+  // isAdmin là giá trị DERIVED từ session + profile role
   const isAdmin = useMemo(() => {
     const email = session?.user?.email?.toLowerCase();
-    return email ? ADMIN_EMAILS.includes(email) : false;
-  }, [session]);
+    const isEmailAdmin = email ? ADMIN_EMAILS.includes(email) : false;
+    const isRoleAdmin = profile?.role === 'admin';
+    const isMetaAdmin = (session?.user as any)?.user_metadata?.role === 'admin' || (session?.user as any)?.app_metadata?.role === 'admin';
+    return isEmailAdmin || isRoleAdmin || isMetaAdmin;
+  }, [session, profile?.role]);
 
   const isCtv = useMemo(() => {
     return profile?.role === 'ctv';
