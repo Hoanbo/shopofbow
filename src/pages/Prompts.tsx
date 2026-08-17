@@ -268,17 +268,23 @@ function CustomFilterDropdown({
   const selectedOption = options.find((o) => o.id === value) || options[0];
 
   return (
-    <div ref={ref} className="relative z-40">
+    <div ref={ref} className={`relative ${isOpen ? 'z-50' : 'z-20'} w-full sm:w-auto`}>
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-[#131C32] px-3.5 py-2.5 text-xs font-extrabold text-slate-800 dark:text-slate-200 shadow-xs hover:border-blue-400 dark:hover:border-blue-500 transition cursor-pointer whitespace-nowrap"
+        className={`flex w-full sm:w-auto items-center justify-between gap-2 rounded-2xl border bg-white dark:bg-[#131C32] px-3.5 py-2.5 text-xs font-extrabold shadow-xs transition cursor-pointer whitespace-nowrap ${
+          isOpen
+            ? 'border-blue-500 text-blue-600 dark:text-blue-400 ring-2 ring-blue-500/20'
+            : 'border-slate-200/90 dark:border-slate-700/80 text-slate-800 dark:text-slate-200 hover:border-blue-400 dark:hover:border-blue-500'
+        }`}
       >
-        {prefix && <span className="text-[11px] font-bold text-slate-400">{prefix}:</span>}
-        {selectedOption.icon && <span className="text-sm">{selectedOption.icon}</span>}
-        <span>{selectedOption.label}</span>
+        <div className="flex items-center gap-2 truncate">
+          {prefix && <span className="text-[11px] font-bold text-slate-400 shrink-0">{prefix}:</span>}
+          {selectedOption.icon && <span className="text-sm shrink-0">{selectedOption.icon}</span>}
+          <span className="truncate">{selectedOption.label}</span>
+        </div>
         <svg
-          className={`h-3.5 w-3.5 text-slate-400 transition-transform ${isOpen ? 'rotate-180 text-blue-500' : ''}`}
+          className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-blue-500' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -289,7 +295,7 @@ function CustomFilterDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-50 mt-1.5 w-60 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-[#18243E]/95 p-1.5 shadow-2xl backdrop-blur-md animate-scale-up space-y-0.5 max-h-72 overflow-y-auto">
+        <div className="absolute left-0 sm:left-auto sm:right-0 top-full z-50 mt-1.5 w-full sm:w-64 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-[#18243E]/95 p-1.5 shadow-2xl backdrop-blur-md animate-scale-up space-y-0.5 max-h-72 overflow-y-auto">
           {options.map((opt) => {
             const isSelected = opt.id === value;
             return (
@@ -540,7 +546,7 @@ export default function Prompts() {
           </div>
 
           {/* Right: Custom Elegant Dropdowns (Use-Case + Sorting) */}
-          <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
             <CustomFilterDropdown
               value={activeUseCase}
               onChange={setActiveUseCase}
