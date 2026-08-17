@@ -578,15 +578,23 @@ export default function AdminPrompts() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Nội dung câu lệnh Prompt (*)</label>
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-700 dark:text-slate-300">Nội dung câu lệnh Prompt (*)</label>
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">
+                      💡 Dùng [Tên biến] để tạo form điền
+                    </span>
+                  </div>
                   <textarea
                     value={formData.prompt_content}
                     onChange={(e) => setFormData({ ...formData, prompt_content: e.target.value })}
-                    placeholder="Nhập chi tiết câu lệnh prompt..."
+                    placeholder="Nhập chi tiết câu lệnh prompt... Ví dụ: Đóng vai chuyên gia về [LĨNH VỰC] viết bài bán [TÊN SẢN PHẨM] với tông giọng [TÔNG GIỌNG: Hài hước]..."
                     rows={6}
                     required
                     className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3 font-mono text-xs font-medium focus:border-[#2563EB] focus:outline-none transition leading-relaxed"
                   />
+                  <p className="text-[11px] text-slate-400">
+                    ✨ Cú pháp <code className="text-amber-500 font-bold">[Tên biến]</code> hoặc <code className="text-amber-500 font-bold">[Tên biến: Gợi ý]</code> sẽ tự động biến thành ô nhập liệu tương tác trên giao diện người dùng.
+                  </p>
                 </div>
 
                 <div className="space-y-1">
