@@ -411,7 +411,7 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
 
     const userEmail = userData.user.email;
     const formattedPrice = Number(order.price || 0).toLocaleString('vi-VN') + 'đ';
-    const emailType = type || (order.status === 'refunded' ? 'refunded' : order.status === 'processing' ? 'processing' : 'completed');
+    const emailType = type || payload.event || (order.status === 'refunded' ? 'refunded' : order.status === 'processing' ? 'processing' : 'completed');
 
     let emailSubject = '';
     let badgeText = '';
@@ -421,7 +421,47 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
     let btnText = '';
     let btnUrl = '';
 
-    if (emailType === 'refunded') {
+    if (emailType === 'expiry_7_days') {
+      emailSubject = `⏰ [BOW] Gói ${order.product_name} của bạn sẽ hết hạn sau 7 ngày!`;
+      badgeText = 'NHẮC HẠN TRƯỚC 7 NGÀY';
+      badgeColor = 'background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);';
+      titleText = '⏰ Gói dịch vụ sắp hết hạn sau 7 ngày!';
+      descHtml = `Gói dịch vụ <strong style="color: #ffffff;">${escapeHtml(order.product_name)}</strong> (Đơn #${order.payment_code}) của bạn sẽ hết hạn vào ngày <strong>${payload.expires_at_formatted || 'sắp tới'}</strong>. Vui lòng gia hạn để tránh gián đoạn dịch vụ.`;
+      btnText = '🔄 GIA HẠN DỊCH VỤ TRÊN WEB';
+      btnUrl = `${SITE_URL}/products`;
+    } else if (emailType === 'expiry_3_days') {
+      emailSubject = `⚠️ [BOW] Gói ${order.product_name} của bạn chỉ còn 3 ngày sử dụng!`;
+      badgeText = 'CÒN 3 NGÀY HẾT HẠN';
+      badgeColor = 'background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);';
+      titleText = '⚠️ Gói dịch vụ sắp hết hạn sau 3 ngày!';
+      descHtml = `Gói dịch vụ <strong style="color: #ffffff;">${escapeHtml(order.product_name)}</strong> (Đơn #${order.payment_code}) của bạn chỉ còn <strong>3 ngày</strong> sử dụng (Hạn dùng: ${payload.expires_at_formatted || 'sắp tới'}). Hãy gia hạn ngay hôm nay!`;
+      btnText = '⚡ GIA HẠN NGAY BÂY GIỜ';
+      btnUrl = `${SITE_URL}/products`;
+    } else if (emailType === 'expiry_1_day') {
+      emailSubject = `🚨 [BOW KHẨN CẤP] Gói ${order.product_name} của bạn sẽ hết hạn vào ngày mai!`;
+      badgeText = 'HẾT HẠN VÀO NGÀY MAI';
+      badgeColor = 'background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);';
+      titleText = '🚨 Gói dịch vụ sẽ hết hạn vào ngày mai!';
+      descHtml = `Khẩn cấp: Gói dịch vụ <strong style="color: #ffffff;">${escapeHtml(order.product_name)}</strong> (Đơn #${order.payment_code}) của bạn sẽ chính thức hết hạn vào ngày mai (<strong>${payload.expires_at_formatted || 'ngày mai'}</strong>). Vui lòng gia hạn ngay để không bị ngắt kết nối tài khoản.`;
+      btnText = '🚨 GIA HẠN KHẨN CẤP';
+      btnUrl = `${SITE_URL}/products`;
+    } else if (emailType === 'expiry_expired') {
+      emailSubject = `🔴 [BOW] Gói ${order.product_name} của bạn đã kết thúc chu kỳ sử dụng`;
+      badgeText = 'ĐÃ HẾT HẠN SỬ DỤNG';
+      badgeColor = 'background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3);';
+      titleText = 'Gói dịch vụ đã hết hạn';
+      descHtml = `Gói dịch vụ <strong style="color: #ffffff;">${escapeHtml(order.product_name)}</strong> (Đơn #${order.payment_code}) của bạn đã kết thúc thời gian sử dụng. Bạn có thể gia hạn lại hoặc đặt mua gói mới bất cứ lúc nào.`;
+      btnText = '🛍️ MUA HOẶC GIA HẠN GÓI MỚI';
+      btnUrl = `${SITE_URL}/products`;
+    } else if (emailType === 'manual_reminder') {
+      emailSubject = `🔔 [BOW] Nhắc hạn dịch vụ ${order.product_name}`;
+      badgeText = 'NHẮC GIA HẠN DỊCH VỤ';
+      badgeColor = 'background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3);';
+      titleText = '🔔 Thông báo nhắc gia hạn dịch vụ';
+      descHtml = `${escapeHtml(payload.custom_message || `Gói dịch vụ ${order.product_name} (Đơn #${order.payment_code}) của bạn sắp hết hạn. Vui lòng kiểm tra và gia hạn dịch vụ.`)}`;
+      btnText = '🌐 TRUY CẬP WEBSITE BOW';
+      btnUrl = `${SITE_URL}/dashboard?tab=orders`;
+    } else if (emailType === 'refunded') {
       emailSubject = `💸 [BOW] Đã hoàn tiền đơn hàng #${order.payment_code} vào số dư ví của bạn!`;
       badgeText = 'HOÀN TIỀN VỀ VÍ';
       badgeColor = 'background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);';

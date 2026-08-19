@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
@@ -6,6 +6,7 @@ import { SearchIcon } from '../../components/icons';
 import { useToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { Pagination } from '../../components/admin/Pagination';
+import { useRealtimeEvent } from '../../services/realtime';
 
 type Order = {
   id: string;
@@ -24,6 +25,10 @@ type Order = {
   expires_at?: string;
   renewal_policy?: string;
   target_account?: string;
+  renewed_from_order_id?: string;
+  superseded_by_order_id?: string;
+  supersede_reason?: string;
+  superseded_at?: string;
   created_at: string;
   profiles?: {
     email: string;
@@ -308,18 +313,43 @@ export default function AdminOrders() {
     actor_name: string;
     created_at: string;
   }>>([]);
+  const [expiryReminders, setExpiryReminders] = useState<Array<{
+    id: string;
+    notification_type: string;
+    days_left: number;
+    scheduled_for: string;
+    sent_at: string;
+    status: string;
+    metadata?: any;
+  }>>([]);
+  const [renewedFromOrder, setRenewedFromOrder] = useState<any | null>(null);
+  const [supersededByOrder, setSupersededByOrder] = useState<any | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [isManualReminderOpen, setIsManualReminderOpen] = useState(false);
+  const [manualCustomNote, setManualCustomNote] = useState('');
+  const [sendingManualReminder, setSendingManualReminder] = useState(false);
+  const [triggeringCron, setTriggeringCron] = useState(false);
 
   const openOrderDetail = async (order: Order) => {
     setSelectedOrderDetail(order);
     setLoadingDetail(true);
     setUserProfileDetail(null);
     setOrderTimeline([]);
+    setExpiryReminders([]);
+    setRenewedFromOrder(null);
+    setSupersededByOrder(null);
 
     try {
-      const [profileRes, timelineRes] = await Promise.all([
+      const [profileRes, timelineRes, reminderRes, renewalFromRes, supersedeByRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', order.user_id).maybeSingle(),
         supabase.from('order_status_history').select('*').eq('order_id', order.id).order('created_at', { ascending: true }),
+        (supabase.from('order_expiry_notifications') as any).select('*').eq('order_id', order.id).order('created_at', { ascending: true }),
+        order.renewed_from_order_id
+          ? (supabase.from('orders') as any).select('id, payment_code, status, product_name, plan_label, created_at').eq('id', order.renewed_from_order_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        order.superseded_by_order_id
+          ? (supabase.from('orders') as any).select('id, payment_code, status, product_name, plan_label, created_at').eq('id', order.superseded_by_order_id).maybeSingle()
+          : (supabase.from('orders') as any).select('id, payment_code, status, product_name, plan_label, created_at').eq('renewed_from_order_id', order.id).not('status', 'in', '("cancelled","refunded")').maybeSingle(),
       ]);
 
       if (profileRes.data) {
@@ -328,10 +358,109 @@ export default function AdminOrders() {
       if (timelineRes.data) {
         setOrderTimeline(timelineRes.data);
       }
+      if (reminderRes.data) {
+        setExpiryReminders(reminderRes.data as any);
+      }
+      if (renewalFromRes.data) {
+        setRenewedFromOrder(renewalFromRes.data);
+      }
+      if (supersedeByRes.data) {
+        setSupersededByOrder(supersedeByRes.data);
+      }
     } catch (err) {
       console.error('Error fetching order/user detail:', err);
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const sendOrderEmail = async (
+    orderId: string,
+    type: 'completed' | 'refunded' | 'processing' | 'cancelled' | 'manual_reminder' | 'expiry_7_days' | 'expiry_3_days' | 'expiry_1_day' | 'expiry_expired',
+    customMessage?: string
+  ) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+
+      const response = await fetch('/api/email-notify', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          order_id: orderId,
+          type,
+          custom_message: customMessage,
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn('[sendOrderEmail] Non-200 response:', response.status);
+        return { email_sent: false, message: `HTTP ${response.status}` };
+      }
+
+      const resData = await response.json();
+      return {
+        email_sent: resData.status === 'sent',
+        message: resData.status,
+      };
+    } catch (err: any) {
+      console.warn('[sendOrderEmail] Error sending email:', err?.message || err);
+      return { email_sent: false, message: err?.message || 'Network error' };
+    }
+  };
+
+  const handleTriggerCronScan = async () => {
+    setTriggeringCron(true);
+    try {
+      const { data, error } = await (supabase as any).rpc('check_and_notify_expiring_orders');
+      if (error) throw error;
+      const sent = data?.reminders_sent?.total || 0;
+      toast.success(`Đã quét xong: Đã gửi ${sent} thông báo & email nhắc hạn!`);
+      if (selectedOrderDetail) {
+        openOrderDetail(selectedOrderDetail);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi quét đơn hàng sắp hết hạn.');
+    } finally {
+      setTriggeringCron(false);
+    }
+  };
+
+  const handleSendManualReminder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrderDetail) return;
+    setSendingManualReminder(true);
+    try {
+      const customNote = manualCustomNote.trim();
+      // 1. Ghi nhận DB (Chuông web notification + Tracking history)
+      const { data, error } = await (supabase as any).rpc('admin_send_manual_expiry_reminder', {
+        p_order_id: selectedOrderDetail.id,
+        p_custom_message: customNote || null,
+      });
+      if (error) throw error;
+      if (data?.success) {
+        // 2. Trực tiếp gửi Email qua /api/email-notify với Admin token
+        const emailRes = await sendOrderEmail(selectedOrderDetail.id, 'manual_reminder', customNote || undefined);
+        if (emailRes.email_sent) {
+          toast.success('Đã gửi thông báo chuông & Email nhắc hạn thành công tới khách hàng!');
+        } else {
+          toast.success(data.message || 'Đã gửi thông báo nhắc hạn thành công!');
+        }
+        setIsManualReminderOpen(false);
+        setManualCustomNote('');
+        openOrderDetail(selectedOrderDetail);
+      } else {
+        toast.error(data?.message || 'Không thể gửi thông báo.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Lỗi khi gửi thông báo.');
+    } finally {
+      setSendingManualReminder(false);
     }
   };
 
@@ -369,7 +498,7 @@ export default function AdminOrders() {
     onConfirm: async () => { },
   });
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
       const { data: ordersData, error: ordersError } = await supabase
@@ -406,31 +535,42 @@ export default function AdminOrders() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchOrders();
+  }, [fetchOrders]);
 
-    // Setup Realtime Listener on orders table for instant live updates
-    const ordersChannel = supabase
-      .channel('admin-orders-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'orders',
-        },
-        () => {
-          fetchOrders();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(ordersChannel);
-    };
+  // ── Realtime Hub: targeted order updates (no full refetch) ────────────────
+  // Khi có INSERT: fetch đơn mới (kèm profile) → prepend vào list
+  // Khi có UPDATE: patch đơn tại chỗ → không cần fetch lại toàn bộ list
+  const fetchSingleOrder = useCallback(async (orderId: string): Promise<Order | null> => {
+    try {
+      const { data } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
+      if (!data) return null;
+      const { data: prof } = await supabase.from('profiles').select('id, email, full_name').eq('id', data.user_id).maybeSingle();
+      return { ...data, profiles: prof ? { email: prof.email, full_name: prof.full_name } : undefined } as Order;
+    } catch {
+      return null;
+    }
   }, []);
+
+  useRealtimeEvent('orders:INSERT', useCallback(async (e: any) => {
+    const full = await fetchSingleOrder(e.payload.id);
+    if (!full) return;
+    setOrders((prev) => {
+      if (prev.some((o) => o.id === full.id)) return prev;
+      return [full, ...prev];
+    });
+  }, [fetchSingleOrder]));
+
+  useRealtimeEvent('orders:UPDATE', useCallback(async (e: any) => {
+    const full = await fetchSingleOrder(e.payload.id);
+    if (!full) return;
+    setOrders((prev) => prev.map((o) => (o.id === full.id ? { ...o, ...full } : o)));
+    // Also refresh detail modal if it's showing this order
+    setSelectedOrderDetail((prev) => prev?.id === full.id ? { ...prev, ...full } : prev);
+  }, [fetchSingleOrder]));
 
   // Tự động scroll đến đơn hàng mục tiêu nếu có param ?order_id=xxx
   useEffect(() => {
@@ -525,40 +665,7 @@ export default function AdminOrders() {
     });
   };
 
-  const sendOrderEmail = async (orderId: string, type: 'completed' | 'refunded' | 'processing' | 'cancelled') => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
 
-      const response = await fetch('/api/email-notify', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          order_id: orderId,
-          type,
-        }),
-      });
-
-      if (!response.ok) {
-        console.warn('[sendOrderEmail] Non-200 response:', response.status);
-        return { email_sent: false, message: `HTTP ${response.status}` };
-      }
-
-      const resData = await response.json();
-      return {
-        email_sent: resData.status === 'sent',
-        message: resData.status,
-      };
-    } catch (err: any) {
-      console.warn('[sendOrderEmail] Error sending email:', err?.message || err);
-      return { email_sent: false, message: err?.message || 'Network error' };
-    }
-  };
 
   const handleDeliver = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -641,12 +748,23 @@ export default function AdminOrders() {
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Đơn hàng</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Xem và bàn giao dịch vụ tài khoản premium cho khách hàng.</p>
         </div>
-        <button
-          onClick={fetchOrders}
-          className="rounded-xl bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-5 py-2.5 text-xs font-bold text-white shadow-md transition hover:scale-102 self-start sm:self-auto"
-        >
-          🔄 Tải lại đơn hàng
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleTriggerCronScan}
+            disabled={triggeringCron}
+            className="rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/80 px-4 py-2.5 text-xs font-bold text-amber-800 dark:text-amber-300 shadow-xs transition hover:scale-102 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          >
+            <span>{triggeringCron ? '⏳' : '⚡'}</span>
+            <span>{triggeringCron ? 'Đang quét...' : 'Quét nhắc hạn (7/3/1 ngày)'}</span>
+          </button>
+
+          <button
+            onClick={fetchOrders}
+            className="rounded-xl bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-5 py-2.5 text-xs font-bold text-white shadow-md transition hover:scale-102 cursor-pointer"
+          >
+            🔄 Tải lại đơn hàng
+          </button>
+        </div>
       </div>
 
       {/* FILTERS & SEARCH */}
@@ -1019,6 +1137,43 @@ export default function AdminOrders() {
                         </div>
                       </div>
 
+                      {/* Renewal Relationship Card (if this order is a renewal from an older order) */}
+                      {(selectedOrderDetail.renewed_from_order_id || renewedFromOrder) && (
+                        <div className="rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/60 dark:bg-blue-950/40 p-3 flex items-center justify-between text-xs gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">🔄</span>
+                            <div>
+                              <span className="font-bold text-blue-900 dark:text-blue-200 block">Đơn gia hạn tiếp nối</span>
+                              <span className="text-[11px] text-blue-600 dark:text-blue-300">
+                                Gia hạn từ đơn cũ: <strong>#{renewedFromOrder?.payment_code || selectedOrderDetail.renewed_from_order_id}</strong>
+                              </span>
+                            </div>
+                          </div>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 shrink-0">
+                            GIA HẠN TIẾP NỐI
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Superseded Relationship Card (if this older order has been superseded by a newer order) */}
+                      {(selectedOrderDetail.superseded_by_order_id || supersededByOrder) && (
+                        <div className="rounded-xl border border-purple-200 dark:border-purple-800/60 bg-purple-50/60 dark:bg-purple-950/40 p-3 flex items-center justify-between text-xs gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">⏸️</span>
+                            <div>
+                              <span className="font-bold text-purple-900 dark:text-purple-200 block">Đơn hàng đã được thay thế / gia hạn</span>
+                              <span className="text-[11px] text-purple-600 dark:text-purple-300">
+                                Thay thế bởi đơn mới: <strong>#{supersededByOrder?.payment_code || selectedOrderDetail.superseded_by_order_id}</strong>
+                                {selectedOrderDetail.supersede_reason === 'AUTO_DETECTED_RENEWAL' ? ' (Tự động nhận diện)' : ' (Gia hạn tường minh)'}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 shrink-0">
+                            ĐÃ THAY THẾ
+                          </span>
+                        </div>
+                      )}
+
                       {selectedOrderDetail.notes && (
                         <div className="bg-[#F8FAFC] dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800 text-xs">
                           <span className="font-bold text-slate-500 block mb-1">Ghi chú của khách:</span>
@@ -1054,7 +1209,147 @@ export default function AdminOrders() {
                   );
                 })()}
 
-                {/* Section 4: Lịch sử trạng thái đơn hàng (Timeline) */}
+                {/* Section 4: Quản lý & Lịch sử Nhắc hạn Độc lập (7 / 3 / 1 ngày & Hết hạn) */}
+                {selectedOrderDetail.status === 'completed' && (
+                  <div className="rounded-[22px] border border-amber-200/80 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-4 sm:p-5 space-y-3.5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                        <span>⏰</span> Tiến trình & Lịch sử nhắc hạn (4 Mốc độc lập)
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setIsManualReminderOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 text-[11px] font-bold shadow-xs transition hover:scale-102 cursor-pointer"
+                      >
+                        <span>📧</span> Gửi nhắc thủ công
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 text-xs">
+                      {/* Helper to render status with stop state */}
+                      {(() => {
+                        const renderStatus = (milestoneKey: string) => {
+                          const sentRecord = expiryReminders.find(r => r.notification_type === milestoneKey);
+                          if (sentRecord) {
+                            return (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300 shrink-0">
+                                ✅ Đã gửi ({new Date(sentRecord.sent_at).toLocaleDateString('vi-VN')} {new Date(sentRecord.sent_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })})
+                              </span>
+                            );
+                          }
+
+                          if (supersededByOrder || selectedOrderDetail.superseded_by_order_id) {
+                            const code = supersededByOrder?.payment_code || 'đơn mới';
+                            const isAuto = selectedOrderDetail.supersede_reason === 'AUTO_DETECTED_RENEWAL';
+                            return (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 px-2.5 py-1 text-[11px] font-extrabold text-[#2563EB] dark:text-[#35A8FF] shrink-0" title={`Đã được thay thế bởi đơn #${code}`}>
+                                ⏸ Đã dừng ({isAuto ? 'Tự động nhận diện gia hạn' : 'Khách đã gia hạn'} #{code})
+                              </span>
+                            );
+                          }
+
+                          if (selectedOrderDetail.status === 'cancelled') {
+                            return (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 shrink-0">
+                                ⏸ Đã dừng (Đơn đã hủy)
+                              </span>
+                            );
+                          }
+
+                          if (selectedOrderDetail.status === 'refunded') {
+                            return (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 px-2.5 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 shrink-0">
+                                ⏸ Đã dừng (Đã hoàn tiền)
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                              ⏳ Chưa đến hạn
+                            </span>
+                          );
+                        };
+
+                        return (
+                          <>
+                            {/* 7 Days Reminder */}
+                            <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-[#131C32] border border-slate-200/60 dark:border-slate-800 gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm">⏰</span>
+                                <div>
+                                  <span className="font-extrabold text-slate-800 dark:text-slate-200 block">Mốc trước 7 ngày</span>
+                                  <span className="text-[10px] text-slate-400">Email & Chuông báo khách hàng</span>
+                                </div>
+                              </div>
+                              {renderStatus('expiry_7_days')}
+                            </div>
+
+                            {/* 3 Days Reminder */}
+                            <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-[#131C32] border border-slate-200/60 dark:border-slate-800 gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm">⚠️</span>
+                                <div>
+                                  <span className="font-extrabold text-slate-800 dark:text-slate-200 block">Mốc trước 3 ngày</span>
+                                  <span className="text-[10px] text-slate-400">Cảnh báo sắp hết hạn</span>
+                                </div>
+                              </div>
+                              {renderStatus('expiry_3_days')}
+                            </div>
+
+                            {/* 1 Day Reminder */}
+                            <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-[#131C32] border border-slate-200/60 dark:border-slate-800 gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm">🚨</span>
+                                <div>
+                                  <span className="font-extrabold text-slate-800 dark:text-slate-200 block">Mốc trước 1 ngày (Ngày mai)</span>
+                                  <span className="text-[10px] text-slate-400">Nhắc nhở khẩn cấp trước 24h</span>
+                                </div>
+                              </div>
+                              {renderStatus('expiry_1_day')}
+                            </div>
+
+                            {/* Expired Milestone */}
+                            <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-[#131C32] border border-slate-200/60 dark:border-slate-800 gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm">🔴</span>
+                                <div>
+                                  <span className="font-extrabold text-slate-800 dark:text-slate-200 block">Mốc Đã hết hạn</span>
+                                  <span className="text-[10px] text-slate-400">Thông báo kết thúc chu kỳ</span>
+                                </div>
+                              </div>
+                              {renderStatus('expiry_expired')}
+                            </div>
+                          </>
+                        );
+                      })()}
+
+                      {/* Manual Reminder (if any) */}
+                      {(() => {
+                        const notifManual = expiryReminders.find(r => r.notification_type === 'manual_reminder');
+                        if (!notifManual) return null;
+                        return (
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-purple-50/60 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/80 gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm">📩</span>
+                              <div>
+                                <span className="font-extrabold text-purple-900 dark:text-purple-200 block">Lượt gửi nhắc thủ công bởi Admin</span>
+                                <span className="text-[10px] text-purple-600 dark:text-purple-300">
+                                  {notifManual.metadata?.custom_message ? `"${notifManual.metadata.custom_message}"` : 'Theo mẫu mặc định'}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 dark:bg-purple-900/60 border border-purple-300 dark:border-purple-700 px-2.5 py-1 text-[11px] font-extrabold text-purple-800 dark:text-purple-200 shrink-0">
+                              Đã gửi ({new Date(notifManual.sent_at).toLocaleDateString('vi-VN')} {new Date(notifManual.sent_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })})
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 5: Lịch sử trạng thái đơn hàng (Timeline) */}
                 {orderTimeline.length > 0 && (
                   <div className="rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A]/60 bg-white dark:bg-[#18243E]/40 p-4 sm:p-5 space-y-3">
                     <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
@@ -1180,6 +1475,56 @@ export default function AdminOrders() {
                 className="flex-1 rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] hover:from-sky-500 hover:to-blue-700 py-3 text-xs font-bold text-white shadow-md disabled:opacity-60 transition"
               >
                 {submittingDelivery ? 'Đang gửi...' : '🚀 Bàn giao ngay'}
+              </button>
+            </div>
+          </form>
+        </div>,
+        document.body
+      )}
+
+      {/* RENDER MODAL GỬI NHẮC HẠN THỦ CÔNG (PORTAL) */}
+      {isManualReminderOpen && selectedOrderDetail && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity" onClick={() => !sendingManualReminder && setIsManualReminderOpen(false)} />
+
+          <form onSubmit={handleSendManualReminder} className="relative z-[100000] w-full max-w-md transform overflow-hidden rounded-[28px] border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-[#18243E] p-6 sm:p-8 shadow-2xl transition-all text-left space-y-4">
+            <div>
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span>📧</span> Gửi email nhắc gia hạn
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-300 font-semibold mt-1">
+                Gửi đến: <strong className="text-slate-900 dark:text-white">{userProfileDetail?.email || selectedOrderDetail.profiles?.email || 'Khách hàng'}</strong>
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+                Lời nhắn tùy chỉnh (Tùy chọn)
+              </label>
+              <textarea
+                value={manualCustomNote}
+                onChange={(e) => setManualCustomNote(e.target.value)}
+                placeholder="Để trống sẽ gửi lời nhắc mẫu chuẩn của hệ thống..."
+                rows={3}
+                className="w-full rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-900/60 p-3.5 text-xs font-bold outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] text-slate-900 dark:text-white"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 mt-4">
+              <button
+                type="button"
+                disabled={sendingManualReminder}
+                onClick={() => setIsManualReminderOpen(false)}
+                className="flex-1 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={sendingManualReminder}
+                className="flex-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 py-3 text-xs font-bold text-white shadow-md disabled:opacity-60 transition cursor-pointer"
+              >
+                {sendingManualReminder ? 'Đang gửi...' : '📧 Gửi ngay'}
               </button>
             </div>
           </form>

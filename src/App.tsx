@@ -9,8 +9,27 @@ import Prompts from './pages/Prompts';
 import NotFound from './pages/NotFound';
 import Auth from './pages/Auth';
 import ClientDashboard from './pages/Dashboard';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { FavoritesProvider } from './context/FavoritesContext';
+import { RealtimeProvider } from './services/realtime';
+
+function TicketsRoute() {
+  const { session, isAdmin, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="grid min-h-dvh place-items-center bg-[#0B1224]">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-500/20 border-t-blue-500" />
+      </div>
+    );
+  }
+  if (!session) {
+    return <Navigate to="/contact" replace />;
+  }
+  if (isAdmin) {
+    return <Navigate to="/admin/tickets" replace />;
+  }
+  return <Navigate to="/dashboard?tab=support" replace />;
+}
 
 // Admin is code-split so the public site never downloads the dashboard bundle.
 const ProtectedRoute = lazy(() => import('./components/admin/ProtectedRoute'));
@@ -65,10 +84,10 @@ const router = createBrowserRouter([
           { path: 'affiliates', element: lazyAdmin(<AdminAffiliates />) },
           { path: 'tickets', element: lazyAdmin(<AdminTickets />) },
           { path: 'audit-logs', element: lazyAdmin(<AdminAuditLogs />) },
-          { path: 'audit', element: <Navigate to="/admin/audit-logs" replace /> },
+          { path: 'audit', element: lazyAdmin(<AdminAuditLogs />) },
           { path: 'activity', element: lazyAdmin(<AdminAuditLogs />) },
-          { path: 'analytics', element: <Navigate to="/admin" replace /> },
-          { path: 'wallet', element: <Navigate to="/admin/users" replace /> },
+          { path: 'analytics', element: lazyAdmin(<Dashboard />) },
+          { path: 'wallet', element: lazyAdmin(<AdminUsers />) },
           { path: 'users', element: lazyAdmin(<AdminUsers />) },
           { path: 'settings', element: lazyAdmin(<AdminSettings />) },
           { path: '*', element: <Navigate to="/admin" replace /> },
@@ -77,13 +96,14 @@ const router = createBrowserRouter([
     ],
   },
 
-  // ─────────────── Public Pages ───────────────
+  // ─────────────── Public & Client Pages ───────────────
   {
     element: <Layout />,
     children: [
       { path: '/', element: <Home /> },
       { path: '/dashboard', element: <ClientDashboard /> },
       { path: '/prompts', element: <Prompts /> },
+      { path: '/tickets', element: <TicketsRoute /> },
       { path: '/ai-tools', element: <Navigate to="/products" replace /> },
       { path: '/ai-tools/:slug', element: <Detail category="ai-tool" base="/products" crumb="Sản phẩm" /> },
       { path: '/premium-apps', element: <Navigate to="/products" replace /> },
@@ -109,9 +129,11 @@ const router = createBrowserRouter([
 export default function App() {
   return (
     <AuthProvider>
-      <FavoritesProvider>
-        <RouterProvider router={router} />
-      </FavoritesProvider>
+      <RealtimeProvider>
+        <FavoritesProvider>
+          <RouterProvider router={router} />
+        </FavoritesProvider>
+      </RealtimeProvider>
     </AuthProvider>
   );
 }

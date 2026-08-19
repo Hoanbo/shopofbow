@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Pagination } from '../../components/admin/Pagination';
 import AdminTicketDetailModal from '../../components/admin/AdminTicketDetailModal';
+import { useRealtimeEvent } from '../../services/realtime';
 
 interface AdminTicketRow {
   id: string;
@@ -71,13 +72,17 @@ export default function AdminTickets() {
 
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
   const searchParamQ = searchParams.get('q') || searchParams.get('search');
+  const statusParam = searchParams.get('status') || searchParams.get('filter');
 
-  // Initialize search query from ?q= only
+  // Initialize search query and activeFilter from URL
   useEffect(() => {
     if (searchParamQ) {
       setSearchQuery(searchParamQ);
     }
-  }, [searchParamQ]);
+    if (statusParam && ['pending', 'processing', 'resolved', 'closed', 'all'].includes(statusParam)) {
+      setActiveFilter(statusParam);
+    }
+  }, [searchParamQ, statusParam]);
 
   // Sync URL search param ?ticket=BOW-1001 with selectedTicketId WITHOUT altering searchQuery
   useEffect(() => {
@@ -106,21 +111,34 @@ export default function AdminTickets() {
     }
   };
 
-  // Realtime Ticket list listener
-  useEffect(() => {
-    const channel = supabase
-      .channel('admin-tickets-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'support_tickets' },
-        () => fetchAdminTickets()
-      )
-      .subscribe();
+  // Realtime: INSERT → prepend; UPDATE → patch in-place (no full refetch)
+  useRealtimeEvent('support_tickets:INSERT', useCallback(async (e: any) => {
+    const newId = e.payload?.id;
+    if (!newId) return;
+    try {
+      const { data } = await (supabase
+        .from('support_tickets')
+        .select('*, profiles:profiles!support_tickets_user_id_fkey(full_name, email), orders:orders(product_name, plan_label, payment_code)')
+        .eq('id', newId)
+        .maybeSingle() as any);
+      if (!data) return;
+      setTickets((prev) => {
+        if (prev.some((t) => t.id === data.id)) return prev;
+        return [data as AdminTicketRow, ...prev];
+      });
+    } catch (err) {
+      console.error('Realtime ticket insert fetch error:', err);
+    }
+  }, []));
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchAdminTickets]);
+  useRealtimeEvent('support_tickets:UPDATE', useCallback((e: any) => {
+    const updated = e.payload as AdminTicketRow;
+    if (!updated?.id) return;
+    setTickets((prev) =>
+      prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    );
+  }, []));
 
   // Filter & Search
   const filteredTickets = tickets.filter((t) => {

@@ -3,9 +3,11 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import CreateTicketModal from './CreateTicketModal';
 import UserTicketChatModal from './UserTicketChatModal';
+import { useRealtimeEvent } from '../../services/realtime';
 
 interface TicketRow {
   id: string;
+  user_id: string;
   ticket_number: string;
   subject: string;
   status: 'pending' | 'processing' | 'resolved' | 'closed';
@@ -65,22 +67,24 @@ export default function UserTicketsTab() {
     fetchTickets();
   }, [fetchTickets]);
 
-  // Realtime update listener
-  useEffect(() => {
-    if (!session?.user?.id) return;
-    const channel = supabase
-      .channel(`user-tickets-list-${session.user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'support_tickets', filter: `user_id=eq.${session.user.id}` },
-        () => fetchTickets()
-      )
-      .subscribe();
+  // Realtime Hub: INSERT → prepend; UPDATE → patch in-place
+  useRealtimeEvent('support_tickets:INSERT', useCallback((e: any) => {
+    const t = e.payload as TicketRow;
+    if (!session?.user?.id || t.user_id !== session.user.id) return;
+    setTickets((prev) => {
+      if (prev.some((r) => r.id === t.id)) return prev;
+      return [t, ...prev];
+    });
+  }, [session?.user?.id]));
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user?.id, fetchTickets]);
+  useRealtimeEvent('support_tickets:UPDATE', useCallback((e: any) => {
+    const t = e.payload as TicketRow;
+    if (!session?.user?.id || t.user_id !== session.user.id) return;
+    setTickets((prev) =>
+      prev.map((r) => (r.id === t.id ? { ...r, ...t } : r))
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    );
+  }, [session?.user?.id]));
 
   const filteredTickets = tickets.filter((t) => {
     if (activeFilter === 'all') return true;

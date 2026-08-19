@@ -16,6 +16,7 @@ import ReviewModal from '../components/user/ReviewModal';
 import OrderRenewalModal from '../components/user/OrderRenewalModal';
 import AppLogo from '../components/AppLogo';
 import { formatVND } from '../data/catalog';
+import { useRealtimeEvent } from '../services/realtime';
 
 const BANK_CONFIG = {
   bankId: 'MB', // MB Bank (mã VietQR)
@@ -736,39 +737,35 @@ export default function Dashboard() {
     if (session?.user?.id) {
       fetchOrders();
       refreshBalance();
-
-      // Supabase Realtime Subscription for User Orders Auto-Update & Celebration Popup
-      const userOrdersChannel = supabase
-        .channel(`user-orders-realtime-${session.user.id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'orders',
-            filter: `user_id=eq.${session.user.id}`,
-          },
-          (payload) => {
-            const oldStatus = (payload.old as any)?.status;
-            const newOrder = payload.new as Order;
-
-            // Auto-refresh orders & balance state without requiring F5 reload
-            fetchOrders();
-            refreshBalance();
-
-            // Detect if order status changed to 'completed' (bàn giao)
-            if (newOrder?.status === 'completed' && oldStatus !== 'completed') {
-              setDeliveredOrderModal(newOrder);
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(userOrdersChannel);
-      };
     }
-  }, [session?.user?.id, activeTab]);
+  }, [session?.user?.id]);
+
+  // ── Realtime Hub: user orders (INSERT/UPDATE) ───────────────────────────────────
+  // user-hub-{userId} đã subscribe orders của user này, ta chỉ cần consume event.
+  // Không cần tạo channel riêng; chỉ cần update state tại chỗ.
+  useRealtimeEvent('orders:INSERT', useCallback((e: any) => {
+    const o = e.payload as Order;
+    if (!session?.user?.id || o.user_id !== session.user.id) return;
+    setOrders((prev) => {
+      if (prev.some((r) => r.id === o.id)) return prev;
+      return [o, ...prev];
+    });
+  }, [session?.user?.id]));
+
+  useRealtimeEvent('orders:UPDATE', useCallback((e: any) => {
+    const o = e.payload as Order;
+    const oldStatus = (e.old as any)?.status;
+    if (!session?.user?.id || o.user_id !== session.user.id) return;
+    setOrders((prev) => prev.map((r) => (r.id === o.id ? { ...r, ...o } : r)));
+    refreshBalance();
+    // Cập nhật detail modal nếu đang mở
+    setSelectedDetailOrder((prev) => prev?.id === o.id ? { ...prev, ...o } : prev);
+    // Popup cố định khi đơn có sản phẩm được bàn giao
+    if (o.status === 'completed' && oldStatus !== 'completed') {
+      setDeliveredOrderModal(o);
+    }
+  }, [session?.user?.id, refreshBalance]));
+
 
   if (!session) return null;
 

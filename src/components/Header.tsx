@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import SearchBar from './SearchBar';
 import { SearchIcon, AppIcon, HeadsetIcon, SparkIcon } from './icons';
@@ -6,6 +6,7 @@ import newLogo from '../assets/new-logover2.png';
 import { useAuth } from '../context/AuthContext';
 import { useFavorites } from '../context/FavoritesContext';
 import { supabase } from '../lib/supabase';
+import { useRealtimeEvent } from '../services/realtime';
 
 interface HeaderNotification {
   id: string;
@@ -86,27 +87,33 @@ export default function Header() {
     };
 
     fetchNotifs();
+    // Realtime di chuyển sang RealtimeHub — không tạo channel mới ở đây
+  }, [session?.user?.id]);
 
-    // Subscribe to Realtime inserts & updates
-    const channel = supabase
-      .channel(`header-notifs-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-        },
-        () => {
-          fetchNotifs();
-        },
-      )
-      .subscribe();
+  // Cập nhật danh sách notification khi Hub phát sự kiện INSERT
+  const handleNotifInsert = useCallback(
+    (e: { payload: HeaderNotification }) => {
+      setNotifications((prev) => {
+        // Tránh duplicate
+        if (prev.some((n) => n.id === e.payload.id)) return prev;
+        return [e.payload, ...prev].slice(0, 10);
+      });
+    },
+    [],
+  );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user?.id, isAdmin]);
+  // Cập nhật is_read khi Hub phát sự kiện UPDATE
+  const handleNotifUpdate = useCallback(
+    (e: { payload: HeaderNotification }) => {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === e.payload.id ? { ...n, ...e.payload } : n)),
+      );
+    },
+    [],
+  );
+
+  useRealtimeEvent('notifications:INSERT', handleNotifInsert as any);
+  useRealtimeEvent('notifications:UPDATE', handleNotifUpdate as any);
 
   // Outside click listener for user menu & notification menu
   useEffect(() => {

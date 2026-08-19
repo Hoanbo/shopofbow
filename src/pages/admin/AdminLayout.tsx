@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { useRealtimeEvent } from '../../services/realtime';
 import newLogo from '../../assets/new-logover2.png';
 import {
   HomeIcon,
@@ -184,32 +185,29 @@ export default function AdminLayout() {
 
   useEffect(() => {
     fetchNotifs();
-
-    // Subscribe to new admin notifications via Realtime
-    const channel = supabase
-      .channel('admin-notifications')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: 'is_admin=eq.true',
-      }, (payload) => {
-        const newNotif = payload.new as Notif;
-        setNotifs((prev) => [newNotif, ...prev]);
-        // Play chime sound
-        if (!audioRef.current) {
-          audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2ozMVia0fXJlFEvLUmLxfbRmlgtKj2Bu/DMnFgqKDR3r+7ImFQlJC1spujCk1AgICVgn+S9kE0cHCFXlN26jEoZGR5PlM6yjUcVFhlIjce0lVATEhZGi8y3m1INERROi8u5nFILERRNjcq7nlIMERRMjsq6n1INERROjcm7oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMN');
-        }
-        audioRef.current.currentTime = 0;
-        audioRef.current.volume = 0.4;
-        audioRef.current.play().catch(() => {});
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // Realtime được xử lý bởi admin-hub-global trong RealtimeHub
   }, []);
+
+  // Thêm notification mới vào danh sách khi Hub phát sự kiện INSERT (is_admin = true)
+  const handleAdminNotifInsert = useCallback(
+    (e: { payload: Notif }) => {
+      if (!e.payload.is_admin) return;
+      setNotifs((prev) => {
+        if (prev.some((n) => n.id === e.payload.id)) return prev;
+        return [e.payload, ...prev];
+      });
+      // Play chime sound
+      if (!audioRef.current) {
+        audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2ozMVia0fXJlFEvLUmLxfbRmlgtKj2Bu/DMnFgqKDR3r+7ImFQlJC1spujCk1AgICVgn+S9kE0cHCFXlN26jEoZGR5PlM6yjUcVFhlIjce0lVATEhZGi8y3m1INERROi8u5nFILERRNjcq7nlIMERRMjsq6n1INERROjcm7oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMN');
+      }
+      audioRef.current.currentTime = 0;
+      audioRef.current.volume = 0.4;
+      audioRef.current.play().catch(() => {});
+    },
+    [],
+  );
+
+  useRealtimeEvent('notifications:INSERT', handleAdminNotifInsert as any);
 
   // Navigation Links List component with grouped categories
   const navList = (

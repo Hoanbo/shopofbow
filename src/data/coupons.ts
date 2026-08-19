@@ -16,6 +16,17 @@ export interface Coupon {
   start_at: string;
   expires_at?: string | null;
   is_active: boolean;
+  applies_to_all_products?: boolean;
+  product_ids?: string[];
+  coupon_products?: {
+    product_id: string;
+    products?: {
+      id: string;
+      name: string;
+      slug: string;
+      logo_url?: string;
+    };
+  }[];
   created_at: string;
   updated_at: string;
 }
@@ -50,15 +61,17 @@ export interface CouponValidationResult {
   discount_amount?: number;
   original_amount?: number;
   final_amount?: number;
+  applies_to_all_products?: boolean;
 }
 
 /**
- * Validate a coupon code server-side against an order amount and optional user id
+ * Validate a coupon code server-side against an order amount, optional user id and optional product id
  */
 export async function validateCouponCode(
   code: string,
   orderAmount: number,
-  userId?: string
+  userId?: string,
+  productId?: string
 ): Promise<CouponValidationResult> {
   try {
     const cleanCode = code.trim().toUpperCase();
@@ -70,6 +83,7 @@ export async function validateCouponCode(
       p_code: cleanCode,
       p_order_amount: orderAmount,
       p_user_id: userId || undefined,
+      p_product_id: productId && productId.length === 36 ? productId : undefined,
     });
 
     if (error) {

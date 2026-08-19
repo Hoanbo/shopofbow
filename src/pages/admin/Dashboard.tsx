@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { fetchStats } from '../../data/admin';
+import { useRealtimeEvent } from '../../services/realtime';
 
 type RangeMode = '7d' | '30d' | '90d' | '12m';
 
@@ -156,7 +157,7 @@ export default function Dashboard() {
   const [actionCounts, setActionCounts] = useState({
     pendingDelivery: 0,
     processing: 0,
-    contactMessages: 0,
+    pendingTickets: 0,
   });
 
   // Operational KPIs for Command Center Widget
@@ -186,44 +187,38 @@ export default function Dashboard() {
       setRawOrders(allOrders);
       setRecentOrders(allOrders.slice(0, 5));
 
-      // Compute action counts
+      // Compute action counts for orders
       const pendingDelivery = allOrders.filter((o) => o.status === 'pending_delivery').length;
       const processing = allOrders.filter((o) => o.status === 'processing').length;
 
-      let contactMessages = 0;
-      try {
-        const savedMsgs = localStorage.getItem('bow_inbox_messages');
-        if (savedMsgs) {
-          const msgs = JSON.parse(savedMsgs);
-          contactMessages = msgs.filter((m: any) => m.unread && !m.archived).length;
-        } else {
-          contactMessages = 2;
-        }
-      } catch {
-        contactMessages = 0;
-      }
-
-      setActionCounts({
-        pendingDelivery,
-        processing,
-        contactMessages,
-      });
-
-      // 2. Fetch profiles & operational KPIs
+      // 2. Fetch profiles, operational KPIs & support tickets
       const [
         { data: profilesData },
         { data: productsData },
         { data: pendingReviewsData },
         { data: couponsData },
+        { data: ticketsData },
       ] = await Promise.all([
         supabase.from('profiles').select('id, created_at, balance') as any,
         supabase.from('products').select('id, created_at') as any,
         supabase.from('product_reviews').select('id').eq('status', 'pending') as any,
         supabase.from('coupons').select('id, is_active, expires_at') as any,
+        supabase.from('support_tickets').select('id, status') as any,
       ]);
 
       const allProfiles: ProfileRow[] = profilesData || [];
       const allProducts: ProductRow[] = productsData || [];
+
+      // Pending/Processing tickets needing response from Admin
+      const pendingTickets = (ticketsData || []).filter(
+        (t: any) => t.status === 'pending' || t.status === 'processing'
+      ).length;
+
+      setActionCounts({
+        pendingDelivery,
+        processing,
+        pendingTickets,
+      });
 
       const totalUserBalance = (profilesData || []).reduce(
         (sum: number, p: any) => sum + Number(p.balance || 0),
@@ -480,7 +475,84 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData();
+    // Realtime được xử lý bởi admin-hub-global trong RealtimeHub
   }, []);
+
+  // Targeted handler: khi có order mới (INSERT) chỉ cập nhật bộ đếm và recent orders
+  const handleOrderInsert = useCallback((e: { payload: OrderRow }) => {
+    const o = e.payload;
+    setRawOrders((prev) => {
+      if (prev.some((r) => r.id === o.id)) return prev;
+      return [o, ...prev];
+    });
+    setRecentOrders((prev) => {
+      if (prev.some((r) => r.id === o.id)) return prev;
+      return [o, ...prev].slice(0, 5);
+    });
+    if (o.status === 'pending_delivery') {
+      setActionCounts((prev) => ({ ...prev, pendingDelivery: prev.pendingDelivery + 1 }));
+    }
+    if (o.status === 'processing') {
+      setActionCounts((prev) => ({ ...prev, processing: prev.processing + 1 }));
+    }
+  }, []);
+
+  // Targeted handler: khi order thay đổi trạng thái đồng bộ số liệu chính xác từ state cũ
+  const handleOrderUpdate = useCallback((e: { payload: OrderRow }) => {
+    const o = e.payload;
+    setRawOrders((prev) => {
+      const existing = prev.find((r) => r.id === o.id);
+      const oldStatus = existing?.status;
+      const newStatus = o.status;
+      if (oldStatus && oldStatus !== newStatus) {
+        setActionCounts((ac) => {
+          let pd = ac.pendingDelivery;
+          let pr = ac.processing;
+          if (oldStatus === 'pending_delivery') pd = Math.max(0, pd - 1);
+          if (oldStatus === 'processing') pr = Math.max(0, pr - 1);
+          if (newStatus === 'pending_delivery') pd += 1;
+          if (newStatus === 'processing') pr += 1;
+          return { ...ac, pendingDelivery: pd, processing: pr };
+        });
+      }
+      return prev.map((r) => (r.id === o.id ? { ...r, ...o } : r));
+    });
+    setRecentOrders((prev) => prev.map((r) => (r.id === o.id ? { ...r, ...o } : r)));
+  }, []);
+
+  // Handler sync đếm ticket cần phản hồi chính xác 100%
+  const refreshTicketCount = useCallback(async () => {
+    try {
+      const { data } = await (supabase.from('support_tickets').select('id, status') as any);
+      if (data) {
+        const pendingTickets = (data || []).filter(
+          (t: any) => t.status === 'pending' || t.status === 'processing'
+        ).length;
+        setActionCounts((prev) => ({ ...prev, pendingTickets }));
+      }
+    } catch (err) {
+      console.error('Error refreshing ticket count:', err);
+    }
+  }, []);
+
+  // Handler sync đếm đánh giá chờ duyệt chính xác 100%
+  const refreshReviewCount = useCallback(async () => {
+    try {
+      const { data } = await (supabase.from('product_reviews').select('id').eq('status', 'pending') as any);
+      if (data) {
+        setOperationalKPIs((prev) => ({ ...prev, pendingReviewsCount: data.length }));
+      }
+    } catch (err) {
+      console.error('Error refreshing review count:', err);
+    }
+  }, []);
+
+  useRealtimeEvent('orders:INSERT', handleOrderInsert as any);
+  useRealtimeEvent('orders:UPDATE', handleOrderUpdate as any);
+  useRealtimeEvent('support_tickets:INSERT', refreshTicketCount);
+  useRealtimeEvent('support_tickets:UPDATE', refreshTicketCount);
+  useRealtimeEvent('product_reviews:INSERT', refreshReviewCount);
+  useRealtimeEvent('product_reviews:UPDATE', refreshReviewCount);
 
   // Filtered Analytics per activeRange
   const rangeFilteredOrders = useMemo(() => {
@@ -611,7 +683,7 @@ export default function Dashboard() {
   const pathD = points.length > 0 ? `M ${points.join(' L ')}` : '';
   const areaD = points.length > 0 ? `${pathD} L ${chartWidth},${chartHeight} L 0,${chartHeight} Z` : '';
 
-  const totalActionNeeded = actionCounts.pendingDelivery + actionCounts.processing + actionCounts.contactMessages;
+  const totalActionNeeded = actionCounts.pendingDelivery + actionCounts.processing + actionCounts.pendingTickets;
 
   return (
     <div className="space-y-6">
@@ -898,9 +970,9 @@ export default function Dashboard() {
                 </div>
               </Link>
 
-              {/* Item 3: Yêu cầu liên hệ */}
+              {/* Item 3: Ticket cần phản hồi */}
               <Link
-                to="/admin/contact"
+                to="/admin/tickets?status=pending"
                 className="flex items-center justify-between p-3 rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition group"
               >
                 <div className="flex items-center gap-2.5">
@@ -909,7 +981,7 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-black text-[#2563EB] dark:text-[#35A8FF] bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-lg">
-                    {actionCounts.contactMessages}
+                    {actionCounts.pendingTickets}
                   </span>
                   <span className="text-slate-400 group-hover:translate-x-1 transition-transform">→</span>
                 </div>

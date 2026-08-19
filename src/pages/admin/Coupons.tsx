@@ -6,8 +6,18 @@ import { SearchIcon, CloseIcon } from '../../components/icons';
 import { Pagination } from '../../components/admin/Pagination';
 import type { Coupon, CouponUsage } from '../../data/coupons';
 
+interface ProductItem {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  is_active: boolean;
+  base_price?: number;
+}
+
 export default function AdminCoupons() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<ProductItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'expiring_soon' | 'inactive' | 'expired' | 'first_order'>('all');
@@ -18,6 +28,7 @@ export default function AdminCoupons() {
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
 
   // Usages Modal
   const [selectedUsageCoupon, setSelectedUsageCoupon] = useState<Coupon | null>(null);
@@ -52,6 +63,8 @@ export default function AdminCoupons() {
     start_at: new Date().toISOString().slice(0, 16),
     expires_at: '',
     is_active: true,
+    applies_to_all_products: true,
+    selected_product_ids: [] as string[],
   });
 
   const fetchCoupons = async () => {
@@ -59,7 +72,18 @@ export default function AdminCoupons() {
     try {
       const { data, error } = await (supabase
         .from('coupons')
-        .select('*')
+        .select(`
+          *,
+          coupon_products (
+            product_id,
+            products (
+              id,
+              name,
+              slug,
+              logo_url
+            )
+          )
+        `)
         .order('created_at', { ascending: false }) as any);
 
       if (error) throw error;
@@ -72,8 +96,24 @@ export default function AdminCoupons() {
     }
   };
 
+  const fetchAvailableProducts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, slug, logo_url, is_active, base_price')
+        .order('name', { ascending: true });
+
+      if (!error && data) {
+        setAvailableProducts(data as ProductItem[]);
+      }
+    } catch (err) {
+      console.error('Error fetching products for scope:', err);
+    }
+  };
+
   useEffect(() => {
     fetchCoupons();
+    fetchAvailableProducts();
   }, []);
 
   // Helper: Copy code to clipboard
@@ -128,6 +168,43 @@ export default function AdminCoupons() {
     };
   };
 
+  // Helper: Scope description meta
+  const getScopeMeta = (c: Coupon) => {
+    const isAll = c.applies_to_all_products !== false;
+    const prods = c.coupon_products || [];
+    if (isAll || prods.length === 0) {
+      return {
+        type: 'all',
+        label: 'Tất cả sản phẩm',
+        badge: '🌐 Tất cả sản phẩm',
+        badgeClass: 'bg-blue-500/10 text-[#2563EB] dark:text-[#35A8FF] border-blue-500/20',
+      };
+    }
+    if (prods.length === 1) {
+      const pName = prods[0]?.products?.name || '1 sản phẩm';
+      return {
+        type: 'single',
+        label: pName,
+        badge: `🎯 ${pName}`,
+        badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+      };
+    }
+    const firstPName = prods[0]?.products?.name || 'Sản phẩm';
+    return {
+      type: 'multiple',
+      label: `${firstPName} + ${prods.length - 1} sản phẩm`,
+      badge: `🎯 ${firstPName} + ${prods.length - 1} sản phẩm`,
+      badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+    };
+  };
+
+  // Filtered products in picker
+  const filteredProductsForPicker = useMemo(() => {
+    if (!productSearch.trim()) return availableProducts;
+    const q = productSearch.toLowerCase();
+    return availableProducts.filter(p => p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q));
+  }, [availableProducts, productSearch]);
+
   // Open Create Modal
   const handleOpenCreate = () => {
     setEditingCoupon(null);
@@ -145,13 +222,17 @@ export default function AdminCoupons() {
       start_at: new Date().toISOString().slice(0, 16),
       expires_at: '',
       is_active: true,
+      applies_to_all_products: true,
+      selected_product_ids: [],
     });
+    setProductSearch('');
     setIsModalOpen(true);
   };
 
   // Open Edit Modal
   const handleOpenEdit = (c: Coupon) => {
     setEditingCoupon(c);
+    const linkedProductIds = c.coupon_products?.map(cp => cp.product_id) || [];
     setFormData({
       code: c.code,
       name: c.name,
@@ -166,7 +247,10 @@ export default function AdminCoupons() {
       start_at: c.start_at ? new Date(c.start_at).toISOString().slice(0, 16) : '',
       expires_at: c.expires_at ? new Date(c.expires_at).toISOString().slice(0, 16) : '',
       is_active: c.is_active,
+      applies_to_all_products: c.applies_to_all_products !== false,
+      selected_product_ids: linkedProductIds,
     });
+    setProductSearch('');
     setIsModalOpen(true);
   };
 
@@ -190,6 +274,10 @@ export default function AdminCoupons() {
       toast.error('Mức giảm theo phần trăm không được vượt quá 100%.');
       return;
     }
+    if (!formData.applies_to_all_products && formData.selected_product_ids.length === 0) {
+      toast.error('Vui lòng chọn ít nhất 1 sản phẩm cho phạm vi áp dụng cụ thể.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -207,8 +295,11 @@ export default function AdminCoupons() {
         start_at: formData.start_at ? new Date(formData.start_at).toISOString() : new Date().toISOString(),
         expires_at: formData.expires_at ? new Date(formData.expires_at).toISOString() : null,
         is_active: Boolean(formData.is_active),
+        applies_to_all_products: Boolean(formData.applies_to_all_products),
         updated_at: new Date().toISOString(),
       };
+
+      let targetCouponId = editingCoupon?.id;
 
       if (editingCoupon) {
         const { error } = await (supabase
@@ -217,18 +308,28 @@ export default function AdminCoupons() {
           .eq('id', editingCoupon.id);
 
         if (error) throw error;
+
+        // Đồng bộ coupon_products
+        await (supabase.from('coupon_products') as any).delete().eq('coupon_id', editingCoupon.id);
+        if (!formData.applies_to_all_products && formData.selected_product_ids.length > 0) {
+          const cpRows = formData.selected_product_ids.map(pId => ({
+            coupon_id: editingCoupon.id,
+            product_id: pId,
+          }));
+          const { error: cpErr } = await (supabase.from('coupon_products') as any).insert(cpRows);
+          if (cpErr) console.error('Error inserting coupon_products:', cpErr);
+        }
+
         toast.success(`Đã cập nhật mã giảm giá "${cleanCode}" thành công!`);
 
         // Log audit
         await (supabase as any).rpc('log_audit_event', {
           p_action: 'update_coupon',
           p_entity_type: 'coupon',
-          p_description: `Admin cập nhật thông tin mã giảm giá "${cleanCode}"`,
+          p_description: `Admin cập nhật thông tin mã giảm giá "${cleanCode}" (Phạm vi: ${formData.applies_to_all_products ? 'Toàn shop' : `${formData.selected_product_ids.length} sản phẩm`})`,
           p_entity_id: editingCoupon.id,
-          p_metadata: payload,
+          p_metadata: { ...payload, selected_product_ids: formData.selected_product_ids },
         });
-
-        setCoupons(prev => prev.map(item => item.id === editingCoupon.id ? { ...item, ...payload } : item));
       } else {
         const { data: inserted, error } = await (supabase
           .from('coupons') as any)
@@ -237,22 +338,30 @@ export default function AdminCoupons() {
           .single();
 
         if (error) throw error;
+        targetCouponId = inserted?.id;
+
+        if (!formData.applies_to_all_products && formData.selected_product_ids.length > 0 && targetCouponId) {
+          const cpRows = formData.selected_product_ids.map(pId => ({
+            coupon_id: targetCouponId,
+            product_id: pId,
+          }));
+          const { error: cpErr } = await (supabase.from('coupon_products') as any).insert(cpRows);
+          if (cpErr) console.error('Error inserting coupon_products:', cpErr);
+        }
+
         toast.success(`Đã tạo mã giảm giá "${cleanCode}" thành công!`);
 
         // Log audit
         await (supabase as any).rpc('log_audit_event', {
           p_action: 'create_coupon',
           p_entity_type: 'coupon',
-          p_description: `Admin tạo mới mã giảm giá "${cleanCode}" (${payload.name})`,
-          p_entity_id: inserted?.id,
-          p_metadata: payload,
+          p_description: `Admin tạo mới mã giảm giá "${cleanCode}" (${payload.name}) (Phạm vi: ${formData.applies_to_all_products ? 'Toàn shop' : `${formData.selected_product_ids.length} sản phẩm`})`,
+          p_entity_id: targetCouponId,
+          p_metadata: { ...payload, selected_product_ids: formData.selected_product_ids },
         });
-
-        if (inserted) {
-          setCoupons(prev => [inserted as Coupon, ...prev]);
-        }
       }
 
+      await fetchCoupons();
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Error saving coupon:', err);
@@ -776,6 +885,14 @@ export default function AdminCoupons() {
 
                   {/* CONDITIONS & VALIDITY PILLS */}
                   <div className="space-y-2 text-xs font-semibold text-slate-600 dark:text-slate-300 pt-1">
+                    {/* Scope / Phạm vi áp dụng */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400">🎯 Phạm vi:</span>
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-black ${getScopeMeta(c).badgeClass}`}>
+                        {getScopeMeta(c).badge}
+                      </span>
+                    </div>
+
                     {/* Audience */}
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400">👤 Đối tượng:</span>
@@ -896,7 +1013,7 @@ export default function AdminCoupons() {
                     {editingCoupon ? `Chỉnh sửa mã: ${editingCoupon.code}` : 'Tạo mã giảm giá mới'}
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Cấu hình chi tiết mức giảm, thời hạn và điều kiện áp dụng
+                    Cấu hình chi tiết mức giảm, thời hạn và phạm vi sản phẩm áp dụng
                   </p>
                 </div>
               </div>
@@ -923,7 +1040,7 @@ export default function AdminCoupons() {
                       required
                       value={formData.code}
                       onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                      placeholder="VD: WELCOME20, BOW10..."
+                      placeholder="VD: WELCOME20, GPT50K..."
                       className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-mono font-bold uppercase text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
                     />
                   </div>
@@ -937,7 +1054,7 @@ export default function AdminCoupons() {
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="VD: Khuyến mãi khai trương..."
+                      placeholder="VD: Khuyến mãi ChatGPT..."
                       className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-semibold text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
                     />
                   </div>
@@ -951,9 +1068,194 @@ export default function AdminCoupons() {
                     type="text"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="VD: Giảm 20K cho khách hàng mới mua đơn đầu tiên..."
+                    placeholder="VD: Giảm 50K khi mua tài khoản ChatGPT Plus..."
                     className="h-10 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 font-medium text-slate-900 dark:text-white focus:border-[#2563EB] outline-none"
                   />
+                </div>
+
+                {/* 🌟 PHẠM VI ÁP DỤNG (PRODUCT SCOPE) */}
+                <div className="rounded-2xl border border-purple-200 dark:border-purple-900/60 bg-purple-50/40 dark:bg-[#1a1c3b] p-4 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🎯</span>
+                      <span className="font-black uppercase text-xs tracking-wider text-slate-800 dark:text-slate-100">
+                        Phạm vi áp dụng theo sản phẩm
+                      </span>
+                    </div>
+                    {!formData.applies_to_all_products && (
+                      <span className="text-[11px] font-extrabold text-purple-600 dark:text-purple-400">
+                        Đã chọn {formData.selected_product_ids.length} sản phẩm
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <label className={`flex items-center gap-2.5 rounded-xl border-2 p-3 cursor-pointer transition ${
+                      formData.applies_to_all_products
+                        ? 'border-[#2563EB] dark:border-[#35A8FF] bg-white dark:bg-blue-950/70 text-[#2563EB] dark:text-[#35A8FF] font-black shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold hover:border-blue-300 dark:hover:border-blue-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="applies_to_all_products"
+                        checked={formData.applies_to_all_products}
+                        onChange={() => setFormData({ ...formData, applies_to_all_products: true })}
+                        className="hidden"
+                      />
+                      <span className="text-base">🌐</span>
+                      <div>
+                        <span className="text-xs block">Tất cả sản phẩm</span>
+                        <span className="text-[10px] text-slate-400 font-normal block">Áp dụng cho toàn bộ danh mục</span>
+                      </div>
+                    </label>
+
+                    <label className={`flex items-center gap-2.5 rounded-xl border-2 p-3 cursor-pointer transition ${
+                      !formData.applies_to_all_products
+                        ? 'border-purple-600 dark:border-purple-400 bg-white dark:bg-purple-950/70 text-purple-600 dark:text-purple-300 font-black shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-bold hover:border-purple-300 dark:hover:border-purple-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="applies_to_all_products"
+                        checked={!formData.applies_to_all_products}
+                        onChange={() => setFormData({ ...formData, applies_to_all_products: false })}
+                        className="hidden"
+                      />
+                      <span className="text-base">🎯</span>
+                      <div>
+                        <span className="text-xs block">Chỉ sản phẩm cụ thể</span>
+                        <span className="text-[10px] text-slate-400 font-normal block">Chọn 1 hoặc nhiều sản phẩm</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Searchable Multi-Select Product Picker */}
+                  {!formData.applies_to_all_products && (
+                    <div className="space-y-3 pt-1 animate-fade-in">
+                      {/* Selected Products Chips */}
+                      {formData.selected_product_ids.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                              Sản phẩm đã chọn ({formData.selected_product_ids.length}):
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, selected_product_ids: [] })}
+                              className="text-rose-500 hover:text-rose-600 font-bold text-[11px] hover:underline cursor-pointer"
+                            >
+                              Xóa tất cả
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                            {formData.selected_product_ids.map((pId) => {
+                              const prod = availableProducts.find(p => p.id === pId);
+                              return (
+                                <span
+                                  key={pId}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800/80 px-2 py-1 text-[11px] font-extrabold text-purple-700 dark:text-purple-300 shadow-2xs"
+                                >
+                                  {prod?.logo_url && (
+                                    <img src={prod.logo_url} alt="" className="h-3.5 w-3.5 rounded-full object-cover" />
+                                  )}
+                                  <span>{prod?.name || pId.slice(0, 8)}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setFormData({
+                                      ...formData,
+                                      selected_product_ids: formData.selected_product_ids.filter(id => id !== pId)
+                                    })}
+                                    className="ml-0.5 text-purple-400 hover:text-purple-700 dark:hover:text-purple-100 font-bold text-xs"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Search Input */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={productSearch}
+                          onChange={(e) => setProductSearch(e.target.value)}
+                          placeholder="🔍 Tìm kiếm sản phẩm theo tên..."
+                          className="h-9 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 pl-3 pr-8 text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-purple-500 outline-none"
+                        />
+                        {productSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setProductSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Products Scrollable List */}
+                      <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90">
+                        {filteredProductsForPicker.length === 0 ? (
+                          <div className="p-4 text-center text-slate-400 text-[11px]">
+                            Không tìm thấy sản phẩm nào khớp với "{productSearch}"
+                          </div>
+                        ) : (
+                          filteredProductsForPicker.map((prod) => {
+                            const isSelected = formData.selected_product_ids.includes(prod.id);
+                            return (
+                              <label
+                                key={prod.id}
+                                className={`flex items-center justify-between p-2.5 cursor-pointer transition ${
+                                  isSelected
+                                    ? 'bg-purple-50/70 dark:bg-purple-950/40 font-bold'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/60 font-medium'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setFormData({
+                                          ...formData,
+                                          selected_product_ids: [...formData.selected_product_ids, prod.id]
+                                        });
+                                      } else {
+                                        setFormData({
+                                          ...formData,
+                                          selected_product_ids: formData.selected_product_ids.filter(id => id !== prod.id)
+                                        });
+                                      }
+                                    }}
+                                    className="h-4 w-4 rounded text-purple-600 focus:ring-purple-500"
+                                  />
+                                  {prod.logo_url ? (
+                                    <img src={prod.logo_url} alt="" className="h-6 w-6 rounded-lg object-cover shrink-0 border border-slate-200/60 dark:border-slate-700" />
+                                  ) : (
+                                    <div className="h-6 w-6 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center text-xs font-black shrink-0">
+                                      ⚡
+                                    </div>
+                                  )}
+                                  <span className="text-xs text-slate-900 dark:text-white truncate">
+                                    {prod.name}
+                                  </span>
+                                </div>
+                                {!prod.is_active && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-400 shrink-0">
+                                    Ẩn
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 🌟 CẤU HÌNH MỨC GIẢM — SÁNG RÕ & TRỰC QUAN */}

@@ -183,7 +183,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
     setCouponLoading(true);
     setCouponError(null);
     try {
-      const res = await validateCouponCode(targetCode, rawTotalPrice, session.user.id);
+      const res = await validateCouponCode(targetCode, rawTotalPrice, session.user.id, item.id);
       if (res.valid) {
         setAppliedCoupon(res);
         setCouponInput(res.code || targetCode.toUpperCase());

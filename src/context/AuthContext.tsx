@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { subscribe } from '../services/realtime/eventBus';
 
-/** Danh sách email admin — nguồn duy nhất, dùng chung cho toàn app. */
+/** Danh sách email admin — nguồn duy nhất, chỉ có duy nhất hoankb4@gmail.com */
 export const ADMIN_EMAILS = ['hoankb4@gmail.com'];
 
 export interface UserProfile {
@@ -54,13 +55,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // isAdmin là giá trị DERIVED từ session + profile role
+  // isAdmin là giá trị DERIVED từ session + profile role (chỉ hoankb4@gmail.com hoặc role admin)
   const isAdmin = useMemo(() => {
     const email = session?.user?.email?.toLowerCase();
-    const isEmailAdmin = email ? ADMIN_EMAILS.includes(email) : false;
+    if (!email) return false;
+    const isEmailAdmin = ADMIN_EMAILS.includes(email);
     const isRoleAdmin = profile?.role === 'admin';
-    const isMetaAdmin = (session?.user as any)?.user_metadata?.role === 'admin' || (session?.user as any)?.app_metadata?.role === 'admin';
-    return isEmailAdmin || isRoleAdmin || isMetaAdmin;
+    return isEmailAdmin || isRoleAdmin;
   }, [session, profile?.role]);
 
   const isCtv = useMemo(() => {
@@ -105,6 +106,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [session?.user?.id]);
 
+  // Cập nhật balance / profile ngay khi RealtimeHub phát profiles:UPDATE cho user này
+  // — không cần round-trip DB thêm
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const uid = session.user.id;
+    return subscribe('profiles:UPDATE', (e) => {
+      if (e.payload.id !== uid) return;
+      setBalance(e.payload.balance ?? 0);
+      setProfile((prev) =>
+        prev ? { ...prev, balance: e.payload.balance ?? 0, role: (e.payload.role as any) ?? prev.role, full_name: e.payload.full_name ?? prev.full_name } : prev,
+      );
+    });
+  }, [session?.user?.id]);
+
   useEffect(() => {
     let alive = true;
 
@@ -121,9 +136,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth
       .getSession()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (alive) {
           setSession(data.session);
+          if (data.session?.user?.id) {
+            await fetchProfile(data.session.user.id);
+          }
           cleanUrlHash();
         }
       })
@@ -136,9 +154,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
     // Theo dõi mọi thay đổi auth (login/logout/refresh token) sau đó.
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
       if (alive) {
         setSession(s);
+        if (s?.user?.id) {
+          await fetchProfile(s.user.id);
+        }
         setLoading(false);
         cleanUrlHash();
       }
