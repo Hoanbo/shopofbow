@@ -129,16 +129,7 @@ export default function CreateTicketModal({
 
       if (msgErr) throw msgErr;
 
-      // 4. Create admin notification
-      const userEmail = session.user.email || 'Khách hàng';
-      await (supabase.from('notifications') as any).insert({
-        is_admin: true,
-        type: 'ticket_created',
-        title: `🎫 Ticket mới ${ticket.ticket_number}`,
-        message: `${userEmail}: ${subject.trim()}`,
-      });
-
-      // 5. Send Telegram notification to Admin Bot
+      // 4. Send Telegram notification to Admin Bot
       sendTicketTelegramNotify(ticket.id, 'ticket_created', message.trim()).catch(() => {});
 
       toast.success(`Tạo yêu cầu ${ticket.ticket_number} thành công!`);

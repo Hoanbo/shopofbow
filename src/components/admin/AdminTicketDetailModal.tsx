@@ -306,21 +306,7 @@ export default function AdminTicketDetailModal({ ticketId, onClose, onTicketUpda
         description: `Admin cập nhật Ticket ${ticket.ticket_number}: Trạng thái "${targetStatus}", Độ ưu tiên "${targetPriority}"`,
       });
 
-      // 2. User Notification
-      const statusLabels: Record<string, string> = {
-        pending: '🔴 Chờ xử lý',
-        processing: '🟡 Đang xử lý',
-        resolved: '🟢 Đã giải quyết',
-        closed: '⚫ Đã đóng',
-      };
 
-      await (supabase.from('notifications') as any).insert({
-        user_id: ticket.user_id,
-        is_admin: false,
-        type: 'ticket_status',
-        title: `Cập nhật Ticket ${ticket.ticket_number}`,
-        message: `Trạng thái Yêu cầu hỗ trợ của bạn đã chuyển sang: ${statusLabels[targetStatus] || targetStatus}`,
-      });
 
       // 3. Email & Telegram Notifications for target status
       if (targetStatus === 'resolved') {
@@ -383,14 +369,6 @@ export default function AdminTicketDetailModal({ ticketId, onClose, onTicketUpda
         description: `Admin phản hồi Ticket ${ticket.ticket_number}: "${text.length > 40 ? text.substring(0, 40) + '...' : text}"`,
       });
 
-      // 4. User In-App Notification
-      await (supabase.from('notifications') as any).insert({
-        user_id: ticket.user_id,
-        is_admin: false,
-        type: 'ticket_reply',
-        title: `BOW đã phản hồi Ticket ${ticket.ticket_number}`,
-        message: text.length > 60 ? `${text.substring(0, 60)}...` : text,
-      });
 
       // 5. Send Email notification to User
       sendTicketEmailNotify(ticket.id, 'ticket_reply', text).catch(() => {});

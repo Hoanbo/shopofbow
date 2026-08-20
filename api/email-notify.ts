@@ -403,13 +403,23 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
       return { statusCode: 200, body: { status: 'skipped_no_user' } };
     }
 
-    const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(order.user_id);
-    if (userErr || !userData.user?.email) {
-      console.error('[email-notify] Cannot fetch user email:', userErr);
-      return { statusCode: 404, body: { error: 'User email not found' } };
+    let userEmail = '';
+    const { data: userData } = await supabase.auth.admin.getUserById(order.user_id);
+    if (userData?.user?.email) {
+      userEmail = userData.user.email;
+    } else {
+      const { data: prof } = await supabase.from('profiles').select('email').eq('id', order.user_id).maybeSingle();
+      if (prof?.email) {
+        userEmail = prof.email;
+      } else if (payload.user_email && typeof payload.user_email === 'string') {
+        userEmail = payload.user_email;
+      }
     }
 
-    const userEmail = userData.user.email;
+    if (!userEmail) {
+      console.error('[email-notify] Cannot resolve user email for order:', order.id);
+      return { statusCode: 404, body: { error: 'User email not found' } };
+    }
     const formattedPrice = Number(order.price || 0).toLocaleString('vi-VN') + 'đ';
     const emailType = type || payload.event || (order.status === 'refunded' ? 'refunded' : order.status === 'processing' ? 'processing' : 'completed');
 
@@ -566,7 +576,24 @@ async function processEmailNotify(headers: Record<string, string | string[] | un
         html: emailHtml,
       });
 
-      console.log(`[email-notify] Email (${emailType}) sent via SMTP to ${userEmail}, messageId: ${info.messageId}`);
+      // Automatic Reconciliation for Expiry Reminders
+      if (emailType.startsWith('expiry_') || emailType === 'manual_reminder') {
+        try {
+          await supabase
+            .from('order_expiry_notifications')
+            .update({
+              email_status: 'sent',
+              provider_message_id: info.messageId,
+              email_error: null,
+              last_attempt_at: new Date().toISOString(),
+            })
+            .eq('order_id', order.id)
+            .eq('notification_type', emailType);
+        } catch (dbErr) {
+          console.warn('[email-notify] Could not update order_expiry_notifications:', dbErr);
+        }
+      }
+
       return { statusCode: 200, body: { status: 'sent', type: emailType, messageId: info.messageId } };
     }
 

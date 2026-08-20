@@ -139,16 +139,6 @@ export default function AdminReviews() {
         description: `Admin ${targetStatus === 'approved' ? 'duyệt' : 'từ chối'} Đánh giá #${selectedReview.id.slice(0, 8)} cho ${prodName}`,
       });
 
-      // 3. User Notification
-      await (supabase.from('notifications') as any).insert({
-        user_id: selectedReview.user_id,
-        is_admin: false,
-        type: 'review_status',
-        title: targetStatus === 'approved' ? 'Đánh giá đã được phê duyệt' : 'Cập nhật Đánh giá sản phẩm',
-        message: targetStatus === 'approved'
-          ? `Đánh giá của bạn cho sản phẩm "${prodName}" đã được phê duyệt và xuất hiện công khai!`
-          : `Đánh giá của bạn cho sản phẩm "${prodName}" chưa được phê duyệt. ${adminNote.trim() ? `Lý do: ${adminNote.trim()}` : ''}`,
-      });
 
       toast.success(`Đã ${targetStatus === 'approved' ? 'duyệt' : 'từ chối'} đánh giá!`);
       setSelectedReview(null);
@@ -191,15 +181,6 @@ export default function AdminReviews() {
         description: `Admin ${targetStatus === 'approved' ? 'duyệt nhanh' : 'từ chối nhanh'} Đánh giá #${review.id.slice(0, 8)} cho ${prodName}`,
       });
 
-      await (supabase.from('notifications') as any).insert({
-        user_id: review.user_id,
-        is_admin: false,
-        type: 'review_status',
-        title: targetStatus === 'approved' ? 'Đánh giá đã được phê duyệt' : 'Cập nhật Đánh giá sản phẩm',
-        message: targetStatus === 'approved'
-          ? `Đánh giá của bạn cho sản phẩm "${prodName}" đã được phê duyệt và xuất hiện công khai!`
-          : `Đánh giá của bạn cho sản phẩm "${prodName}" chưa được phê duyệt.`,
-      });
 
       toast.success(`Đã ${targetStatus === 'approved' ? 'duyệt' : 'từ chối'} đánh giá #${review.id.slice(0, 8)}!`);
       fetchReviews();

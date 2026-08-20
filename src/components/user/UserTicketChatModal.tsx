@@ -158,15 +158,7 @@ export default function UserTicketChatModal({ ticketId, onClose, onTicketUpdated
 
       if (insErr) throw insErr;
 
-      // 2. Insert admin notification
-      await (supabase.from('notifications') as any).insert({
-        is_admin: true,
-        type: 'ticket_message',
-        title: `💬 Tin nhắn từ ${ticket.ticket_number}`,
-        message: text.length > 50 ? `${text.substring(0, 50)}...` : text,
-      });
-
-      // 3. Send Telegram alert to Admin
+      // 2. Send Telegram alert to Admin
       sendTicketTelegramNotify(ticket.id, 'ticket_user_message', text).catch(() => {});
 
       if (onTicketUpdated) onTicketUpdated();
@@ -219,15 +211,7 @@ export default function UserTicketChatModal({ ticketId, onClose, onTicketUpdated
         description: `Khách hàng xác nhận hài lòng và đóng Ticket #${ticket.ticket_number}`,
       });
 
-      // 3. Insert Admin Notification
-      await (supabase.from('notifications') as any).insert({
-        is_admin: true,
-        type: 'ticket_closed',
-        title: `🔒 Ticket #${ticket.ticket_number} đã được đóng`,
-        message: `Khách hàng ${userEmail} đã xác nhận hài lòng và đóng vé hỗ trợ.`,
-      });
-
-      // 4. Send Telegram and Email notifications
+      // 3. Send Telegram and Email notifications
       sendTicketTelegramNotify(ticket.id, 'ticket_closed').catch(() => {});
       sendTicketEmailNotify(ticket.id, 'ticket_closed').catch(() => {});
 

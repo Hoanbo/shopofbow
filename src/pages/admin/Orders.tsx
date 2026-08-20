@@ -320,6 +320,12 @@ export default function AdminOrders() {
     scheduled_for: string;
     sent_at: string;
     status: string;
+    email_status?: string;
+    web_status?: string;
+    provider_message_id?: string;
+    email_error?: string;
+    attempt_count?: number;
+    last_attempt_at?: string;
     metadata?: any;
   }>>([]);
   const [renewedFromOrder, setRenewedFromOrder] = useState<any | null>(null);
@@ -1231,10 +1237,20 @@ export default function AdminOrders() {
                         const renderStatus = (milestoneKey: string) => {
                           const sentRecord = expiryReminders.find(r => r.notification_type === milestoneKey);
                           if (sentRecord) {
+                            const isEmailSent = sentRecord.email_status === 'sent' || (!sentRecord.email_status && sentRecord.status === 'sent');
+                            const isEmailSending = sentRecord.email_status === 'sending';
+                            const isEmailFailed = sentRecord.email_status === 'failed' || sentRecord.email_status === 'failed_final';
+
                             return (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300 shrink-0">
-                                ✅ Đã gửi ({new Date(sentRecord.sent_at).toLocaleDateString('vi-VN')} {new Date(sentRecord.sent_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })})
-                              </span>
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                                  🔔 Chuông Web ✅ • 📧 Email {isEmailSent ? '✅ Đã gửi' : isEmailSending ? '⏳ Đang gửi...' : isEmailFailed ? '❌ Lỗi' : '✅'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-semibold">
+                                  {new Date(sentRecord.sent_at).toLocaleDateString('vi-VN')} {new Date(sentRecord.sent_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                  {(sentRecord.attempt_count ?? 1) > 1 ? ` • Lần thử: ${sentRecord.attempt_count}` : ''}
+                                </span>
+                              </div>
                             );
                           }
 
