@@ -26,6 +26,7 @@ const BANK_CONFIG = {
 
 type Order = {
   id: string;
+  user_id: string;
   product_name: string;
   plan_label: string;
   price: number;
@@ -743,7 +744,7 @@ export default function Dashboard() {
   // ── Realtime Hub: user orders (INSERT/UPDATE) ───────────────────────────────────
   // user-hub-{userId} đã subscribe orders của user này, ta chỉ cần consume event.
   // Không cần tạo channel riêng; chỉ cần update state tại chỗ.
-  useRealtimeEvent('orders:INSERT', useCallback((e: any) => {
+  useRealtimeEvent('orders:INSERT', useCallback((e) => {
     const o = e.payload as Order;
     if (!session?.user?.id || o.user_id !== session.user.id) return;
     setOrders((prev) => {
@@ -752,9 +753,9 @@ export default function Dashboard() {
     });
   }, [session?.user?.id]));
 
-  useRealtimeEvent('orders:UPDATE', useCallback((e: any) => {
+  useRealtimeEvent('orders:UPDATE', useCallback((e) => {
     const o = e.payload as Order;
-    const oldStatus = (e.old as any)?.status;
+    const oldStatus = e.old?.status;
     if (!session?.user?.id || o.user_id !== session.user.id) return;
     setOrders((prev) => prev.map((r) => (r.id === o.id ? { ...r, ...o } : r)));
     refreshBalance();

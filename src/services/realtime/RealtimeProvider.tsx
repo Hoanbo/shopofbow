@@ -31,7 +31,6 @@ import { emit } from './eventBus';
 import type {
   OrderPayload,
   SupportTicketPayload,
-  SupportMessagePayload,
   NotificationPayload,
   ProfilePayload,
   ProductReviewPayload,

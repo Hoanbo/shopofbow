@@ -135,7 +135,15 @@ export default function AdminLayout() {
   };
 
   // ── Real Notifications from DB ──────────────────────────────
-  type Notif = { id: string; title: string; message: string; order_id?: string | null; is_read: boolean; created_at: string };
+  type Notif = {
+    id: string;
+    title: string;
+    message: string;
+    order_id?: string | null;
+    is_read: boolean;
+    is_admin?: boolean;
+    created_at: string;
+  };
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -145,7 +153,7 @@ export default function AdminLayout() {
   const fetchNotifs = async () => {
     const { data } = await (supabase
       .from('notifications')
-      .select('id, title, message, order_id, is_read, created_at')
+      .select('id, title, message, order_id, is_read, is_admin, created_at')
       .eq('is_admin', true)
       .order('created_at', { ascending: false })
       .limit(30) as any);
@@ -189,25 +197,30 @@ export default function AdminLayout() {
   }, []);
 
   // Thêm notification mới vào danh sách khi Hub phát sự kiện INSERT (is_admin = true)
-  const handleAdminNotifInsert = useCallback(
-    (e: { payload: Notif }) => {
-      if (!e.payload.is_admin) return;
-      setNotifs((prev) => {
-        if (prev.some((n) => n.id === e.payload.id)) return prev;
-        return [e.payload, ...prev];
-      });
-      // Play chime sound
-      if (!audioRef.current) {
-        audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2ozMVia0fXJlFEvLUmLxfbRmlgtKj2Bu/DMnFgqKDR3r+7ImFQlJC1spujCk1AgICVgn+S9kE0cHCFXlN26jEoZGR5PlM6yjUcVFhlIjce0lVATEhZGi8y3m1INERROi8u5nFILERRNjcq7nlIMERRMjsq6n1INERROjcm7oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMN');
-      }
-      audioRef.current.currentTime = 0;
-      audioRef.current.volume = 0.4;
-      audioRef.current.play().catch(() => {});
-    },
-    [],
-  );
+  const handleAdminNotifInsert = useCallback((e: { eventType: 'INSERT'; payload: { id: string; title: string; message: string; order_id?: string | null; is_read: boolean; is_admin: boolean; created_at: string } }) => {
+    if (!e.payload.is_admin) return;
+    setNotifs((prev) => {
+      if (prev.some((n) => n.id === e.payload.id)) return prev;
+      return [{
+        id: e.payload.id,
+        title: e.payload.title,
+        message: e.payload.message,
+        order_id: e.payload.order_id,
+        is_read: e.payload.is_read,
+        is_admin: e.payload.is_admin,
+        created_at: e.payload.created_at,
+      }, ...prev];
+    });
+    // Play chime sound
+    if (!audioRef.current) {
+      audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2ozMVia0fXJlFEvLUmLxfbRmlgtKj2Bu/DMnFgqKDR3r+7ImFQlJC1spujCk1AgICVgn+S9kE0cHCFXlN26jEoZGR5PlM6yjUcVFhlIjce0lVATEhZGi8y3m1INERROi8u5nFILERRNjcq7nlIMERRMjsq6n1INERROjcm7oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMNERROjcu6oFMN');
+    }
+    audioRef.current.currentTime = 0;
+    audioRef.current.volume = 0.4;
+    audioRef.current.play().catch(() => {});
+  }, []);
 
-  useRealtimeEvent('notifications:INSERT', handleAdminNotifInsert as any);
+  useRealtimeEvent('notifications:INSERT', handleAdminNotifInsert);
 
   // Navigation Links List component with grouped categories
   const navList = (
