@@ -77,7 +77,7 @@ export default function UserAffiliateTab() {
             Chia sẻ cho bạn bè — Nhận hoa hồng thẳng vào Ví BOW!
           </h2>
           <p className="text-xs sm:text-sm text-blue-100 leading-relaxed font-medium">
-            Mỗi khi bạn bè mua đơn hàng đầu tiên qua liên kết của bạn, họ được giảm giá chào mừng và bạn nhận ngay tiền hoa hồng để mua sắm miễn phí.
+            Mỗi khi bạn bè mua đơn hàng qua liên kết giới thiệu của bạn, bạn nhận ngay tiền hoa hồng thẳng vào ví web để mua sắm hoặc rút tiền.
           </p>
         </div>
 
@@ -202,9 +202,9 @@ export default function UserAffiliateTab() {
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/60 font-black text-xs text-amber-600 dark:text-amber-400">
               2
             </span>
-            <h4 className="text-xs font-black text-slate-900 dark:text-white">Bạn bè nhận giảm giá</h4>
+            <h4 className="text-xs font-black text-slate-900 dark:text-white">Bạn bè đặt mua dịch vụ</h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-              Bạn bè được áp dụng ngay mức giảm giá chào mừng cho đơn hàng đầu tiên khi bấm vào link.
+              Bạn bè bấm vào link và chọn mua các gói tài khoản / phần mềm chất lượng cao tại shop.
             </p>
           </div>
 

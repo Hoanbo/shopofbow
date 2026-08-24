@@ -17,8 +17,17 @@ type Order = {
   original_price?: number;
   discount_amount?: number;
   coupon_code?: string;
-  status: 'pending_payment' | 'pending_delivery' | 'processing' | 'completed' | 'cancelled' | 'refunded';
   payment_code: string;
+  status:
+    | 'pending_payment'
+    | 'pending_delivery'
+    | 'processing'
+    | 'completed'
+    | 'cancelled'
+    | 'refunded'
+    | 'paid'
+    | 'pending'
+    | 'delivering';
   notes: string;
   account_details?: string;
   delivery_info?: string;
@@ -55,8 +64,15 @@ export const getFormattedPlanLabel = (order: { product_name?: string; plan_label
   return pLabel || pName;
 };
 
+const isTopupOrder = (order: { product_name?: string; payment_code?: string; notes?: string }) => {
+  const pName = (order.product_name || '').toLowerCase();
+  const pCode = (order.payment_code || '').toUpperCase();
+  const pNotes = (order.notes || '').toLowerCase();
+  return pName.includes('nạp tiền') || pName.includes('nạp số dư') || pCode.startsWith('BOWN') || pNotes.includes('nạp số dư');
+};
+
 const calcOrderExpiry = (order: Order) => {
-  if (order.status !== 'completed') return null;
+  if (order.status !== 'completed' || isTopupOrder(order)) return null;
 
   const displayPlan = getFormattedPlanLabel(order);
   const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${displayPlan} ${order.notes || ''}`.toLowerCase();
@@ -162,7 +178,7 @@ const calcOrderExpiry = (order: Order) => {
 };
 
 const calcAdminWarranty = (order: Order) => {
-  if (order.status !== 'completed') return null;
+  if (order.status !== 'completed' || isTopupOrder(order)) return null;
 
   const displayPlan = getFormattedPlanLabel(order);
   const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${displayPlan} ${order.notes || ''}`.toLowerCase();
@@ -263,13 +279,16 @@ const calcAdminWarranty = (order: Order) => {
   };
 };
 
-const getStatusBadge = (status: Order['status']) => {
+const getStatusBadge = (status: Order['status'] | string) => {
   switch (status) {
+    case 'pending':
     case 'pending_payment':
       return <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-[9px] font-bold text-amber-700 border border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-none">Chờ thanh toán</span>;
+    case 'paid':
     case 'pending_delivery':
       return <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-[9px] font-bold text-[#2563EB] border border-blue-100 dark:bg-blue-950/20 dark:text-[#35A8FF] dark:border-none">Chờ bàn giao</span>;
     case 'processing':
+    case 'delivering':
       return <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-[9px] font-bold text-indigo-700 border border-indigo-100 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-none">Đang thiết lập</span>;
     case 'completed':
       return <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[9px] font-bold text-emerald-700 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-none">Đã hoàn thành</span>;
@@ -277,6 +296,8 @@ const getStatusBadge = (status: Order['status']) => {
       return <span className="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-0.5 text-[9px] font-bold text-rose-700 border border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-none">Đã hủy</span>;
     case 'refunded':
       return <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-bold text-slate-700 border border-slate-200 dark:bg-slate-800/40 dark:text-slate-400 dark:border-none">Đã hoàn tiền</span>;
+    default:
+      return <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-bold text-slate-700 border border-slate-200 dark:bg-slate-800/40 dark:text-slate-400 dark:border-none">{status}</span>;
   }
 };
 
@@ -578,9 +599,13 @@ export default function AdminOrders() {
     setSelectedOrderDetail((prev) => prev?.id === full.id ? { ...prev, ...full } : prev);
   }, [fetchSingleOrder]));
 
-  // Tự động scroll đến đơn hàng mục tiêu nếu có param ?order_id=xxx
+  // Tự động mở detail modal và scroll đến đơn hàng mục tiêu nếu có param ?order_id=xxx
   useEffect(() => {
     if (targetOrderId && orders.length > 0) {
+      const match = orders.find((o) => o.id === targetOrderId || o.payment_code === targetOrderId);
+      if (match) {
+        setSelectedOrderDetail(match);
+      }
       setTimeout(() => {
         const el = document.getElementById(`admin-order-${targetOrderId}`);
         if (el) {
@@ -709,7 +734,12 @@ export default function AdminOrders() {
   };
 
   const filteredOrders = orders.filter((o) => {
-    const matchStatus = filterStatus === 'all' || o.status === filterStatus;
+    const matchStatus =
+      filterStatus === 'all' ||
+      o.status === filterStatus ||
+      (filterStatus === 'pending_delivery' && o.status === 'paid') ||
+      (filterStatus === 'pending_payment' && o.status === 'pending') ||
+      (filterStatus === 'processing' && o.status === 'delivering');
     const q = searchQuery.toLowerCase().trim();
     const matchSearch =
       !q ||
@@ -907,7 +937,7 @@ export default function AdminOrders() {
                   >
                     <span>👁️</span> Xem chi tiết
                   </button>
-                  {o.status === 'pending_delivery' && (
+                  {(o.status === 'pending_delivery' || o.status === 'paid') && (
                     <>
                       <button
                         onClick={() => handleUpdateStatus(o.id, 'processing')}
@@ -923,7 +953,7 @@ export default function AdminOrders() {
                       </button>
                     </>
                   )}
-                  {o.status === 'processing' && (
+                  {(o.status === 'processing' || o.status === 'delivering') && (
                     <button
                       onClick={() => setDeliveryOrder(o)}
                       className="rounded-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-4.5 py-2 text-xs font-bold text-white shadow-md transition hover:scale-102"
@@ -932,8 +962,8 @@ export default function AdminOrders() {
                     </button>
                   )}
 
-                  {/* Allow refund ONLY for pending_delivery or processing (before completed) */}
-                  {(o.status === 'pending_delivery' || o.status === 'processing') && (
+                  {/* Allow refund for pending_delivery, paid, processing, or delivering */}
+                  {(o.status === 'pending_delivery' || o.status === 'paid' || o.status === 'processing' || o.status === 'delivering') && (
                     <button
                       onClick={() => handleRefund(o.id)}
                       className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] px-4.5 py-2 text-xs font-bold text-slate-500 hover:text-[#2563EB] transition shadow-xs"
@@ -943,7 +973,7 @@ export default function AdminOrders() {
                   )}
 
                   {/* Allow cancel if pending payment */}
-                  {o.status === 'pending_payment' && (
+                  {(o.status === 'pending_payment' || o.status === 'pending') && (
                     <button
                       onClick={() => handleUpdateStatus(o.id, 'cancelled')}
                       className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-red-50 px-4.5 py-2 text-xs font-bold text-slate-500 hover:text-red-500 transition shadow-xs"
@@ -1401,7 +1431,7 @@ export default function AdminOrders() {
             {/* Modal Footer / Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                {selectedOrderDetail.status === 'pending_delivery' && (
+                {(selectedOrderDetail.status === 'pending_delivery' || selectedOrderDetail.status === 'paid' || selectedOrderDetail.status === 'processing' || selectedOrderDetail.status === 'delivering') && (
                   <button
                     onClick={() => {
                       const ord = selectedOrderDetail;
@@ -1413,19 +1443,7 @@ export default function AdminOrders() {
                     🚀 Bàn giao tài khoản
                   </button>
                 )}
-                {selectedOrderDetail.status === 'processing' && (
-                  <button
-                    onClick={() => {
-                      const ord = selectedOrderDetail;
-                      setSelectedOrderDetail(null);
-                      setDeliveryOrder(ord);
-                    }}
-                    className="rounded-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] px-4.5 py-2 text-xs font-bold text-white shadow-md transition hover:scale-102"
-                  >
-                    🚀 Bàn giao tài khoản
-                  </button>
-                )}
-                {(selectedOrderDetail.status === 'pending_delivery' || selectedOrderDetail.status === 'processing') && (
+                {(selectedOrderDetail.status === 'pending_delivery' || selectedOrderDetail.status === 'paid' || selectedOrderDetail.status === 'processing' || selectedOrderDetail.status === 'delivering') && (
                   <button
                     onClick={() => handleRefund(selectedOrderDetail.id)}
                     className="rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#131C32] hover:bg-[#F5F9FF] px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#2563EB] transition shadow-xs"

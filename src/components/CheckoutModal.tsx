@@ -12,7 +12,6 @@ import {
 } from '../data/coupons';
 import {
   getStoredReferralCode,
-  calculateFirstOrderDiscount,
 } from '../utils/affiliate';
 
 interface Plan {
@@ -69,14 +68,8 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
   const unitPrice = isCtvDiscountApplied ? Number(planCtvPrice) : plan.price;
   const rawTotalPrice = unitPrice * quantity;
 
-  // First-order universal welcome discount (for non-CTV orders on products with discount configured)
-  const isAutoWelcomeDiscount = !isCtv && isFirstOrderUser && (item.affiliateDiscount != null && item.affiliateDiscount > 0);
-  const autoWelcomeDiscountAmount = isAutoWelcomeDiscount
-    ? calculateFirstOrderDiscount(item, rawTotalPrice, isFirstOrderUser)
-    : 0;
-
   const couponDiscountAmount = appliedCoupon?.valid ? (appliedCoupon.discount_amount ?? 0) : 0;
-  const discountAmount = Math.max(autoWelcomeDiscountAmount, couponDiscountAmount);
+  const discountAmount = couponDiscountAmount;
   const finalPrice = Math.max(0, rawTotalPrice - discountAmount);
 
   // Generate unique payment code & reset on open
@@ -428,16 +421,6 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                   </span>
                 )}
               </div>
-
-              {/* Auto Welcome Discount Alert */}
-              {isAutoWelcomeDiscount && !appliedCoupon?.valid && (
-                <div className="flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 p-2.5 text-xs text-emerald-800 dark:text-emerald-300">
-                  <span className="text-base">🎉</span>
-                  <span className="font-semibold">
-                    Đã tự động áp dụng ưu đãi chào mừng đơn đầu tiên: <strong>-{autoWelcomeDiscountAmount.toLocaleString('vi-VN')}đ</strong>
-                  </span>
-                </div>
-              )}
 
               {/* Coupon Suggestion for First-Order user */}
               {showWelcomeSuggestion && (

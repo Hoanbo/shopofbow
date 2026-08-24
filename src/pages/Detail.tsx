@@ -232,7 +232,7 @@ export default function Detail({ category, base, crumb }: Props) {
                 </div>
               </div>
             ) : (
-              <div className="mt-5 space-y-2">
+              <div className="mt-5">
                 <div className="flex items-baseline gap-3 rounded-[22px] bg-[#EEF6FF] dark:bg-blue-950/20 border border-[#D8E9FF] dark:border-blue-900/40 p-4 sm:p-5">
                   <span className="text-3xl font-black text-[#2563EB] dark:text-[#35A8FF]">{formatVND(displayPrice)}</span>
                   {active.originalPrice && (
@@ -241,12 +241,6 @@ export default function Detail({ category, base, crumb }: Props) {
                     </span>
                   )}
                 </div>
-
-                {item.affiliateDiscount && item.affiliateDiscount > 0 && (
-                  <div className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/40 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                    🎉 Giảm ngay {item.affiliateType === 'percent' ? `${item.affiliateDiscount}%` : formatVND(item.affiliateDiscount)} cho đơn hàng đầu tiên của bạn!
-                  </div>
-                )}
               </div>
             )}
 

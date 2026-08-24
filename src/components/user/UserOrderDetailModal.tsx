@@ -16,8 +16,17 @@ interface OrderDetailModalProps {
     original_price?: number;
     discount_amount?: number;
     coupon_code?: string;
-    status: 'pending_payment' | 'pending_delivery' | 'processing' | 'completed' | 'cancelled' | 'refunded';
     payment_code: string;
+    status:
+      | 'pending_payment'
+      | 'pending_delivery'
+      | 'processing'
+      | 'completed'
+      | 'cancelled'
+      | 'refunded'
+      | 'paid'
+      | 'pending'
+      | 'delivering';
     notes?: string;
     account_details?: string;
     delivery_info?: string;
@@ -132,11 +141,14 @@ export default function UserOrderDetailModal({
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'pending':
       case 'pending_payment':
         return <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/40 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-400 border border-amber-200/50">Chờ thanh toán</span>;
+      case 'paid':
       case 'pending_delivery':
         return <span className="inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-950/40 px-3 py-1 text-xs font-bold text-[#2563EB] dark:text-[#35A8FF] border border-blue-200/50">Chờ bàn giao</span>;
       case 'processing':
+      case 'delivering':
         return <span className="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-400 border border-indigo-200/50">Đang thiết lập</span>;
       case 'completed':
         return <span className="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-200/50">Đã hoàn thành</span>;
@@ -145,7 +157,7 @@ export default function UserOrderDetailModal({
       case 'refunded':
         return <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200">Đã hoàn tiền</span>;
       default:
-        return null;
+        return <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-3 py-1 text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200">{status}</span>;
     }
   };
 
@@ -167,8 +179,15 @@ export default function UserOrderDetailModal({
     return pLabel || pName;
   };
 
+  const isTopupOrder = () => {
+    const pName = (activeOrder.product_name || '').toLowerCase();
+    const pCode = (activeOrder.payment_code || '').toUpperCase();
+    const pNotes = (activeOrder.notes || '').toLowerCase();
+    return pName.includes('nạp tiền') || pName.includes('nạp số dư') || pCode.startsWith('BOWN') || pNotes.includes('nạp số dư');
+  };
+
   const calcExpiryInfo = () => {
-    if (activeOrder.status !== 'completed') return null;
+    if (activeOrder.status !== 'completed' || isTopupOrder()) return null;
 
     const displayPlan = getFormattedPlanLabel(activeOrder);
     const planStr = `${activeOrder.product_name || ''} ${activeOrder.plan_label || ''} ${displayPlan} ${activeOrder.notes || ''}`.toLowerCase();
@@ -286,7 +305,7 @@ export default function UserOrderDetailModal({
   };
 
   const calcWarranty = () => {
-    if (activeOrder.status !== 'completed') return null;
+    if (activeOrder.status !== 'completed' || isTopupOrder()) return null;
 
     const displayPlan = getFormattedPlanLabel(activeOrder);
     const planStr = `${activeOrder.product_name || ''} ${activeOrder.plan_label || ''} ${displayPlan} ${activeOrder.notes || ''}`.toLowerCase();

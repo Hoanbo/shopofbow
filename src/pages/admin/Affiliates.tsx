@@ -105,10 +105,6 @@ export default function AdminAffiliates() {
     .filter((c) => c.status === 'completed')
     .reduce((sum, c) => sum + Number(c.commission_amount || 0), 0);
 
-  const totalDiscounts = conversions
-    .filter((c) => c.status === 'completed')
-    .reduce((sum, c) => sum + Number(c.discount_amount || 0), 0);
-
   const totalCompletedOrders = conversions.filter((c) => c.status === 'completed').length;
 
   // Filter conversions
@@ -155,7 +151,7 @@ export default function AdminAffiliates() {
       </div>
 
       {/* KPI Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
           <span className="text-xs font-extrabold uppercase tracking-wider text-blue-500">Doanh thu Affiliate</span>
           <p className="mt-1 text-2xl font-black text-blue-600 dark:text-blue-400">
@@ -173,16 +169,6 @@ export default function AdminAffiliates() {
           </p>
           <span className="mt-1 block text-[11px] font-semibold text-slate-400">
             Cộng trực tiếp vào số dư ví CTV/Member
-          </span>
-        </div>
-
-        <div className="rounded-[24px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-5 shadow-xs">
-          <span className="text-xs font-extrabold uppercase tracking-wider text-rose-500">Giảm giá chào mừng đơn đầu</span>
-          <p className="mt-1 text-2xl font-black text-rose-600 dark:text-rose-400">
-            {totalDiscounts.toLocaleString('vi-VN')}đ
-          </p>
-          <span className="mt-1 block text-[11px] font-semibold text-slate-400">
-            Ưu đãi kích cầu khách mới
           </span>
         </div>
 

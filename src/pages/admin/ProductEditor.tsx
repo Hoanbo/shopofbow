@@ -463,7 +463,7 @@ export default function ProductEditor() {
                 <div className="space-y-3.5 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <div>
                     <label className="mb-1.5 block text-xs font-bold text-slate-700 dark:text-slate-200 leading-tight">
-                      Loại hoa hồng & Giảm giá
+                      Loại hoa hồng giới thiệu
                     </label>
                     <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-[#0B132B] border border-slate-200/80 dark:border-slate-800">
                       <button
@@ -492,15 +492,6 @@ export default function ProductEditor() {
                       </button>
                     </div>
                   </div>
-
-                  <Field
-                    label={form.affiliate_type === 'percent' ? 'Giảm giá chào mừng đơn đầu (%)' : 'Giảm giá chào mừng đơn đầu (₫)'}
-                    type="number"
-                    min="0"
-                    value={form.affiliate_discount || ''}
-                    onChange={(e) => set('affiliate_discount', Math.max(0, Number(e.target.value) || 0))}
-                    hint="Ưu đãi tự động cho mọi khách hàng mới ở đơn đầu tiên"
-                  />
 
                   <Field
                     label={form.affiliate_type === 'percent' ? 'Hoa hồng người giới thiệu (%)' : 'Hoa hồng người giới thiệu (₫)'}

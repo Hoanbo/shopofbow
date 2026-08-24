@@ -70,7 +70,7 @@ export default function AdminTickets() {
     fetchAdminTickets();
   }, [fetchAdminTickets]);
 
-  const ticketParam = searchParams.get('ticket') || searchParams.get('id');
+  const ticketParam = searchParams.get('ticket') || searchParams.get('ticket_id') || searchParams.get('id');
   const searchParamQ = searchParams.get('q') || searchParams.get('search');
   const statusParam = searchParams.get('status') || searchParams.get('filter');
 

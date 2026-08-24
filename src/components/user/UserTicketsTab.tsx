@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import CreateTicketModal from './CreateTicketModal';
@@ -37,12 +38,15 @@ function formatRelativeTime(dateStr: string): string {
 
 export default function UserTicketsTab() {
   const { session } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string>('all');
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [activeChatTicketId, setActiveChatTicketId] = useState<string | null>(null);
+
+  const targetTicketParam = searchParams.get('ticket_id') || searchParams.get('ticket');
 
   const fetchTickets = useCallback(async () => {
     if (!session?.user?.id) return;
@@ -66,6 +70,42 @@ export default function UserTicketsTab() {
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  // Deep linking: Tự động mở Ticket Chat Modal nếu có ?ticket_id=xxx hoặc ?ticket=xxx
+  useEffect(() => {
+    if (!targetTicketParam || !session?.user?.id) return;
+
+    // Kiểm tra trong danh sách tickets đã load
+    const match = tickets.find(
+      (t) =>
+        t.id === targetTicketParam ||
+        t.ticket_number.toLowerCase() === targetTicketParam.toLowerCase(),
+    );
+    if (match) {
+      setActiveChatTicketId(match.id);
+      return;
+    }
+
+    // Nếu chưa load trong state (ví dụ deep link từ bên ngoài), query trực tiếp
+    const fetchTargetTicket = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('support_tickets')
+          .select('id, ticket_number')
+          .or(`id.eq.${targetTicketParam},ticket_number.eq.${targetTicketParam}`)
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (!error && data) {
+          setActiveChatTicketId(data.id);
+        }
+      } catch (err) {
+        console.error('Error resolving deep link ticket:', err);
+      }
+    };
+
+    fetchTargetTicket();
+  }, [targetTicketParam, tickets, session?.user?.id]);
 
   // Realtime Hub: INSERT → prepend; UPDATE → patch in-place
   useRealtimeEvent('support_tickets:INSERT', useCallback((e: any) => {
@@ -210,7 +250,15 @@ export default function UserTicketsTab() {
 
       <UserTicketChatModal
         ticketId={activeChatTicketId}
-        onClose={() => setActiveChatTicketId(null)}
+        onClose={() => {
+          setActiveChatTicketId(null);
+          if (searchParams.has('ticket_id') || searchParams.has('ticket')) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('ticket_id');
+            next.delete('ticket');
+            setSearchParams(next, { replace: true });
+          }
+        }}
         onTicketUpdated={fetchTickets}
       />
     </div>

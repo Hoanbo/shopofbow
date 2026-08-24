@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useFavorites } from '../context/FavoritesContext';
 import { supabase } from '../lib/supabase';
 import { useRealtimeEvent } from '../services/realtime';
+import { resolveNotificationDestination } from '../utils/notificationRouter';
 
 interface HeaderNotification {
   id: string;
@@ -14,6 +15,10 @@ interface HeaderNotification {
   title: string;
   message: string;
   order_id?: string;
+  ticket_id?: string;
+  target_type?: string;
+  target_id?: string;
+  is_admin?: boolean;
   is_read: boolean;
   created_at: string;
 }
@@ -73,7 +78,7 @@ export default function Header() {
     const fetchNotifs = async () => {
       try {
         const { data, error } = await (supabase.from('notifications') as any)
-          .select('id, type, title, message, order_id, is_read, created_at')
+          .select('id, type, title, message, order_id, ticket_id, target_type, target_id, is_admin, is_read, created_at')
           .eq('user_id', userId)
           .eq('is_admin', false)
           .order('created_at', { ascending: false })
@@ -93,6 +98,8 @@ export default function Header() {
   // Cập nhật danh sách notification khi Hub phát sự kiện INSERT
   const handleNotifInsert = useCallback(
     (e: { payload: HeaderNotification }) => {
+      // Chỉ nhận thông báo của user (bỏ qua thông báo của admin layout)
+      if ((e.payload as any)?.is_admin) return;
       setNotifications((prev) => {
         // Tránh duplicate
         if (prev.some((n) => n.id === e.payload.id)) return prev;
@@ -105,6 +112,7 @@ export default function Header() {
   // Cập nhật is_read khi Hub phát sự kiện UPDATE
   const handleNotifUpdate = useCallback(
     (e: { payload: HeaderNotification }) => {
+      if ((e.payload as any)?.is_admin) return;
       setNotifications((prev) =>
         prev.map((n) => (n.id === e.payload.id ? { ...n, ...e.payload } : n)),
       );
@@ -148,8 +156,9 @@ export default function Header() {
         console.error('Failed to mark notification read:', err);
       }
     }
+    const dest = resolveNotificationDestination(notif, false);
     setShowNotifMenu(false);
-    nav('/dashboard?tab=orders');
+    nav(dest);
   };
 
   const handleMarkAllRead = async () => {

@@ -13,7 +13,16 @@ export interface StatusHistoryItem {
 
 interface OrderTimelineProps {
   orderId: string;
-  currentStatus: 'pending_payment' | 'pending_delivery' | 'processing' | 'completed' | 'cancelled' | 'refunded';
+  currentStatus:
+    | 'pending_payment'
+    | 'pending_delivery'
+    | 'processing'
+    | 'completed'
+    | 'cancelled'
+    | 'refunded'
+    | 'paid'
+    | 'pending'
+    | 'delivering';
   orderCreatedAt: string;
   compact?: boolean;
 }
@@ -73,7 +82,7 @@ export default function OrderTimeline({
     if (orderId) {
       fetchHistory();
     }
-  }, [orderId]);
+  }, [orderId, currentStatus]);
 
   // Realtime subscription for timeline updates
   useEffect(() => {
@@ -127,9 +136,16 @@ export default function OrderTimeline({
     });
   }
 
+  // Normalize legacy/synonym status
+  const normalizedCurrentStatus =
+    currentStatus === 'paid' ? 'pending_delivery'
+    : currentStatus === 'pending' ? 'pending_payment'
+    : currentStatus === 'delivering' ? 'processing'
+    : currentStatus;
+
   // Handle special status paths (cancelled / refunded)
-  const isCancelled = currentStatus === 'cancelled';
-  const isRefunded = currentStatus === 'refunded';
+  const isCancelled = normalizedCurrentStatus === 'cancelled';
+  const isRefunded = normalizedCurrentStatus === 'refunded';
 
   let activeSteps: StepConfig[] = [...STANDARD_STEPS];
   if (isCancelled) {
@@ -149,7 +165,7 @@ export default function OrderTimeline({
   }
 
   // Find index of current status
-  const currentIndex = activeSteps.findIndex((s) => s.key === currentStatus);
+  const currentIndex = activeSteps.findIndex((s) => s.key === normalizedCurrentStatus);
 
   return (
     <div className={`rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-[#18243E] ${compact ? 'p-3.5' : 'p-4 sm:p-5'} space-y-3`}>

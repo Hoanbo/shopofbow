@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { useRealtimeEvent } from '../../services/realtime';
+import { resolveNotificationDestination } from '../../utils/notificationRouter';
 import newLogo from '../../assets/new-logover2.png';
 import {
   HomeIcon,
@@ -137,9 +138,13 @@ export default function AdminLayout() {
   // ── Real Notifications from DB ──────────────────────────────
   type Notif = {
     id: string;
+    type?: string;
     title: string;
     message: string;
     order_id?: string | null;
+    ticket_id?: string | null;
+    target_type?: string | null;
+    target_id?: string | null;
     is_read: boolean;
     is_admin?: boolean;
     created_at: string;
@@ -153,7 +158,7 @@ export default function AdminLayout() {
   const fetchNotifs = async () => {
     const { data } = await (supabase
       .from('notifications')
-      .select('id, title, message, order_id, is_read, is_admin, created_at')
+      .select('id, type, title, message, order_id, ticket_id, target_type, target_id, is_read, is_admin, created_at')
       .eq('is_admin', true)
       .order('created_at', { ascending: false })
       .limit(30) as any);
@@ -177,9 +182,8 @@ export default function AdminLayout() {
       setNotifs((prev) => prev.map((n) => n.id === notification.id ? { ...n, is_read: true } : n));
     }
     setShowNotifications(false);
-    nav(notification.order_id
-      ? `/admin/orders?order_id=${encodeURIComponent(notification.order_id)}`
-      : '/admin/orders');
+    const dest = resolveNotificationDestination(notification, true);
+    nav(dest);
   };
 
   // Format relative time

@@ -32,8 +32,16 @@ type Order = {
   price: number;
   original_price?: number;
   discount_amount?: number;
-  coupon_code?: string;
-  status: 'pending_payment' | 'pending_delivery' | 'processing' | 'completed' | 'cancelled' | 'refunded';
+  status:
+    | 'pending_payment'
+    | 'pending_delivery'
+    | 'processing'
+    | 'completed'
+    | 'cancelled'
+    | 'refunded'
+    | 'paid'
+    | 'pending'
+    | 'delivering';
   payment_code: string;
   notes: string;
   account_details?: string;
@@ -45,13 +53,16 @@ type Order = {
 };
 
 // Helper for Status Tags color
-const getStatusBadge = (status: Order['status']) => {
+const getStatusBadge = (status: Order['status'] | string) => {
   switch (status) {
+    case 'pending':
     case 'pending_payment':
       return <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700 border border-amber-100">Chờ thanh toán</span>;
+    case 'paid':
     case 'pending_delivery':
       return <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-[#2563EB] border border-blue-100">Chờ bàn giao</span>;
     case 'processing':
+    case 'delivering':
       return <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 border border-indigo-100">Đang thiết lập</span>;
     case 'completed':
       return <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-100">Đã hoàn thành</span>;
@@ -59,6 +70,8 @@ const getStatusBadge = (status: Order['status']) => {
       return <span className="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 border border-rose-100">Đã hủy</span>;
     case 'refunded':
       return <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 border border-slate-200">Đã hoàn tiền</span>;
+    default:
+      return <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 border border-slate-200">{status}</span>;
   }
 };
 
@@ -166,8 +179,15 @@ function OrderCard({
     return pLabel || pName;
   };
 
+  const isTopupOrder = () => {
+    const pName = (order.product_name || '').toLowerCase();
+    const pCode = (order.payment_code || '').toUpperCase();
+    const pNotes = (order.notes || '').toLowerCase();
+    return pName.includes('nạp tiền') || pName.includes('nạp số dư') || pCode.startsWith('BOWN') || pNotes.includes('nạp số dư');
+  };
+
   const calcExpiryInfo = () => {
-    if (order.status !== 'completed') return null;
+    if (order.status !== 'completed' || isTopupOrder()) return null;
 
     const displayPlan = getFormattedPlanLabel(order);
     const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${displayPlan} ${order.notes || ''}`.toLowerCase();
@@ -283,7 +303,7 @@ function OrderCard({
   };
 
   const calcWarranty = () => {
-    if (order.status !== 'completed') return null;
+    if (order.status !== 'completed' || isTopupOrder()) return null;
 
     const displayPlan = getFormattedPlanLabel(order);
     const planStr = `${order.product_name || ''} ${order.plan_label || ''} ${displayPlan} ${order.notes || ''}`.toLowerCase();
@@ -746,9 +766,12 @@ export default function Dashboard() {
   // Không cần tạo channel riêng; chỉ cần update state tại chỗ.
   useRealtimeEvent('orders:INSERT', useCallback((e) => {
     const o = e.payload as Order;
-    if (!session?.user?.id || o.user_id !== session.user.id) return;
+    if (!session?.user?.id) return;
+    if (o.user_id && o.user_id !== session.user.id) return;
     setOrders((prev) => {
-      if (prev.some((r) => r.id === o.id)) return prev;
+      if (prev.some((r) => r.id === o.id)) {
+        return prev.map((r) => (r.id === o.id ? { ...r, ...o } : r));
+      }
       return [o, ...prev];
     });
   }, [session?.user?.id]));
@@ -756,8 +779,15 @@ export default function Dashboard() {
   useRealtimeEvent('orders:UPDATE', useCallback((e) => {
     const o = e.payload as Order;
     const oldStatus = e.old?.status;
-    if (!session?.user?.id || o.user_id !== session.user.id) return;
-    setOrders((prev) => prev.map((r) => (r.id === o.id ? { ...r, ...o } : r)));
+    if (!session?.user?.id) return;
+    if (o.user_id && o.user_id !== session.user.id) return;
+    setOrders((prev) => {
+      const exists = prev.some((r) => r.id === o.id);
+      if (exists) {
+        return prev.map((r) => (r.id === o.id ? { ...r, ...o } : r));
+      }
+      return [o, ...prev];
+    });
     refreshBalance();
     // Cập nhật detail modal nếu đang mở
     setSelectedDetailOrder((prev) => prev?.id === o.id ? { ...prev, ...o } : prev);
@@ -766,6 +796,43 @@ export default function Dashboard() {
       setDeliveredOrderModal(o);
     }
   }, [session?.user?.id, refreshBalance]));
+
+  // Deep linking: Tự động mở Order Detail Modal nếu có ?order_id=xxx trong URL
+  const targetOrderId = searchParams.get('order_id');
+  useEffect(() => {
+    if (!targetOrderId || !session?.user?.id) return;
+
+    // Tìm trong danh sách orders đã nạp
+    const match = orders.find(
+      (o) => o.id === targetOrderId || o.payment_code === targetOrderId,
+    );
+    if (match) {
+      setSelectedDetailOrder(match);
+      return;
+    }
+
+    // Nếu chưa có trong danh sách, fetch trực tiếp từ DB
+    const fetchTargetOrder = async () => {
+      try {
+        const { data, error } = await (supabase
+          .from('orders')
+          .select('*')
+          .or(`id.eq.${targetOrderId},payment_code.eq.${targetOrderId}`)
+          .eq('user_id', session.user.id)
+          .maybeSingle() as any);
+
+        if (!error && data) {
+          setSelectedDetailOrder(data as Order);
+        } else if (error || !data) {
+          toast.error('⚠️ Đơn hàng không tồn tại hoặc bạn không có quyền xem.');
+        }
+      } catch (err) {
+        console.error('Error loading deep linked order:', err);
+      }
+    };
+
+    fetchTargetOrder();
+  }, [targetOrderId, orders, session?.user?.id, toast]);
 
 
   if (!session) return null;
@@ -1449,7 +1516,14 @@ export default function Dashboard() {
         order={selectedDetailOrder}
         hasReviewed={selectedDetailOrder ? reviewedOrderIds.has(selectedDetailOrder.id) : false}
         onReviewSuccess={handleReviewSuccess}
-        onClose={() => setSelectedDetailOrder(null)}
+        onClose={() => {
+          setSelectedDetailOrder(null);
+          if (searchParams.has('order_id')) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('order_id');
+            setSearchParams(next, { replace: true });
+          }
+        }}
         onRequestSupport={(orderId) => {
           setSupportOrderIdForModal(orderId);
           setShowSupportModalFromOrder(true);
