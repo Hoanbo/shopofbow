@@ -625,7 +625,7 @@ export default function AdminCoupons() {
           <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             type="text"
-            placeholder="🔍 Tìm mã giảm giá hoặc tên chiến dịch..."
+            placeholder="Tìm mã giảm giá hoặc tên chiến dịch..."
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
             className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/90 pl-10 pr-9 text-xs font-medium text-slate-900 dark:text-white outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] placeholder:text-slate-400"
@@ -643,74 +643,39 @@ export default function AdminCoupons() {
 
         {/* Filter Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
-          <button
-            type="button"
-            onClick={() => { setFilterTab('all'); setCurrentPage(1); }}
-            className={`rounded-xl px-3 py-2 text-xs font-black transition cursor-pointer shrink-0 ${
-              filterTab === 'all'
-                ? 'bg-[#2563EB] text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            Tất cả ({coupons.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => { setFilterTab('active'); setCurrentPage(1); }}
-            className={`rounded-xl px-3 py-2 text-xs font-black transition cursor-pointer shrink-0 ${
-              filterTab === 'active'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            🟢 Đang chạy ({stats.active})
-          </button>
-          {stats.expiringSoon > 0 && (
-            <button
-              type="button"
-              onClick={() => { setFilterTab('expiring_soon'); setCurrentPage(1); }}
-              className={`rounded-xl px-3 py-2 text-xs font-black transition cursor-pointer shrink-0 ${
-                filterTab === 'expiring_soon'
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              🟡 Sắp hết hạn ({stats.expiringSoon})
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => { setFilterTab('inactive'); setCurrentPage(1); }}
-            className={`rounded-xl px-3 py-2 text-xs font-black transition cursor-pointer shrink-0 ${
-              filterTab === 'inactive'
-                ? 'bg-slate-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            ⚪ Tạm dừng ({stats.inactive})
-          </button>
-          <button
-            type="button"
-            onClick={() => { setFilterTab('expired'); setCurrentPage(1); }}
-            className={`rounded-xl px-3 py-2 text-xs font-black transition cursor-pointer shrink-0 ${
-              filterTab === 'expired'
-                ? 'bg-rose-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            🔴 Hết hạn ({stats.expired})
-          </button>
-          <button
-            type="button"
-            onClick={() => { setFilterTab('first_order'); setCurrentPage(1); }}
-            className={`rounded-xl px-3 py-2 text-xs font-black transition cursor-pointer shrink-0 ${
-              filterTab === 'first_order'
-                ? 'bg-purple-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            ⭐ Đơn đầu tiên ({stats.firstOrder})
-          </button>
+          {[
+            { key: 'all', label: 'Tất cả', count: coupons.length },
+            { key: 'active', label: 'Đang chạy', count: stats.active },
+            ...(stats.expiringSoon > 0 ? [{ key: 'expiring_soon', label: 'Sắp hết hạn', count: stats.expiringSoon }] : []),
+            { key: 'inactive', label: 'Tạm dừng', count: stats.inactive },
+            { key: 'expired', label: 'Hết hạn', count: stats.expired },
+            { key: 'first_order', label: 'Đơn đầu tiên', count: stats.firstOrder },
+          ].map((tab) => {
+            const isActive = filterTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => { setFilterTab(tab.key as any); setCurrentPage(1); }}
+                className={`group inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-[#2563EB] text-white font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-semibold'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold font-mono transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -981,17 +946,18 @@ export default function AdminCoupons() {
       )}
 
       {/* Pagination */}
-      {!loading && totalPages > 1 && (
-        <div className="pt-2">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filteredCoupons.length}
-            itemsPerPage={ITEMS_PER_PAGE}
-            itemLabel="mã giảm giá"
-            onPageChange={(p) => setCurrentPage(p)}
-          />
-        </div>
+      {!loading && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={filteredCoupons.length}
+          itemsPerPage={ITEMS_PER_PAGE}
+          itemLabel="mã giảm giá"
+          onPageChange={(p) => {
+            setCurrentPage(p);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
       )}
 
       {/* ────────────────────────────────────────────────────────

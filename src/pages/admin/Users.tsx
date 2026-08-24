@@ -307,37 +307,37 @@ export default function AdminUsers() {
       {/* Filter / Search Bar */}
       <div className="flex flex-col sm:flex-row items-center gap-3 rounded-[22px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-3.5 shadow-xs">
         {/* Role tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl w-full sm:w-auto">
-          <button
-            onClick={() => setRoleFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-              roleFilter === 'all'
-                ? 'bg-white dark:bg-[#1E2A4A] text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
-            }`}
-          >
-            Tất cả ({users.length})
-          </button>
-          <button
-            onClick={() => setRoleFilter('ctv')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
-              roleFilter === 'ctv'
-                ? 'bg-white dark:bg-[#1E2A4A] text-amber-600 dark:text-amber-400 shadow-xs'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
-            }`}
-          >
-            👑 CTV Sỉ ({totalCtvs})
-          </button>
-          <button
-            onClick={() => setRoleFilter('member')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-              roleFilter === 'member'
-                ? 'bg-white dark:bg-[#1E2A4A] text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
-            }`}
-          >
-            Khách thường ({users.length - totalCtvs})
-          </button>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {[
+            { key: 'all', label: 'Tất cả', count: users.length },
+            { key: 'ctv', label: 'CTV Sỉ', count: totalCtvs },
+            { key: 'member', label: 'Khách thường', count: users.length - totalCtvs },
+          ].map((tab) => {
+            const isActive = roleFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setRoleFilter(tab.key as any)}
+                className={`group inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-[#2563EB] text-white font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-semibold'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold font-mono transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="relative flex-1 w-full">

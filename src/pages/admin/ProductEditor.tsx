@@ -45,7 +45,7 @@ const emptyForm = {
   affiliate_type: 'fixed' as 'fixed' | 'percent',
   affiliate_reward: 0,
   affiliate_discount: 0,
-  rating: 5,
+  rating: null as number | null,
   sold: 0,
   is_active: true,
   is_featured: false,
@@ -119,7 +119,7 @@ export default function ProductEditor() {
           affiliate_type: (p.affiliate_type as 'fixed' | 'percent') || 'fixed',
           affiliate_reward: Number(p.affiliate_reward ?? 0),
           affiliate_discount: Number(p.affiliate_discount ?? 0),
-          rating: Number(p.rating ?? 5),
+          rating: p.rating != null ? Number(p.rating) : null,
           sold: p.sold ?? 0,
           is_active: p.is_active,
           is_featured: p.is_featured,
@@ -130,6 +130,14 @@ export default function ProductEditor() {
       .catch((e) => toast.error(e instanceof Error ? e.message : 'Lỗi tải dữ liệu'))
       .finally(() => setLoading(false));
   }, [id, isNew, loadSubs]);
+
+  const minRetailPrice = plans.length > 0
+    ? Math.min(...plans.filter(p => Number(p.price) > 0).map(p => Number(p.price)))
+    : (Number(form.base_price) || 0);
+
+  const minCtvPrice = plans.length > 0
+    ? Math.min(...plans.filter(p => (Number(p.price_ctv) || Number(p.price)) > 0).map(p => Number(p.price_ctv) || Number(p.price)))
+    : (Number(form.price_ctv) || minRetailPrice);
 
   const buildPayload = (): Partial<ProductRow> => ({
     name: form.name.trim(),
@@ -142,15 +150,13 @@ export default function ProductEditor() {
     banner_url: form.banner_url || null,
     accent: form.accent || null,
     badge: form.badge || null,
-    base_price: Number(form.base_price) || 0,
-    price_ctv: Number(form.price_ctv) > 0 ? Number(form.price_ctv) : null,
+    base_price: minRetailPrice > 0 ? minRetailPrice : Number(form.base_price) || 0,
+    price_ctv: minCtvPrice > 0 ? minCtvPrice : null,
     affiliate_enabled: form.affiliate_enabled,
     affiliate_type: form.affiliate_type,
     affiliate_reward: Number(form.affiliate_reward) || 0,
     affiliate_discount: Number(form.affiliate_discount) || 0,
     original_price: null,
-    rating: Number(form.rating) || null,
-    sold: Number(form.sold) || 0,
     is_active: form.is_active,
     is_featured: form.is_featured,
     sort_order: Number(form.sort_order) || 0,
@@ -416,39 +422,42 @@ export default function ProductEditor() {
             </div>
           </AdminCard>
 
-          <AdminCard title="Giá & Đánh giá">
-            <div className="space-y-4">
-              <Field
-                label="Giá bán lẻ (₫)"
-                type="number"
-                min="0"
-                value={form.base_price}
-                onChange={(e) => set('base_price', Math.max(0, Number(e.target.value) || 0))}
-              />
-              <Field
-                label="👑 Giá Sỉ CTV (₫)"
-                type="number"
-                min="0"
-                value={form.price_ctv || ''}
-                onChange={(e) => set('price_ctv', Math.max(0, Number(e.target.value) || 0))}
-                hint="Giá ưu đãi khi tài khoản CTV đăng nhập (0 hoặc để trống = dùng giá bán lẻ)"
-              />
-              <Field
-                label="Đánh giá (0-5)"
-                type="number"
-                step="0.1"
-                min="0"
-                max="5"
-                value={form.rating}
-                onChange={(e) => set('rating', Math.min(5, Math.max(0, Number(e.target.value) || 0)))}
-              />
-              <Field
-                label="Đã bán"
-                type="number"
-                min="0"
-                value={form.sold}
-                onChange={(e) => set('sold', Math.max(0, Number(e.target.value) || 0))}
-              />
+          <AdminCard title="📊 Giá hiển thị & Thống kê thực tế">
+            <div className="space-y-3.5">
+              <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/30 p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400">🏷️ Giá hiển thị Card (Gói thấp nhất):</span>
+                  <span className="font-extrabold text-[#2563EB] dark:text-[#35A8FF]">
+                    {minRetailPrice > 0 ? `${minRetailPrice.toLocaleString('vi-VN')}₫` : '0₫'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-500 dark:text-slate-400">👑 Giá Sỉ CTV Card:</span>
+                  <span className="font-extrabold text-amber-600 dark:text-amber-400">
+                    {minCtvPrice > 0 ? `${minCtvPrice.toLocaleString('vi-VN')}₫` : 'Theo giá lẻ'}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium">
+                  💡 Hệ thống tự động lấy mức giá của gói thấp nhất bên dưới để hiển thị ngoài trang chủ.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-3 text-center">
+                  <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">⭐ Đánh giá thật</span>
+                  <span className="mt-1 block text-sm font-black text-amber-500">
+                    {form.rating && Number(form.rating) > 0 ? `${Number(form.rating).toFixed(1)} ⭐` : 'Chưa có review'}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Tự động từ Reviews</span>
+                </div>
+                <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 p-3 text-center">
+                  <span className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">🛒 Lượng mua thật</span>
+                  <span className="mt-1 block text-lg font-black text-slate-900 dark:text-white">
+                    {Number(form.sold) || 0}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Đơn đã hoàn thành</span>
+                </div>
+              </div>
             </div>
           </AdminCard>
 
@@ -808,6 +817,7 @@ function PlansEditor({
   const [draft, setDraft] = useState({
     name: '',
     duration: '',
+    cost_price: 0 as number | undefined,
     price: 0,
     price_ctv: 0,
     warranty: '',
@@ -824,6 +834,7 @@ function PlansEditor({
     setDraft({
       name: '',
       duration: '',
+      cost_price: 0,
       price: 0,
       price_ctv: 0,
       warranty: '',
@@ -840,6 +851,7 @@ function PlansEditor({
     setDraft({
       name: p.name,
       duration: p.duration ?? '',
+      cost_price: Number((p as any).cost_price) || 0,
       price: Number(p.price) || 0,
       price_ctv: Number(p.price_ctv) || 0,
       warranty: p.notes ?? '',
@@ -885,6 +897,7 @@ function PlansEditor({
                   ...item,
                   name: draft.name.trim(),
                   duration: draft.duration.trim() || null,
+                  cost_price: Number(draft.cost_price) > 0 ? Number(draft.cost_price) : null,
                   price: Number(draft.price) || 0,
                   price_ctv: Number(draft.price_ctv) > 0 ? Number(draft.price_ctv) : null,
                   notes: draft.warranty.trim() || null,
@@ -905,13 +918,14 @@ function PlansEditor({
         await updatePlan(editingPlanId, {
           name: draft.name.trim(),
           duration: draft.duration.trim() || null,
+          cost_price: Number(draft.cost_price) > 0 ? Number(draft.cost_price) : null,
           price: Number(draft.price) || 0,
           price_ctv: Number(draft.price_ctv) > 0 ? Number(draft.price_ctv) : null,
           notes: draft.warranty.trim() || null,
           is_highlight: draft.is_highlight,
           badge: draft.badge.trim() || null,
           features: draft.features.length > 0 ? draft.features : null,
-        });
+        } as any);
         resetDraft();
         toast.success('Đã cập nhật gói giá thành công!');
         reload();
@@ -928,6 +942,7 @@ function PlansEditor({
           product_id: 'new',
           name: draft.name.trim(),
           duration: draft.duration.trim() || null,
+          cost_price: Number(draft.cost_price) > 0 ? Number(draft.cost_price) : null,
           price: Number(draft.price) || 0,
           price_ctv: Number(draft.price_ctv) > 0 ? Number(draft.price_ctv) : null,
           original_price: null,
@@ -938,7 +953,7 @@ function PlansEditor({
           sort_order: plans.length + 1,
           badge: draft.badge.trim() || null,
           features: draft.features.length > 0 ? draft.features : null,
-        };
+        } as any;
         setPlans((prev) => [...prev, newPlanDraft]);
         resetDraft();
         toast.success('Đã thêm gói giá vào bản nháp!');
@@ -951,6 +966,7 @@ function PlansEditor({
           product_id: productId,
           name: draft.name.trim(),
           duration: draft.duration.trim() || null,
+          cost_price: Number(draft.cost_price) > 0 ? Number(draft.cost_price) : null,
           price: Number(draft.price) || 0,
           price_ctv: Number(draft.price_ctv) > 0 ? Number(draft.price_ctv) : null,
           original_price: null,
@@ -959,7 +975,7 @@ function PlansEditor({
           sort_order: plans.length + 1,
           badge: draft.badge.trim() || null,
           features: draft.features.length > 0 ? draft.features : null,
-        });
+        } as any);
         resetDraft();
         toast.success('Đã thêm gói giá mới thành công!');
         reload();
@@ -1019,6 +1035,11 @@ function PlansEditor({
                   <span className="font-extrabold text-slate-900 dark:text-white text-xs">{p.name}</span>
                   {p.duration && <span className="text-xs text-slate-400 font-semibold">({p.duration})</span>}
                   <span className="text-xs font-black text-[#2563EB] dark:text-[#35A8FF]">{Number(p.price).toLocaleString('vi-VN')}₫</span>
+                  {(p as any).cost_price != null && Number((p as any).cost_price) > 0 && (
+                    <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/40 px-2 py-0.5 text-[9px] font-bold text-slate-600 dark:text-slate-300">
+                      💰 Vốn: {Number((p as any).cost_price).toLocaleString('vi-VN')}₫
+                    </span>
+                  )}
                   {p.price_ctv != null && Number(p.price_ctv) > 0 && (
                     <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/50 border border-amber-200/60 dark:border-amber-800/40 px-2 py-0.5 text-[9px] font-black text-amber-700 dark:text-amber-300">
                       👑 Sỉ CTV: {Number(p.price_ctv).toLocaleString('vi-VN')}₫
@@ -1084,9 +1105,10 @@ function PlansEditor({
         </div>
       )}
 
-      <div className="space-y-3.5 border-t border-slate-100 dark:border-slate-800 pt-3">
+      {/* Plan edit form container */}
+      <div className="rounded-2xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#0B132B]/50 p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h4 className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
+          <h4 className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
             {editingPlanId ? '✏️ Chỉnh sửa gói giá hiện tại' : '➕ Thêm gói giá mới'}
           </h4>
           {editingPlanId && (
@@ -1100,9 +1122,17 @@ function PlansEditor({
           )}
         </div>
 
-        <div className="grid gap-3.5 sm:grid-cols-5 items-start">
+        <div className="grid gap-3.5 sm:grid-cols-6 items-start">
           <Field label="Tên gói *" value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Ví dụ: 1 tháng..." />
           <Field label="Thời hạn *" value={draft.duration} onChange={(e) => setDraft((d) => ({ ...d, duration: e.target.value }))} placeholder="Ví dụ: 30 ngày..." />
+          <Field
+            label="Giá vốn / Nhập (₫)"
+            type="number"
+            min="0"
+            value={draft.cost_price || ''}
+            onChange={(e) => setDraft((d) => ({ ...d, cost_price: Math.max(0, Number(e.target.value) || 0) }))}
+            placeholder="0"
+          />
           <Field
             label="Giá lẻ (₫) *"
             type="number"

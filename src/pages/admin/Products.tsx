@@ -29,6 +29,30 @@ export default function AdminProducts() {
   const [q, setQ] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const toast = useToast();
+  const [counts, setCounts] = useState<Record<Filter, number>>({
+    all: 0,
+    'ai-tool': 0,
+    'premium-app': 0,
+    product: 0,
+  });
+
+  const loadCounts = useCallback(async () => {
+    try {
+      const all = await listProducts({});
+      setCounts({
+        all: all.length,
+        'ai-tool': all.filter((p) => p.type === 'ai-tool').length,
+        'premium-app': all.filter((p) => p.type === 'premium-app').length,
+        product: all.filter((p) => p.type === 'product').length,
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCounts();
+  }, [loadCounts]);
 
 
   const load = useCallback(async () => {
@@ -68,16 +92,16 @@ export default function AdminProducts() {
   const onDelete = (id: string) => {
     setConfirmConfig({
       isOpen: true,
-      title: 'Xóa sản phẩm',
-      message: 'Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này không thể hoàn tác.',
+      title: 'Xác nhận xóa',
+      message: 'Bạn có chắc chắn muốn xóa sản phẩm này? Thao tác này không thể hoàn tác.',
       onConfirm: async () => {
         try {
           await deleteProduct(id);
-          setRows((r) => r.filter((x) => x.id !== id));
-          toast.success('Xóa sản phẩm thành công!');
-          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+          toast.success('Đã xóa sản phẩm');
+          load();
+          loadCounts();
         } catch (e: any) {
-          setErr(e instanceof Error ? e.message : 'Xóa thất bại');
+          toast.error('Không thể xóa sản phẩm: ' + e.message);
         }
       },
     });
@@ -86,16 +110,20 @@ export default function AdminProducts() {
   const toggleFeatured = async (row: ProductRow) => {
     try {
       await setFeatured(row.id, !row.is_featured);
-      setRows((r) => r.map((x) => (x.id === row.id ? { ...x, is_featured: !x.is_featured } : x)));
+      toast.success(row.is_featured ? 'Đã bỏ nổi bật' : 'Đã đặt làm nổi bật');
+      load();
+      loadCounts();
     } catch (e: any) {
-      toast.error('Không thể cập nhật nổi bật: ' + e.message);
+      toast.error('Không thể cập nhật: ' + e.message);
     }
   };
 
   const toggleActive = async (row: ProductRow) => {
     try {
       await setActive(row.id, !row.is_active);
-      setRows((r) => r.map((x) => (x.id === row.id ? { ...x, is_active: !x.is_active } : x)));
+      toast.success(row.is_active ? 'Đã ẩn sản phẩm' : 'Đã kích hoạt hiển thị sản phẩm');
+      load();
+      loadCounts();
     } catch (e: any) {
       toast.error('Không thể cập nhật hiển thị: ' + e.message);
     }
@@ -125,20 +153,34 @@ export default function AdminProducts() {
 
       {/* FILTER & SEARCH */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-[#131C32] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 rounded-[22px] p-4 shadow-xs">
-        <div className="flex flex-wrap gap-1.5">
-          {filters.map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setType(f.key)}
-              className={`rounded-full px-4 py-2 text-xs font-bold transition-all ${
-                type === f.key
-                  ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs'
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-[#F4F8FF] dark:hover:bg-slate-850'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {filters.map((f) => {
+            const count = counts[f.key] ?? 0;
+            const isActive = type === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setType(f.key)}
+                className={`group inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-[#2563EB] text-white font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-semibold'
+                }`}
+              >
+                <span>{f.label}</span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold font-mono transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
         
         <div className="flex h-11 items-center gap-2 rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] px-4 sm:max-w-xs sm:flex-1">

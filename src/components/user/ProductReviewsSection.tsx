@@ -79,16 +79,30 @@ export default function ProductReviewsSection({
   };
 
   useEffect(() => {
-    if (productId) {
-      fetchReviews();
-    }
+    if (!productId) return;
+    fetchReviews();
+
+    const channel = supabase
+      .channel(`realtime-product-reviews-${productId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'product_reviews', filter: `product_id=eq.${productId}` },
+        () => {
+          fetchReviews();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [productId]);
 
   // Dynamic Statistics
   const totalCount = reviews.length;
   const avgRating = totalCount > 0
     ? (reviews.reduce((acc, r) => acc + r.rating, 0) / totalCount).toFixed(1)
-    : '0.0';
+    : null;
 
   const countsByStar = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
   reviews.forEach((r) => {
@@ -125,49 +139,72 @@ export default function ProductReviewsSection({
       {/* Summary Box */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-5 rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-[#18243E]">
         {/* Rating Score */}
-        <div className="flex flex-col items-center justify-center text-center space-y-1 md:border-r border-slate-200/60 dark:border-slate-800">
-          <span className="text-4xl font-black text-slate-900 dark:text-white">
-            {totalCount > 0 ? avgRating : '0.0'}
-          </span>
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((star) => (
-              <StarIcon
-                key={star}
-                className={`h-4 w-4 ${
-                  totalCount > 0 && star <= Math.round(Number(avgRating))
-                    ? 'fill-amber-400 text-amber-400'
-                    : 'fill-slate-200 text-slate-300 dark:fill-slate-700 dark:text-slate-600'
-                }`}
-              />
-            ))}
+        {totalCount > 0 ? (
+          <div className="flex flex-col items-center justify-center text-center space-y-1 md:border-r border-slate-200/60 dark:border-slate-800">
+            <span className="text-4xl font-black text-slate-900 dark:text-white">
+              {avgRating}
+            </span>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <StarIcon
+                  key={star}
+                  className={`h-4 w-4 ${
+                    star <= Math.round(Number(avgRating))
+                      ? 'fill-amber-400 text-amber-400'
+                      : 'fill-slate-200 text-slate-300 dark:fill-slate-700 dark:text-slate-600'
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 pt-1">
+              Dựa trên {totalCount} đánh giá đã xác minh
+            </span>
           </div>
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 pt-1">
-            {totalCount > 0 ? `Dựa trên ${totalCount} đánh giá đã xác minh` : 'Chưa có đánh giá đã xác minh'}
-          </span>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center text-center space-y-1.5 md:border-r border-slate-200/60 dark:border-slate-800 p-2">
+            <span className="text-2xl">⭐</span>
+            <span className="text-sm font-extrabold text-slate-800 dark:text-slate-200">
+              Chưa có đánh giá
+            </span>
+            <span className="text-[11px] text-slate-400 max-w-[220px]">
+              Chưa có lượt đánh giá nào cho sản phẩm này
+            </span>
+          </div>
+        )}
 
         {/* Breakdown Bars */}
-        <div className="md:col-span-2 space-y-1.5 justify-center flex flex-col">
-          {[5, 4, 3, 2, 1].map((star) => {
-            const count = countsByStar[star as keyof typeof countsByStar];
-            const pct = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
-            return (
-              <div key={star} className="flex items-center gap-3 text-xs font-bold">
-                <span className="w-8 shrink-0 flex items-center gap-0.5 text-slate-600 dark:text-slate-300">
-                  <span>{star}</span>
-                  <StarIcon className="h-3 w-3 fill-amber-400 text-amber-400" />
-                </span>
-                <div className="flex-1 h-2 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full transition-all duration-500"
-                    style={{ width: `${pct}%` }}
-                  />
+        {totalCount > 0 ? (
+          <div className="md:col-span-2 space-y-1.5 justify-center flex flex-col">
+            {[5, 4, 3, 2, 1].map((star) => {
+              const count = countsByStar[star as keyof typeof countsByStar];
+              const pct = Math.round((count / totalCount) * 100);
+              return (
+                <div key={star} className="flex items-center gap-3 text-xs font-bold">
+                  <span className="w-8 shrink-0 flex items-center gap-0.5 text-slate-600 dark:text-slate-300">
+                    <span>{star}</span>
+                    <StarIcon className="h-3 w-3 fill-amber-400 text-amber-400" />
+                  </span>
+                  <div className="flex-1 h-2 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="w-10 text-right text-slate-400 font-mono text-[11px]">{pct}%</span>
                 </div>
-                <span className="w-10 text-right text-slate-400 font-mono text-[11px]">{pct}%</span>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="md:col-span-2 flex flex-col items-center justify-center text-center p-4 rounded-xl border border-dashed border-slate-200/80 dark:border-slate-800 bg-white/40 dark:bg-slate-900/20 space-y-1">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+              📊 Chưa đủ dữ liệu đánh giá chi tiết
+            </span>
+            <p className="text-[11px] text-slate-400">
+              Biểu đồ sao sẽ tự động hiển thị sau khi có bài đánh giá đầu tiên.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Filters & Sorting Header */}

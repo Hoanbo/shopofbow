@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import type { CatalogItem } from '../data/types';
 import { fetchBySlug, fetchByCategory, fetchAllProducts, fetchFaqs } from '../data/api';
@@ -6,6 +6,7 @@ import { formatVND } from '../data/catalog';
 import { useAsync } from '../hooks/useAsync';
 import { useSeo } from '../hooks/useSeo';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import CheckoutModal from '../components/CheckoutModal';
 import ProductReviewsSection from '../components/user/ProductReviewsSection';
 import AppLogo from '../components/AppLogo';
@@ -44,32 +45,65 @@ export default function Detail({ category, base, crumb }: Props) {
   const [copiedRef, setCopiedRef] = useState(false);
   const toast = useToast();
 
-  const { data: item, loading } = useAsync(
+  const { data: rawItem, loading } = useAsync(
     () => (slug ? fetchBySlug(slug) : Promise.resolve(null)),
     [slug],
   );
+
+  const [liveItem, setLiveItem] = useState<CatalogItem | null>(null);
+  useEffect(() => {
+    if (rawItem) setLiveItem(rawItem);
+  }, [rawItem]);
+
+  useEffect(() => {
+    if (!rawItem?.id) return;
+    const channel = supabase
+      .channel(`realtime-product-header-${rawItem.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'products', filter: `id=eq.${rawItem.id}` },
+        (payload: any) => {
+          if (payload.new) {
+            setLiveItem((prev) => prev ? {
+              ...prev,
+              rating: payload.new.rating != null ? Number(payload.new.rating) : undefined,
+              sold: payload.new.sold ?? prev.sold,
+              price: Number(payload.new.base_price ?? prev.price),
+              priceCtv: payload.new.price_ctv != null ? Number(payload.new.price_ctv) : prev.priceCtv,
+            } : prev);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [rawItem?.id]);
+
+  const currentItem = liveItem || rawItem;
   const { data: related = [] } = useAsync(async () => {
-    if (!item) return [];
-    const catItems = await fetchByCategory(item.category);
-    const sameCat = catItems.filter((i) => i.id !== item.id);
+    if (!currentItem) return [];
+    const catItems = await fetchByCategory(currentItem.category);
+    const sameCat = catItems.filter((i) => i.id !== currentItem.id);
     if (sameCat.length >= 4) {
       return sameCat.slice(0, 4);
     }
     const all = await fetchAllProducts();
-    const other = all.filter((i) => i.id !== item.id && !sameCat.some((c) => c.id === i.id));
+    const other = all.filter((i) => i.id !== currentItem.id && !sameCat.some((c) => c.id === i.id));
     return [...sameCat, ...other].slice(0, 4);
-  }, [item?.id, item?.category]);
+  }, [currentItem?.id, currentItem?.category]);
 
-  const { data: faqs = [] } = useAsync(() => (item ? fetchFaqs(item.id) : Promise.resolve([])), [item?.id]);
+  const { data: faqs = [] } = useAsync(() => (currentItem ? fetchFaqs(currentItem.id) : Promise.resolve([])), [currentItem?.id]);
   const [plan, setPlan] = useState(0);
   const [showCheckout, setShowCheckout] = useState(false);
   // Thông tin đơn hàng sau khi thanh toán ví thành công
   const [walletOrder, setWalletOrder] = useState<{ code: string; amount: number; qty: number } | null>(null);
 
   useSeo({
-    title: item?.name,
-    description: item?.description || item?.tagline,
-    image: item?.image,
+    title: currentItem?.name,
+    description: currentItem?.description || currentItem?.tagline,
+    image: currentItem?.image,
     type: 'product',
   });
 
@@ -89,7 +123,7 @@ export default function Detail({ category, base, crumb }: Props) {
     );
   }
 
-  if (!item || (category !== 'all' && item.category !== category)) {
+  if (!currentItem || (category !== 'all' && currentItem.category !== category)) {
     return (
       <div className="container-bow py-20 text-center">
         <div className="mx-auto max-w-md rounded-[28px] border border-[#E7EEF8] bg-white p-8 shadow-sm">
@@ -106,6 +140,7 @@ export default function Detail({ category, base, crumb }: Props) {
     );
   }
 
+  const item = currentItem;
   const relatedItems = related.slice(0, 4);
   const active = item.plans[plan] ?? item.plans[0];
   const fav = item ? (isFavorite(item.id) || isFavorite(item.slug)) : false;
@@ -204,9 +239,13 @@ export default function Detail({ category, base, crumb }: Props) {
             <p className="mt-1.5 text-sm font-medium text-slate-500 leading-relaxed">{item.tagline}</p>
 
             <div className="mt-4 flex items-center gap-3 text-sm">
-              <span className="flex items-center gap-1 font-extrabold text-[#0F172A]">
-                <StarIcon className="h-4 w-4 text-amber-400" /> {item.rating}
-              </span>
+              {item.rating != null && Number(item.rating) > 0 ? (
+                <span className="flex items-center gap-1 font-extrabold text-[#0F172A] dark:text-white">
+                  <StarIcon className="h-4 w-4 text-amber-400" /> {Number(item.rating).toFixed(1)}
+                </span>
+              ) : (
+                <span className="font-semibold text-slate-400">Chưa có đánh giá</span>
+              )}
               <span className="text-slate-300">•</span>
               <span className="font-semibold text-slate-500">
                 Đã bán {item.sold >= 1000 ? (item.sold / 1000).toFixed(1) + 'k' : item.sold} gói
@@ -251,8 +290,11 @@ export default function Detail({ category, base, crumb }: Props) {
                 <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {item.plans.map((p, i) => {
                     const isSelected = plan === i;
-                    const badgeText = p.badge || (p.highlight ? 'Tốt nhất' : null);
+                    const badgeText = p.badge && !p.label.toLowerCase().includes(p.badge.toLowerCase())
+                      ? p.badge
+                      : (p.highlight ? 'Khuyên dùng' : null);
                     const planPrice = (isCtv && p.priceCtv != null && p.priceCtv > 0) ? p.priceCtv : p.price;
+                    const showDuration = p.duration && !p.label.toLowerCase().includes(p.duration.toLowerCase());
 
                     return (
                       <button
@@ -273,7 +315,7 @@ export default function Detail({ category, base, crumb }: Props) {
                         <span className={`block text-sm font-extrabold ${isSelected ? (isCtv ? 'text-amber-700 dark:text-amber-300' : 'text-[#2563EB] dark:text-[#35A8FF]') : 'text-[#0F172A] dark:text-slate-200'}`}>
                           {p.label}
                         </span>
-                        {p.duration && (
+                        {showDuration && (
                           <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500 mt-0.5">
                             {p.duration}
                           </span>
@@ -327,12 +369,17 @@ export default function Detail({ category, base, crumb }: Props) {
                     {/* Render Features of the CURRENTLY SELECTED PLAN */}
                     {((active.features && active.features.length > 0) || item.features.length > 0) && (
                       <ul className="mt-3.5 grid gap-2.5 sm:grid-cols-2">
-                        {((active.features && active.features.length > 0) ? active.features : item.features).map((feat, idx) => (
-                          <li key={`${feat}-${idx}`} className="flex items-start gap-2.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                            <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#2563EB] dark:text-[#35A8FF]" />
-                            <span>{feat}</span>
-                          </li>
-                        ))}
+                        {((active.features && active.features.length > 0) ? active.features : item.features)
+                          .filter((feat) => {
+                            if (active.notes && feat.toLowerCase().startsWith('bảo hành')) return false;
+                            return true;
+                          })
+                          .map((feat, idx) => (
+                            <li key={`${feat}-${idx}`} className="flex items-start gap-2.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
+                              <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#2563EB] dark:text-[#35A8FF]" />
+                              <span>{feat}</span>
+                            </li>
+                          ))}
                       </ul>
                     )}
 
@@ -365,7 +412,7 @@ export default function Detail({ category, base, crumb }: Props) {
                         <span className="text-base shrink-0">🛡️</span>
                         <span>
                           <strong className="font-extrabold text-sky-900 dark:text-sky-200">Bảo hành:</strong>{' '}
-                          {active.notes}
+                          {active.notes.replace(/^bảo hành:\s*/i, '')}
                         </span>
                       </div>
                     )}

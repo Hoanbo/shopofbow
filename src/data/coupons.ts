@@ -106,7 +106,7 @@ export async function checkFirstOrderEligibility(userId: string): Promise<boolea
     const { count, error } = await (supabase.from('orders') as any)
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .in('status', ['pending_delivery', 'processing', 'completed']);
+      .in('status', ['paid', 'pending_delivery', 'processing', 'delivering', 'completed']);
 
     if (error) {
       console.error('[checkFirstOrderEligibility] Error:', error);

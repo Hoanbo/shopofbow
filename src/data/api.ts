@@ -71,13 +71,9 @@ const PRODUCT_COLS =
   'id, category_id, name, slug, short_description, description, logo_url, banner_url, type, accent, badge, base_price, original_price, rating, sold, is_active, is_featured, sort_order, affiliate_enabled, affiliate_type, affiliate_reward, affiliate_discount, price_ctv, created_at, updated_at';
 
 function mapPlan(p: PlanRow): PlanTier {
-  const planLabel = p.duration && p.name && !p.name.toLowerCase().includes(p.duration.toLowerCase())
-    ? `${p.name} (${p.duration})`
-    : p.name;
-
   return {
     id: p.id,
-    label: planLabel,
+    label: p.name,
     duration: p.duration ?? '',
     price: Number(p.price ?? 0),
     originalPrice: p.original_price != null ? Number(p.original_price) : undefined,
@@ -117,7 +113,7 @@ function mapProduct(
     affiliateType: row.affiliate_type ?? 'fixed',
     affiliateReward: row.affiliate_reward != null ? Number(row.affiliate_reward) : undefined,
     affiliateDiscount: row.affiliate_discount != null ? Number(row.affiliate_discount) : undefined,
-    rating: row.rating != null ? Number(row.rating) : 5,
+    rating: row.rating != null ? Number(row.rating) : undefined,
     sold: row.sold ?? 0,
     featured: row.is_featured || undefined,
     badge: row.badge ?? undefined,

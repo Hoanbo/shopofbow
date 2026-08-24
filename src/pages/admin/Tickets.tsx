@@ -45,7 +45,7 @@ export default function AdminTickets() {
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
+  const ITEMS_PER_PAGE = 6;
 
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
@@ -231,8 +231,11 @@ export default function AdminTickets() {
   };
 
   // Counts for status tabs
+  const allCount = tickets.length;
   const pendingCount = tickets.filter((t) => t.status === 'pending').length;
   const processingCount = tickets.filter((t) => t.status === 'processing').length;
+  const resolvedCount = tickets.filter((t) => t.status === 'resolved').length;
+  const closedCount = tickets.filter((t) => t.status === 'closed').length;
 
   return (
     <div className="space-y-6">
@@ -250,13 +253,13 @@ export default function AdminTickets() {
         {(pendingCount > 0 || processingCount > 0) && (
           <div className="flex items-center gap-2">
             {pendingCount > 0 && (
-              <span className="inline-flex items-center rounded-full bg-rose-50 dark:bg-rose-950/40 px-3 py-1 text-xs font-black text-rose-600 dark:text-rose-400 border border-rose-200/50">
-                🔴 {pendingCount} Ticket chờ xử lý
+              <span className="inline-flex items-center rounded-full bg-rose-50 dark:bg-rose-950/40 px-3 py-1 text-xs font-bold text-rose-600 dark:text-rose-400 border border-rose-200/50">
+                {pendingCount} Ticket chờ xử lý
               </span>
             )}
             {processingCount > 0 && (
-              <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/40 px-3 py-1 text-xs font-black text-amber-600 dark:text-amber-400 border border-amber-200/50">
-                🟡 {processingCount} Đang xử lý
+              <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/40 px-3 py-1 text-xs font-bold text-amber-600 dark:text-amber-400 border border-amber-200/50">
+                {processingCount} Đang xử lý
               </span>
             )}
           </div>
@@ -266,27 +269,39 @@ export default function AdminTickets() {
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#131C32] p-4 rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 shadow-xs">
         {/* Status Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           {[
-            { key: 'all', label: 'Tất cả' },
-            { key: 'pending', label: 'Chờ xử lý (🔴)' },
-            { key: 'processing', label: 'Đang xử lý (🟡)' },
-            { key: 'resolved', label: 'Đã giải quyết (🟢)' },
-            { key: 'closed', label: 'Đã đóng (⚫)' },
-          ].map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => { setActiveFilter(f.key); setCurrentPage(1); }}
-              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all whitespace-nowrap ${
-                activeFilter === f.key
-                  ? 'bg-blue-50 dark:bg-blue-950/50 text-[#2563EB] dark:text-[#35A8FF] shadow-2xs font-extrabold'
-                  : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+            { key: 'all', label: 'Tất cả', count: allCount },
+            { key: 'pending', label: 'Chờ xử lý', count: pendingCount },
+            { key: 'processing', label: 'Đang xử lý', count: processingCount },
+            { key: 'resolved', label: 'Đã giải quyết', count: resolvedCount },
+            { key: 'closed', label: 'Đã đóng', count: closedCount },
+          ].map((f) => {
+            const isActive = activeFilter === f.key;
+            return (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => { setActiveFilter(f.key); setCurrentPage(1); }}
+                className={`group inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-[#2563EB] text-white font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-semibold'
+                }`}
+              >
+                <span>{f.label}</span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold font-mono transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+                  }`}
+                >
+                  {f.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Search Bar */}
@@ -468,18 +483,17 @@ export default function AdminTickets() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="p-4 bg-white dark:bg-[#131C32] rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A]/50 shadow-xs">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filteredTickets.length}
-            itemsPerPage={ITEMS_PER_PAGE}
-            itemLabel="Ticket"
-            onPageChange={(p) => setCurrentPage(p)}
-          />
-        </div>
-      )}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredTickets.length}
+        itemsPerPage={ITEMS_PER_PAGE}
+        itemLabel="Ticket"
+        onPageChange={(p) => {
+          setCurrentPage(p);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
 
       {/* Admin Ticket Chat Detail Modal */}
       <AdminTicketDetailModal

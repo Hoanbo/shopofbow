@@ -304,11 +304,32 @@ const getStatusBadge = (status: Order['status'] | string) => {
 export default function AdminOrders() {
   const [searchParams] = useSearchParams();
   const targetOrderId = searchParams.get('order_id');
+  const statusParam = searchParams.get('status') || searchParams.get('filter') || searchParams.get('tab');
+  const searchParamQ = searchParams.get('q') || searchParams.get('search');
+
+  const validFilterStatuses = ['all', 'pending_payment', 'pending_delivery', 'processing', 'completed', 'cancelled', 'refunded', 'expiring_soon'];
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>(
+    statusParam && validFilterStatuses.includes(statusParam)
+      ? statusParam
+      : 'all'
+  );
+  const [searchQuery, setSearchQuery] = useState(searchParamQ || '');
   const toast = useToast();
+
+  useEffect(() => {
+    if (statusParam && validFilterStatuses.includes(statusParam)) {
+      setFilterStatus(statusParam);
+    }
+  }, [statusParam]);
+
+  useEffect(() => {
+    if (searchParamQ) {
+      setSearchQuery(searchParamQ);
+    }
+  }, [searchParamQ]);
 
   // Delivery details modal state
   const [deliveryOrder, setDeliveryOrder] = useState<Order | null>(null);
@@ -499,7 +520,7 @@ export default function AdminOrders() {
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const ORDERS_PER_PAGE = 8;
+  const ORDERS_PER_PAGE = 6;
 
   // Reset to page 1 when filters or search change
   useEffect(() => {
@@ -733,13 +754,56 @@ export default function AdminOrders() {
     }
   };
 
+  const isExpiringSoonOrder = (order: Order) => {
+    if (order.status !== 'completed') return false;
+    const planStr = `${order.plan_label || ''} ${order.notes || ''} ${order.product_name || ''}`.toLowerCase();
+    if (planStr.includes('vĩnh viễn') || planStr.includes('lifetime') || planStr.includes('nạp') || planStr.includes('topup') || planStr.includes('deposit')) {
+      return false;
+    }
+    const createdAtMs = new Date(order.created_at).getTime();
+    let durationDays = 30;
+    if (planStr.includes('1 ngày') || planStr.includes('24h') || planStr.includes('1 day')) {
+      durationDays = 1;
+    } else if (planStr.includes('2 ngày') || planStr.includes('48h')) {
+      durationDays = 2;
+    } else if (planStr.includes('3 ngày')) {
+      durationDays = 3;
+    } else if (planStr.includes('7 ngày') || planStr.includes('1 tuần') || planStr.includes('1 week') || planStr.includes('7 days') || planStr.includes('7d') || (order.price <= 20000 && planStr.includes('capcut'))) {
+      durationDays = 7;
+    } else if (planStr.includes('14 ngày') || planStr.includes('2 tuần') || planStr.includes('2 weeks') || planStr.includes('14 days')) {
+      durationDays = 14;
+    } else if (planStr.includes('15 ngày')) {
+      durationDays = 15;
+    } else if (planStr.includes('1 tháng') || planStr.includes('30 ngày') || planStr.includes('1 month')) {
+      durationDays = 30;
+    } else if (planStr.includes('2 tháng') || planStr.includes('60 ngày')) {
+      durationDays = 60;
+    } else if (planStr.includes('3 tháng') || planStr.includes('90 ngày')) {
+      durationDays = 90;
+    } else if (planStr.includes('6 tháng') || planStr.includes('180 ngày')) {
+      durationDays = 180;
+    } else if (planStr.includes('1 năm') || planStr.includes('12 tháng') || planStr.includes('1 year') || planStr.includes('365 ngày')) {
+      durationDays = 365;
+    } else {
+      const dayMatch = planStr.match(/(\d+)\s*(ngày|day|days)/);
+      if (dayMatch) durationDays = parseInt(dayMatch[1], 10);
+    }
+    const expiresAtMs = order.expires_at ? new Date(order.expires_at).getTime() : createdAtMs + durationDays * 24 * 60 * 60 * 1000;
+    const diffDays = (expiresAtMs - Date.now()) / (24 * 60 * 60 * 1000);
+    return diffDays > 0 && diffDays <= 3;
+  };
+
   const filteredOrders = orders.filter((o) => {
     const matchStatus =
       filterStatus === 'all' ||
-      o.status === filterStatus ||
-      (filterStatus === 'pending_delivery' && o.status === 'paid') ||
-      (filterStatus === 'pending_payment' && o.status === 'pending') ||
-      (filterStatus === 'processing' && o.status === 'delivering');
+      (filterStatus === 'expiring_soon'
+        ? isExpiringSoonOrder(o)
+        : (
+          o.status === filterStatus ||
+          (filterStatus === 'pending_delivery' && o.status === 'paid') ||
+          (filterStatus === 'pending_payment' && o.status === 'pending') ||
+          (filterStatus === 'processing' && o.status === 'delivering')
+        ));
     const q = searchQuery.toLowerCase().trim();
     const matchSearch =
       !q ||
@@ -804,38 +868,70 @@ export default function AdminOrders() {
       </div>
 
       {/* FILTERS & SEARCH */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between bg-white dark:bg-[#131C32] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 rounded-[22px] p-4 shadow-xs">
-        <div className="flex flex-wrap gap-1.5">
+      <div className="rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-4 space-y-3.5 shadow-xs">
+        {/* Row 1: Filter Tabs (Single Horizontal Scrollable Row) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-blue-400/40 dark:scrollbar-thumb-blue-500/40 scrollbar-track-slate-100 dark:scrollbar-track-slate-800/60 sm:scrollbar-none">
           {[
-            { key: 'all', label: 'Tất cả' },
-            { key: 'pending_payment', label: 'Chờ thanh toán' },
-            { key: 'pending_delivery', label: 'Chờ bàn giao' },
-            { key: 'processing', label: 'Đang xử lý' },
-            { key: 'completed', label: 'Đã xong' },
-            { key: 'cancelled', label: 'Đã hủy' },
-            { key: 'refunded', label: 'Hoàn tiền' }
-          ].map((st) => (
-            <button
-              key={st.key}
-              onClick={() => setFilterStatus(st.key)}
-              className={`rounded-full px-3.5 py-2 text-xs font-bold transition-all ${filterStatus === st.key
-                ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-[#F4F8FF] dark:hover:bg-slate-850'
+            { key: 'all', label: 'Tất cả', count: orders.length },
+            { key: 'pending_payment', label: 'Chờ thanh toán', count: orders.filter((o) => o.status === 'pending_payment' || o.status === 'pending').length },
+            { key: 'pending_delivery', label: 'Chờ bàn giao', count: orders.filter((o) => o.status === 'pending_delivery' || o.status === 'paid').length },
+            { key: 'processing', label: 'Đang xử lý', count: orders.filter((o) => o.status === 'processing' || o.status === 'delivering').length },
+            { key: 'completed', label: 'Đã xong', count: orders.filter((o) => o.status === 'completed').length },
+            { key: 'expiring_soon', label: 'Sắp hết hạn', count: orders.filter(isExpiringSoonOrder).length },
+            { key: 'cancelled', label: 'Đã hủy', count: orders.filter((o) => o.status === 'cancelled').length },
+            { key: 'refunded', label: 'Hoàn tiền', count: orders.filter((o) => o.status === 'refunded').length }
+          ].map((st) => {
+            const isActive = filterStatus === st.key;
+            return (
+              <button
+                key={st.key}
+                type="button"
+                onClick={() => { setFilterStatus(st.key); setCurrentPage(1); }}
+                className={`group inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                  isActive
+                    ? 'bg-[#2563EB] text-white font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-semibold'
                 }`}
-            >
-              {st.label}
-            </button>
-          ))}
+              >
+                <span>{st.label}</span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold font-mono transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+                  }`}
+                >
+                  {st.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="flex h-11 items-center gap-2 rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] px-4 sm:max-w-xs sm:flex-1">
-          <SearchIcon className="h-5 w-5 shrink-0 text-slate-400" />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tìm theo Mã đơn, Email, Tên..."
-            className="w-full bg-transparent text-xs font-bold outline-none placeholder:text-slate-400 text-slate-900 dark:text-white"
-          />
+        {/* Row 2: Search Bar + Summary Info */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+          <div className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+            Hiển thị <span className="font-bold text-slate-900 dark:text-white font-mono">{filteredOrders.length}</span> / <span className="font-mono">{orders.length}</span> đơn hàng
+          </div>
+
+          <div className="flex h-10 items-center gap-2 rounded-xl border border-[#DCEAFF] dark:border-[#1E2A4A] bg-slate-50/50 dark:bg-slate-800/60 px-3.5 sm:w-80 shadow-2xs">
+            <SearchIcon className="h-4 w-4 shrink-0 text-slate-400" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm theo Mã đơn, Email, Tên..."
+              className="w-full bg-transparent text-xs font-semibold outline-none placeholder:text-slate-400 text-slate-900 dark:text-white"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

@@ -271,7 +271,7 @@ export default function AdminLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F5F9FF] dark:bg-[#0B1224] transition-colors duration-300 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F5F9FF] dark:bg-[#0B1224] transition-colors duration-300 text-slate-900 dark:text-slate-100 flex flex-col font-sans w-full max-w-full overflow-x-hidden">
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 h-[70px] sm:h-[76px] bg-white/95 dark:bg-[#131C32]/95 backdrop-blur-md border-b border-[#E8F1FF] dark:border-[#1E2A4A]/50 transition-colors duration-300">
         <div className="h-full px-3.5 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
@@ -418,7 +418,7 @@ export default function AdminLayout() {
       </header>
 
       {/* Main Content Layout container */}
-      <div className="mx-auto flex w-full max-w-[1360px] gap-6 lg:gap-8 px-3.5 sm:px-6 py-5 sm:py-8 flex-1">
+      <div className="mx-auto flex w-full max-w-[1360px] gap-6 lg:gap-8 px-3.5 sm:px-6 py-5 sm:py-8 flex-1 min-w-0">
         {/* Sidebar desktop */}
         <aside className="hidden w-64 shrink-0 lg:block">
           <div className="sticky top-24 max-h-[calc(100dvh-7rem)] overflow-y-auto scrollbar-none rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-4 shadow-xs transition-colors duration-300">
@@ -463,7 +463,7 @@ export default function AdminLayout() {
         )}
 
         {/* Main Routing Content viewport */}
-        <main className="min-w-0 flex-1 animate-fade-in">
+        <main className="min-w-0 flex-1 w-full max-w-full overflow-x-hidden animate-fade-in">
           <Outlet />
         </main>
       </div>

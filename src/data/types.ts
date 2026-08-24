@@ -37,7 +37,7 @@ export interface CatalogItem {
   affiliateType?: 'fixed' | 'percent';
   affiliateReward?: number;
   affiliateDiscount?: number;
-  rating: number;
+  rating?: number;
   sold: number;
   featured?: boolean;
   badge?: string;

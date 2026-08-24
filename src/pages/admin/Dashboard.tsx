@@ -1,19 +1,15 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { fetchStats } from '../../data/admin';
 import { useRealtimeEvent } from '../../services/realtime';
 
 type RangeMode = '7d' | '30d' | '90d' | '12m';
+type MetricView = 'revenue' | 'orders';
 
 interface DynamicChart {
   labels: string[];
   values: number[];
-}
-
-interface StatChange {
-  text: string;
-  isPos: boolean;
+  completedValues?: number[];
 }
 
 interface ActivityItem {
@@ -33,20 +29,11 @@ interface OrderRow {
   price: number;
   status: string;
   created_at: string;
+  expires_at?: string;
   payment_code?: string;
   product_name?: string;
   plan_label?: string;
   profiles?: { full_name?: string; email?: string } | null;
-}
-
-interface ProfileRow {
-  id: string;
-  created_at: string;
-}
-
-interface ProductRow {
-  id: string;
-  created_at: string;
 }
 
 interface TopProductStat {
@@ -72,7 +59,6 @@ function formatRelativeTime(dateStr: string): string {
 function formatAuditDescription(desc: string | null | undefined): string {
   if (!desc) return '';
   return desc
-    // Order & Delivery statuses
     .replace(/"pending_payment"/g, '"Chờ thanh toán"')
     .replace(/"pending_delivery"/g, '"Chờ bàn giao"')
     .replace(/"processing"/g, '"Đang thiết lập"')
@@ -84,87 +70,44 @@ function formatAuditDescription(desc: string | null | undefined): string {
     .replace(/\bcompleted\b/g, 'Hoàn tất')
     .replace(/\bcancelled\b/g, 'Đã hủy')
     .replace(/\brefunded\b/g, 'Đã hoàn tiền')
-
-    // Ticket Statuses
     .replace(/"pending"/g, '"Chờ phản hồi"')
     .replace(/"resolved"/g, '"Đã giải quyết"')
     .replace(/"closed"/g, '"Đã đóng"')
     .replace(/\bstatus:?\s*pending\b/gi, 'Trạng thái: Chờ phản hồi')
     .replace(/\bstatus:?\s*resolved\b/gi, 'Trạng thái: Đã giải quyết')
     .replace(/\bstatus:?\s*closed\b/gi, 'Trạng thái: Đã đóng')
-
-    // Ticket Priorities
-    .replace(/"low"/g, '"Thấp"')
-    .replace(/"normal"/g, '"Bình thường"')
-    .replace(/"high"/g, '"Cao"')
-    .replace(/"urgent"/g, '"Khẩn cấp"')
-    .replace(/\bpriority:?\s*urgent\b/gi, 'Mức ưu tiên: Khẩn cấp')
-    .replace(/\bpriority:?\s*high\b/gi, 'Mức ưu tiên: Cao')
-    .replace(/\bpriority:?\s*normal\b/gi, 'Mức ưu tiên: Bình thường')
-    .replace(/\bpriority:?\s*low\b/gi, 'Mức ưu tiên: Thấp')
-
-    // Review Statuses
     .replace(/"approved"/g, '"Đã duyệt"')
     .replace(/"rejected"/g, '"Đã từ chối"')
     .replace(/\bapproved\b/g, 'Đã duyệt')
     .replace(/\brejected\b/g, 'Đã từ chối');
 }
 
-function calcPercentageChange(current: number, previous: number): StatChange {
-  if (previous === 0) {
-    if (current === 0) return { text: '0.0%', isPos: true };
-    return { text: '+100%', isPos: true };
-  }
-  const pct = ((current - previous) / previous) * 100;
-  const isPos = pct >= 0;
-  return { text: `${isPos ? '+' : ''}${pct.toFixed(1)}%`, isPos };
-}
-
 export default function Dashboard() {
-  const [stats, setStats] = useState({
-    totalProducts: 0,
-    totalOrders: 0,
-    totalUsers: 0,
-    totalRevenue: 0,
-    todayRevenue: 0,
-    rev7d: 0,
-    rev30d: 0,
-  });
-
-  const [changes, setChanges] = useState<{
-    revenue: StatChange;
-    orders: StatChange;
-    products: StatChange;
-    users: StatChange;
-  }>({
-    revenue: { text: '0.0%', isPos: true },
-    orders: { text: '0.0%', isPos: true },
-    products: { text: '0.0%', isPos: true },
-    users: { text: '0.0%', isPos: true },
-  });
-
   const [loading, setLoading] = useState(true);
   const [activeRange, setActiveRange] = useState<RangeMode>('7d');
+  const [metricView, setMetricView] = useState<MetricView>('revenue');
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [rawOrders, setRawOrders] = useState<OrderRow[]>([]);
-  const [chartData, setChartData] = useState<Record<RangeMode, DynamicChart>>({
+  const [chartRevenueData, setChartRevenueData] = useState<Record<RangeMode, DynamicChart>>({
+    '7d': { labels: [], values: [] },
+    '30d': { labels: [], values: [] },
+    '90d': { labels: [], values: [] },
+    '12m': { labels: [], values: [] },
+  });
+  const [chartOrdersData, setChartOrdersData] = useState<Record<RangeMode, DynamicChart>>({
     '7d': { labels: [], values: [] },
     '30d': { labels: [], values: [] },
     '90d': { labels: [], values: [] },
     '12m': { labels: [], values: [] },
   });
 
-  // Action items counts (CẦN XỬ LÝ)
-  const [actionCounts, setActionCounts] = useState({
-    pendingDelivery: 0,
-    processing: 0,
+  // Action items counts (HUB CẦN XỬ LÝ NGAY)
+  const [actionHub, setActionHub] = useState({
     pendingTickets: 0,
-  });
-
-  // Operational KPIs for Command Center Widget
-  const [operationalKPIs, setOperationalKPIs] = useState({
-    totalUserBalance: 0,
-    pendingReviewsCount: 0,
-    activeCouponsCount: 0,
+    oldestTicketWait: '',
+    pendingDelivery: 0,
+    expiringSoon: 0,
+    pendingReviews: 0,
   });
 
   const [recentOrders, setRecentOrders] = useState<OrderRow[]>([]);
@@ -175,132 +118,57 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const base = await fetchStats();
-
       // 1. Fetch orders with profiles
       const { data: ordersData } = await (supabase
         .from('orders')
-        .select('id, price, status, created_at, payment_code, product_name, plan_label, profiles:profiles!orders_user_profile_fk(full_name, email)')
+        .select('id, price, status, created_at, expires_at, payment_code, product_name, plan_label, profiles:profiles!orders_user_profile_fk(full_name, email)')
         .order('created_at', { ascending: false }) as any);
 
       const allOrders: OrderRow[] = ordersData || [];
       setRawOrders(allOrders);
       setRecentOrders(allOrders.slice(0, 5));
 
-      // Compute action counts for orders
-      const pendingDelivery = allOrders.filter((o) => o.status === 'pending_delivery').length;
-      const processing = allOrders.filter((o) => o.status === 'processing').length;
-
-      // 2. Fetch profiles, operational KPIs & support tickets
+      // 2. Fetch pending reviews and tickets
       const [
-        { data: profilesData },
-        { data: productsData },
         { data: pendingReviewsData },
-        { data: couponsData },
         { data: ticketsData },
       ] = await Promise.all([
-        supabase.from('profiles').select('id, created_at, balance') as any,
-        supabase.from('products').select('id, created_at') as any,
         supabase.from('product_reviews').select('id').eq('status', 'pending') as any,
-        supabase.from('coupons').select('id, is_active, expires_at') as any,
-        supabase.from('support_tickets').select('id, status') as any,
+        supabase.from('support_tickets').select('id, status, created_at').order('created_at', { ascending: true }) as any,
       ]);
 
-      const allProfiles: ProfileRow[] = profilesData || [];
-      const allProducts: ProductRow[] = productsData || [];
+      // Compute Action Hub metrics
+      const pendingDelivery = allOrders.filter((o) => o.status === 'pending_delivery' || o.status === 'processing').length;
+      const pendingReviews = pendingReviewsData?.length || 0;
 
-      // Pending/Processing tickets needing response from Admin
-      const pendingTickets = (ticketsData || []).filter(
+      const nowMs = Date.now();
+      const expiringSoon = allOrders.filter((o) => {
+        if (o.status !== 'completed' || !o.expires_at) return false;
+        const diffDays = (new Date(o.expires_at).getTime() - nowMs) / (24 * 60 * 60 * 1000);
+        return diffDays > 0 && diffDays <= 3;
+      }).length;
+
+      const pendingTicketsList = (ticketsData || []).filter(
         (t: any) => t.status === 'pending' || t.status === 'processing'
-      ).length;
-
-      setActionCounts({
-        pendingDelivery,
-        processing,
-        pendingTickets,
-      });
-
-      const totalUserBalance = (profilesData || []).reduce(
-        (sum: number, p: any) => sum + Number(p.balance || 0),
-        0
       );
-      const pendingReviewsCount = pendingReviewsData?.length || 0;
-      const nowDate = new Date();
-      const activeCouponsCount = (couponsData || []).filter(
-        (c: any) => c.is_active && (!c.expires_at || new Date(c.expires_at) >= nowDate)
-      ).length;
+      const pendingTicketsCount = pendingTicketsList.length;
+      const oldestTicketWait = pendingTicketsList.length > 0
+        ? formatRelativeTime(pendingTicketsList[0].created_at)
+        : '';
 
-      setOperationalKPIs({
-        totalUserBalance,
-        pendingReviewsCount,
-        activeCouponsCount,
+      setActionHub({
+        pendingTickets: pendingTicketsCount,
+        oldestTicketWait,
+        pendingDelivery,
+        expiringSoon,
+        pendingReviews,
       });
 
       // Filter paid revenue
-      const paidOrders = allOrders.filter((o) => isPaidStatus(o.status));
-      const totalRev = paidOrders.reduce((sum, o) => sum + Number(o.price || 0), 0);
-
-      // Sub-KPIs
-      const now = Date.now();
-      const dayMs = 24 * 60 * 60 * 1000;
-      const startOfToday = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
-
-      const todayRevenue = paidOrders
-        .filter((o) => new Date(o.created_at).getTime() >= startOfToday)
-        .reduce((sum, o) => sum + Number(o.price || 0), 0);
-
-      const rev7d = paidOrders
-        .filter((o) => now - new Date(o.created_at).getTime() <= 7 * dayMs)
-        .reduce((sum, o) => sum + Number(o.price || 0), 0);
-
-      const rev30d = paidOrders
-        .filter((o) => now - new Date(o.created_at).getTime() <= 30 * dayMs)
-        .reduce((sum, o) => sum + Number(o.price || 0), 0);
-
-      setStats({
-        totalProducts: allProducts.length || base.totalProducts || 0,
-        totalOrders: allOrders.length,
-        totalUsers: allProfiles.length,
-        totalRevenue: totalRev,
-        todayRevenue,
-        rev7d,
-        rev30d,
-      });
-
-      // 4. Calculate percentage changes
-      const revCurr = paidOrders
-        .filter((o) => now - new Date(o.created_at).getTime() <= 30 * dayMs)
-        .reduce((sum, o) => sum + Number(o.price || 0), 0);
-      const revPrev = paidOrders
-        .filter((o) => {
-          const diff = now - new Date(o.created_at).getTime();
-          return diff > 30 * dayMs && diff <= 60 * dayMs;
-        })
-        .reduce((sum, o) => sum + Number(o.price || 0), 0);
-
-      const ordCurr = allOrders.filter((o) => now - new Date(o.created_at).getTime() <= 30 * dayMs).length;
-      const ordPrev = allOrders.filter((o) => {
-        const diff = now - new Date(o.created_at).getTime();
-        return diff > 30 * dayMs && diff <= 60 * dayMs;
-      }).length;
-
-      const prodCurr = allProducts.filter((p) => p.created_at && now - new Date(p.created_at).getTime() <= 30 * dayMs).length;
-      const prodPrev = allProducts.filter((p) => p.created_at && now - new Date(p.created_at).getTime() > 30 * dayMs).length;
-
-      const userCurr = allProfiles.filter((u) => u.created_at && now - new Date(u.created_at).getTime() <= 30 * dayMs).length;
-      const userPrev = allProfiles.filter((u) => u.created_at && now - new Date(u.created_at).getTime() > 30 * dayMs).length;
-
-      setChanges({
-        revenue: calcPercentageChange(revCurr, revPrev),
-        orders: calcPercentageChange(ordCurr, ordPrev),
-        products: calcPercentageChange(prodCurr, prodPrev),
-        users: calcPercentageChange(userCurr, userPrev),
-      });
-
-      // 5. Build charts
+      // Build charts
       buildCharts(allOrders);
 
-      // 6. Fetch recent activities from audit_logs
+      // Fetch recent activities from audit_logs
       const { data: auditData, error: auditErr } = await (supabase
         .from('audit_logs')
         .select('id, description, actor_name, actor_role, created_at')
@@ -323,7 +191,7 @@ export default function Dashboard() {
           if (descLower.includes('ticket') || rawDesc.includes('BOW-')) {
             category = 'ticket';
             icon = '🎫';
-            iconBg = 'bg-gradient-to-tr from-blue-500 to-indigo-600 text-white shadow-blue-500/20';
+            iconBg = 'bg-gradient-to-tr from-rose-500 to-red-600 text-white shadow-rose-500/20';
             const ticketMatch = rawDesc.match(/BOW-\d+/i);
             link = ticketMatch ? `/admin/tickets?ticket=${ticketMatch[0].toUpperCase()}` : '/admin/tickets';
           } else if (descLower.includes('đánh giá') || descLower.includes('review') || descLower.includes('sao')) {
@@ -360,27 +228,6 @@ export default function Dashboard() {
             time: formatRelativeTime(log.created_at),
           });
         });
-      } else {
-        const { data: notifData } = await (supabase
-          .from('notifications')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(5) as any);
-        if (notifData && notifData.length > 0) {
-          notifData.forEach((n: any) => {
-            acts.push({
-              id: n.id,
-              text: n.message || n.title,
-              tag: n.type === 'new_order' ? 'Đơn hàng' : n.type === 'order_cancelled' ? 'Hủy đơn' : 'Thông báo',
-              category: 'order',
-              role: 'system',
-              link: '/admin/orders',
-              iconBg: n.type === 'new_order' ? 'bg-emerald-500 text-white' : n.type === 'order_cancelled' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white',
-              icon: n.type === 'new_order' ? '📦' : n.type === 'order_cancelled' ? '❌' : '🔔',
-              time: formatRelativeTime(n.created_at),
-            });
-          });
-        }
       }
       setActivities(acts);
 
@@ -404,13 +251,25 @@ export default function Dashboard() {
       const end = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59).getTime();
       days7.push({ label: `${dayName} ${d.getDate()}/${d.getMonth() + 1}`, start, end });
     }
-    const val7d = days7.map((day) =>
+    const rev7d = days7.map((day) =>
       orders
         .filter((o) => {
           const t = new Date(o.created_at).getTime();
           return t >= day.start && t <= day.end && isPaidStatus(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
+    );
+    const ord7d = days7.map((day) =>
+      orders.filter((o) => {
+        const t = new Date(o.created_at).getTime();
+        return t >= day.start && t <= day.end;
+      }).length
+    );
+    const completedOrd7d = days7.map((day) =>
+      orders.filter((o) => {
+        const t = new Date(o.created_at).getTime();
+        return t >= day.start && t <= day.end && isPaidStatus(o.status);
+      }).length
     );
 
     // 30d Chart
@@ -420,13 +279,25 @@ export default function Dashboard() {
       const end = now.getTime() - i * 7 * dayMs;
       weeks30.push({ label: `Tuần ${4 - i}`, start, end });
     }
-    const val30d = weeks30.map((w) =>
+    const rev30d = weeks30.map((w) =>
       orders
         .filter((o) => {
           const t = new Date(o.created_at).getTime();
           return t >= w.start && t < w.end && isPaidStatus(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
+    );
+    const ord30d = weeks30.map((w) =>
+      orders.filter((o) => {
+        const t = new Date(o.created_at).getTime();
+        return t >= w.start && t < w.end;
+      }).length
+    );
+    const completedOrd30d = weeks30.map((w) =>
+      orders.filter((o) => {
+        const t = new Date(o.created_at).getTime();
+        return t >= w.start && t < w.end && isPaidStatus(o.status);
+      }).length
     );
 
     // 90d Chart (3 tháng - 6 mốc 15 ngày)
@@ -437,13 +308,25 @@ export default function Dashboard() {
       const d = new Date(start);
       points90.push({ label: `${d.getDate()}/${d.getMonth() + 1}`, start, end });
     }
-    const val90d = points90.map((p) =>
+    const rev90d = points90.map((p) =>
       orders
         .filter((o) => {
           const t = new Date(o.created_at).getTime();
           return t >= p.start && t < p.end && isPaidStatus(o.status);
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
+    );
+    const ord90d = points90.map((p) =>
+      orders.filter((o) => {
+        const t = new Date(o.created_at).getTime();
+        return t >= p.start && t < p.end;
+      }).length
+    );
+    const completedOrd90d = points90.map((p) =>
+      orders.filter((o) => {
+        const t = new Date(o.created_at).getTime();
+        return t >= p.start && t < p.end && isPaidStatus(o.status);
+      }).length
     );
 
     // 12m Chart
@@ -456,7 +339,7 @@ export default function Dashboard() {
         month: d.getMonth(),
       });
     }
-    const val12m = months12.map((m) =>
+    const rev12m = months12.map((m) =>
       orders
         .filter((o) => {
           const d = new Date(o.created_at);
@@ -464,21 +347,39 @@ export default function Dashboard() {
         })
         .reduce((sum, o) => sum + Number(o.price || 0), 0)
     );
+    const ord12m = months12.map((m) =>
+      orders.filter((o) => {
+        const d = new Date(o.created_at);
+        return d.getFullYear() === m.year && d.getMonth() === m.month;
+      }).length
+    );
+    const completedOrd12m = months12.map((m) =>
+      orders.filter((o) => {
+        const d = new Date(o.created_at);
+        return d.getFullYear() === m.year && d.getMonth() === m.month && isPaidStatus(o.status);
+      }).length
+    );
 
-    setChartData({
-      '7d': { labels: days7.map((d) => d.label), values: val7d },
-      '30d': { labels: weeks30.map((w) => w.label), values: val30d },
-      '90d': { labels: points90.map((p) => p.label), values: val90d },
-      '12m': { labels: months12.map((m) => m.label), values: val12m },
+    setChartRevenueData({
+      '7d': { labels: days7.map((d) => d.label), values: rev7d },
+      '30d': { labels: weeks30.map((w) => w.label), values: rev30d },
+      '90d': { labels: points90.map((p) => p.label), values: rev90d },
+      '12m': { labels: months12.map((m) => m.label), values: rev12m },
+    });
+
+    setChartOrdersData({
+      '7d': { labels: days7.map((d) => d.label), values: ord7d, completedValues: completedOrd7d },
+      '30d': { labels: weeks30.map((w) => w.label), values: ord30d, completedValues: completedOrd30d },
+      '90d': { labels: points90.map((p) => p.label), values: ord90d, completedValues: completedOrd90d },
+      '12m': { labels: months12.map((m) => m.label), values: ord12m, completedValues: completedOrd12m },
     });
   };
 
   useEffect(() => {
     loadDashboardData();
-    // Realtime được xử lý bởi admin-hub-global trong RealtimeHub
   }, []);
 
-  // Targeted handler: khi có order mới (INSERT) chỉ cập nhật bộ đếm và recent orders
+  // Targeted handler: khi có order mới (INSERT)
   const handleOrderInsert = useCallback((e: { payload: OrderRow }) => {
     const o = e.payload;
     setRawOrders((prev) => {
@@ -489,58 +390,52 @@ export default function Dashboard() {
       if (prev.some((r) => r.id === o.id)) return prev;
       return [o, ...prev].slice(0, 5);
     });
-    if (o.status === 'pending_delivery') {
-      setActionCounts((prev) => ({ ...prev, pendingDelivery: prev.pendingDelivery + 1 }));
-    }
-    if (o.status === 'processing') {
-      setActionCounts((prev) => ({ ...prev, processing: prev.processing + 1 }));
+    if (o.status === 'pending_delivery' || o.status === 'processing') {
+      setActionHub((prev) => ({ ...prev, pendingDelivery: prev.pendingDelivery + 1 }));
     }
   }, []);
 
-  // Targeted handler: khi order thay đổi trạng thái đồng bộ số liệu chính xác từ state cũ
+  // Targeted handler: khi order thay đổi trạng thái
   const handleOrderUpdate = useCallback((e: { payload: OrderRow }) => {
     const o = e.payload;
     setRawOrders((prev) => {
-      const existing = prev.find((r) => r.id === o.id);
-      const oldStatus = existing?.status;
-      const newStatus = o.status;
-      if (oldStatus && oldStatus !== newStatus) {
-        setActionCounts((ac) => {
-          let pd = ac.pendingDelivery;
-          let pr = ac.processing;
-          if (oldStatus === 'pending_delivery') pd = Math.max(0, pd - 1);
-          if (oldStatus === 'processing') pr = Math.max(0, pr - 1);
-          if (newStatus === 'pending_delivery') pd += 1;
-          if (newStatus === 'processing') pr += 1;
-          return { ...ac, pendingDelivery: pd, processing: pr };
-        });
-      }
-      return prev.map((r) => (r.id === o.id ? { ...r, ...o } : r));
+      const updated = prev.map((r) => (r.id === o.id ? { ...r, ...o } : r));
+      const nowMs = Date.now();
+      const pd = updated.filter((r) => r.status === 'pending_delivery' || r.status === 'processing').length;
+      const es = updated.filter((r) => {
+        if (r.status !== 'completed' || !r.expires_at) return false;
+        const diffDays = (new Date(r.expires_at).getTime() - nowMs) / (24 * 60 * 60 * 1000);
+        return diffDays > 0 && diffDays <= 3;
+      }).length;
+      setActionHub((ac) => ({ ...ac, pendingDelivery: pd, expiringSoon: es }));
+      return updated;
     });
     setRecentOrders((prev) => prev.map((r) => (r.id === o.id ? { ...r, ...o } : r)));
   }, []);
 
-  // Handler sync đếm ticket cần phản hồi chính xác 100%
   const refreshTicketCount = useCallback(async () => {
     try {
-      const { data } = await (supabase.from('support_tickets').select('id, status') as any);
+      const { data } = await (supabase.from('support_tickets').select('id, status, created_at').order('created_at', { ascending: true }) as any);
       if (data) {
-        const pendingTickets = (data || []).filter(
+        const pendingList = (data || []).filter(
           (t: any) => t.status === 'pending' || t.status === 'processing'
-        ).length;
-        setActionCounts((prev) => ({ ...prev, pendingTickets }));
+        );
+        setActionHub((prev) => ({
+          ...prev,
+          pendingTickets: pendingList.length,
+          oldestTicketWait: pendingList.length > 0 ? formatRelativeTime(pendingList[0].created_at) : '',
+        }));
       }
     } catch (err) {
       console.error('Error refreshing ticket count:', err);
     }
   }, []);
 
-  // Handler sync đếm đánh giá chờ duyệt chính xác 100%
   const refreshReviewCount = useCallback(async () => {
     try {
       const { data } = await (supabase.from('product_reviews').select('id').eq('status', 'pending') as any);
       if (data) {
-        setOperationalKPIs((prev) => ({ ...prev, pendingReviewsCount: data.length }));
+        setActionHub((prev) => ({ ...prev, pendingReviews: data.length }));
       }
     } catch (err) {
       console.error('Error refreshing review count:', err);
@@ -555,7 +450,7 @@ export default function Dashboard() {
   useRealtimeEvent('product_reviews:UPDATE', refreshReviewCount);
 
   // Filtered Analytics per activeRange
-  const rangeFilteredOrders = useMemo(() => {
+  const rangeMetrics = useMemo(() => {
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
     let limitMs = 7 * dayMs;
@@ -563,22 +458,79 @@ export default function Dashboard() {
     if (activeRange === '90d') limitMs = 90 * dayMs;
     if (activeRange === '12m') limitMs = 365 * dayMs;
 
-    return rawOrders.filter((o) => now - new Date(o.created_at).getTime() <= limitMs);
+    const currentPeriodOrders = rawOrders.filter((o) => now - new Date(o.created_at).getTime() <= limitMs);
+    const previousPeriodOrders = rawOrders.filter((o) => {
+      const diff = now - new Date(o.created_at).getTime();
+      return diff > limitMs && diff <= 2 * limitMs;
+    });
+
+    const currentPaid = currentPeriodOrders.filter((o) => isPaidStatus(o.status));
+    const previousPaid = previousPeriodOrders.filter((o) => isPaidStatus(o.status));
+
+    const currentRevenue = currentPaid.reduce((sum, o) => sum + Number(o.price || 0), 0);
+    const previousRevenue = previousPaid.reduce((sum, o) => sum + Number(o.price || 0), 0);
+
+    // Revenue % change
+    let revenueChangeText = '0.0%';
+    let isRevenuePos = true;
+    if (previousRevenue === 0) {
+      revenueChangeText = currentRevenue > 0 ? '+100%' : '0.0%';
+      isRevenuePos = true;
+    } else {
+      const pct = ((currentRevenue - previousRevenue) / previousRevenue) * 100;
+      isRevenuePos = pct >= 0;
+      revenueChangeText = `${isRevenuePos ? '+' : ''}${pct.toFixed(1)}%`;
+    }
+
+    // Orders count & AOV & breakdown
+    const totalOrdersCount = currentPeriodOrders.length;
+    const completedOrdersCount = currentPaid.length;
+    const cancelledCount = currentPeriodOrders.filter((o) => o.status === 'cancelled').length;
+    const refundedCount = currentPeriodOrders.filter((o) => o.status === 'refunded').length;
+    const pendingPaymentCount = currentPeriodOrders.filter(
+      (o) => o.status === 'pending_payment' || o.status === 'pending'
+    ).length;
+
+    const completedPct = totalOrdersCount > 0 ? (completedOrdersCount / totalOrdersCount) * 100 : 0;
+    const cancelledPct = totalOrdersCount > 0 ? (cancelledCount / totalOrdersCount) * 100 : 0;
+    const refundedPct = totalOrdersCount > 0 ? (refundedCount / totalOrdersCount) * 100 : 0;
+    const pendingPct = totalOrdersCount > 0 ? (pendingPaymentCount / totalOrdersCount) * 100 : 0;
+
+    const aov = completedOrdersCount > 0 ? Math.round(currentRevenue / completedOrdersCount) : 0;
+    const successRate = totalOrdersCount > 0 ? Math.round((completedOrdersCount / totalOrdersCount) * 100) : 0;
+
+    return {
+      currentOrders: currentPeriodOrders,
+      currentRevenue,
+      revenueChangeText,
+      isRevenuePos,
+      totalOrdersCount,
+      completedOrdersCount,
+      cancelledCount,
+      refundedCount,
+      pendingPaymentCount,
+      completedPct,
+      cancelledPct,
+      refundedPct,
+      pendingPct,
+      aov,
+      successRate,
+    };
   }, [rawOrders, activeRange]);
 
-  // Range Top 5 Products (Sorted strictly by sales count sold, excluding wallet top-ups)
+  // Top 5 Products in Range
   const rangeTopProducts = useMemo<TopProductStat[]>(() => {
-    const paidInRange = rangeFilteredOrders.filter(
+    const paidInRange = rangeMetrics.currentOrders.filter(
       (o) => isPaidStatus(o.status) && o.product_name && !o.product_name.includes('Nạp tiền')
     );
-    const totalSalesCountInRange = paidInRange.length;
+    const totalSalesCount = paidInRange.length;
 
     const map = new Map<string, { salesCount: number; revenue: number }>();
     paidInRange.forEach((o) => {
       const pName = o.product_name!;
       const curr = map.get(pName) || { salesCount: 0, revenue: 0 };
       map.set(pName, {
-        salesCount: curr.salesCount + 1,
+        salesCount: curr.salesCount + (Number(o.price) > 0 ? 1 : 1),
         revenue: curr.revenue + Number(o.price || 0),
       });
     });
@@ -588,469 +540,924 @@ export default function Dashboard() {
         name,
         salesCount: stat.salesCount,
         revenue: stat.revenue,
-        percentage: totalSalesCountInRange > 0 ? Math.round((stat.salesCount / totalSalesCountInRange) * 100) : 0,
+        percentage: totalSalesCount > 0 ? Math.round((stat.salesCount / totalSalesCount) * 100) : 0,
       }))
       .sort((a, b) => b.salesCount - a.salesCount || b.revenue - a.revenue)
       .slice(0, 5);
-  }, [rangeFilteredOrders]);
+  }, [rangeMetrics]);
 
-  // Range Category Performance & AOV Metrics
-  const categoryAnalytics = useMemo(() => {
-    const paidInRange = rangeFilteredOrders.filter(
+  // Category Distribution & Donut Chart calculation
+  const categoryDistribution = useMemo(() => {
+    const paidInRange = rangeMetrics.currentOrders.filter(
       (o) => isPaidStatus(o.status) && o.product_name && !o.product_name.includes('Nạp tiền')
     );
     const totalPaidRev = paidInRange.reduce((sum, o) => sum + Number(o.price || 0), 0);
-    const totalPaidSales = paidInRange.length;
 
-    // AOV (Average Order Value)
-    const aov = totalPaidSales > 0 ? Math.round(totalPaidRev / totalPaidSales) : 0;
-
-    // Group sales into AI Tools vs Premium Apps
     let aiToolsCount = 0;
     let aiToolsRev = 0;
-    let premiumAppsCount = 0;
-    let premiumAppsRev = 0;
+    let appsCount = 0;
+    let appsRev = 0;
+    let storageCount = 0;
+    let storageRev = 0;
 
-    const aiKeywords = ['claude', 'chatgpt', 'cursor', 'codex', 'leonardo', 'veo', 'gemini', 'grok', 'kling', 'perplexity', 'meitu', 'youku'];
+    const aiKeywords = ['claude', 'chatgpt', 'cursor', 'codex', 'leonardo', 'veo', 'gemini', 'grok', 'kling', 'perplexity'];
+    const storageKeywords = ['icloud', 'google one', 'onedrive', 'storage', 'proton', 'microsoft 365'];
 
     paidInRange.forEach((o) => {
       const pNameLower = (o.product_name || '').toLowerCase();
-      const isAI = aiKeywords.some((k) => pNameLower.includes(k)) || pNameLower.includes('ai');
       const price = Number(o.price || 0);
 
-      if (isAI) {
+      if (aiKeywords.some((k) => pNameLower.includes(k)) || pNameLower.includes('ai')) {
         aiToolsCount++;
         aiToolsRev += price;
+      } else if (storageKeywords.some((k) => pNameLower.includes(k))) {
+        storageCount++;
+        storageRev += price;
       } else {
-        premiumAppsCount++;
-        premiumAppsRev += price;
+        appsCount++;
+        appsRev += price;
       }
     });
 
-    const aiRevPct = totalPaidRev > 0 ? Math.round((aiToolsRev / totalPaidRev) * 100) : 0;
-    const appRevPct = totalPaidRev > 0 ? Math.round((premiumAppsRev / totalPaidRev) * 100) : 0;
-
-    const totalOrdersCount = rangeFilteredOrders.length;
-    const completedCount = rangeFilteredOrders.filter((o) => isPaidStatus(o.status)).length;
-    const completionRate = totalOrdersCount > 0 ? Math.round((completedCount / totalOrdersCount) * 100) : 0;
+    const aiPct = totalPaidRev > 0 ? Math.round((aiToolsRev / totalPaidRev) * 100) : 0;
+    const storagePct = totalPaidRev > 0 ? Math.round((storageRev / totalPaidRev) * 100) : 0;
+    const appsPct = totalPaidRev > 0 ? Math.max(0, 100 - aiPct - storagePct) : 0;
 
     return {
-      aov,
-      totalPaidSales,
       totalPaidRev,
-      aiToolsCount,
-      aiToolsRev,
-      aiRevPct,
-      premiumAppsCount,
-      premiumAppsRev,
-      appRevPct,
-      completionRate,
+      items: [
+        {
+          name: 'AI Tools',
+          icon: '🤖',
+          color: '#3B82F6', // Blue
+          count: aiToolsCount,
+          revenue: aiToolsRev,
+          percentage: aiPct,
+        },
+        {
+          name: 'Premium Apps',
+          icon: '📱',
+          color: '#8B5CF6', // Purple
+          count: appsCount,
+          revenue: appsRev,
+          percentage: appsPct,
+        },
+        {
+          name: 'Storage & Cloud',
+          icon: '☁️',
+          color: '#10B981', // Emerald
+          count: storageCount,
+          revenue: storageRev,
+          percentage: storagePct,
+        },
+      ],
     };
-  }, [rangeFilteredOrders]);
+  }, [rangeMetrics]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending_payment':
-        return <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 text-[9px] font-extrabold text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/30">Chờ thanh toán</span>;
+        return (
+          <span className="inline-flex items-center rounded-full bg-amber-50 dark:bg-amber-950/30 px-2.5 py-0.5 text-[10px] font-black text-amber-700 dark:text-amber-400 border border-amber-200/70 dark:border-amber-900/40">
+            Chờ thanh toán
+          </span>
+        );
       case 'pending_delivery':
-        return <span className="inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-950/20 px-2 py-0.5 text-[9px] font-extrabold text-[#2563EB] dark:text-[#35A8FF] border border-blue-200/60 dark:border-blue-900/30">Chờ bàn giao</span>;
       case 'processing':
-        return <span className="inline-flex items-center rounded-full bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 text-[9px] font-extrabold text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-900/30">Đang thiết lập</span>;
+        return (
+          <span className="inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-950/30 px-2.5 py-0.5 text-[10px] font-black text-[#2563EB] dark:text-[#35A8FF] border border-blue-200/70 dark:border-blue-900/40">
+            Chờ bàn giao
+          </span>
+        );
       case 'completed':
-        return <span className="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 text-[9px] font-extrabold text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-900/30">Đã hoàn thành</span>;
+        return (
+          <span className="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-0.5 text-[10px] font-black text-emerald-700 dark:text-emerald-400 border border-emerald-200/70 dark:border-emerald-900/40">
+            Hoàn tất
+          </span>
+        );
       case 'cancelled':
-        return <span className="inline-flex items-center rounded-full bg-rose-50 dark:bg-rose-950/20 px-2 py-0.5 text-[9px] font-extrabold text-rose-700 dark:text-rose-400 border border-rose-200/60 dark:border-rose-900/30">Đã hủy</span>;
+        return (
+          <span className="inline-flex items-center rounded-full bg-rose-50 dark:bg-rose-950/30 px-2.5 py-0.5 text-[10px] font-black text-rose-700 dark:text-rose-400 border border-rose-200/70 dark:border-rose-900/40">
+            Đã hủy
+          </span>
+        );
       case 'refunded':
-        return <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[9px] font-extrabold text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700">Đã hoàn tiền</span>;
+        return (
+          <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[10px] font-black text-slate-600 dark:text-slate-400 border border-slate-200/70 dark:border-slate-700">
+            Đã hoàn tiền
+          </span>
+        );
       default:
         return null;
     }
   };
 
-  // Dynamic Chart SVG calculations
-  const currentChart = chartData[activeRange] || { labels: [], values: [] };
-  const maxVal = Math.max(...(currentChart.values.length ? currentChart.values : [0])) || 100000;
-  const chartHeight = 150;
-  const chartWidth = 500;
+  // Area Chart Calculations with Y-Axis & Smooth Spline
+  const activeChartData = metricView === 'revenue' ? chartRevenueData[activeRange] : chartOrdersData[activeRange];
+  const chartValues = activeChartData?.values?.length ? activeChartData.values : [0];
+  const completedChartValues = activeChartData?.completedValues?.length ? activeChartData.completedValues : chartValues.map(() => 0);
+  const rawMax = Math.max(...chartValues, ...(metricView === 'orders' ? completedChartValues : []));
+  const maxVal = rawMax > 0 ? rawMax : (metricView === 'revenue' ? 100000 : 5);
 
-  const points = (currentChart.values.length ? currentChart.values : [0]).map((v, i) => {
-    const count = Math.max(currentChart.values.length, 1);
-    const x = count > 1 ? (i / (count - 1)) * chartWidth : chartWidth / 2;
-    const y = chartHeight - (v / maxVal) * (chartHeight - 30) - 15;
-    return `${x},${y}`;
+  const chartHeight = 165;
+  const chartWidth = 540;
+  const padLeft = 40;
+  const padRight = 16;
+  const topY = 16;
+  const bottomY = chartHeight - 20;
+  const midY = topY + (bottomY - topY) / 2;
+  const plotWidth = chartWidth - padLeft - padRight;
+  const plotHeight = bottomY - topY;
+
+  const rawPointObjs = chartValues.map((v, i) => {
+    const count = Math.max(chartValues.length, 1);
+    const x = padLeft + (count > 1 ? (i / (count - 1)) * plotWidth : plotWidth / 2);
+    const y = bottomY - (v / maxVal) * plotHeight;
+    return { x, y };
   });
 
-  const pathD = points.length > 0 ? `M ${points.join(' L ')}` : '';
-  const areaD = points.length > 0 ? `${pathD} L ${chartWidth},${chartHeight} L 0,${chartHeight} Z` : '';
+  const completedRawPointObjs = completedChartValues.map((v, i) => {
+    const count = Math.max(completedChartValues.length, 1);
+    const x = padLeft + (count > 1 ? (i / (count - 1)) * plotWidth : plotWidth / 2);
+    const y = bottomY - (v / maxVal) * plotHeight;
+    return { x, y };
+  });
 
-  const totalActionNeeded = actionCounts.pendingDelivery + actionCounts.processing + actionCounts.pendingTickets;
+  const points = rawPointObjs.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+  const completedPoints = completedRawPointObjs.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`);
+
+  // Straight crisp polyline path (Direct & Highly Accurate)
+  const pathD = points.length > 0 ? `M ${points.join(' L ')}` : '';
+  const lastX = rawPointObjs[rawPointObjs.length - 1]?.x || chartWidth - padRight;
+  const firstX = rawPointObjs[0]?.x || padLeft;
+  const areaD = pathD ? `${pathD} L ${lastX.toFixed(1)},${bottomY} L ${firstX.toFixed(1)},${bottomY} Z` : '';
+
+  const completedPathD = completedPoints.length > 0 ? `M ${completedPoints.join(' L ')}` : '';
+  const completedAreaD = completedPathD ? `${completedPathD} L ${lastX.toFixed(1)},${bottomY} L ${firstX.toFixed(1)},${bottomY} Z` : '';
+
+  const formatYAxis = (val: number) => {
+    if (metricView === 'revenue') {
+      if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+      if (val >= 1000) return `${Math.round(val / 1000)}k`;
+      return `${val}đ`;
+    }
+    return Number.isInteger(val) ? `${val}` : val.toFixed(1);
+  };
+
+  const totalUrgentActions = actionHub.pendingTickets + actionHub.pendingDelivery + actionHub.expiringSoon + actionHub.pendingReviews;
+
+  const rangeLabelMap: Record<RangeMode, string> = {
+    '7d': '7 ngày',
+    '30d': '30 ngày',
+    '90d': '3 tháng',
+    '12m': '12 tháng',
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Title Header & Time Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6 pb-8 w-full max-w-full overflow-x-hidden">
+      {/* 🧭 HEADER & GLOBAL FILTER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">Tổng quan hệ thống</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Theo dõi doanh số, phân tích sản phẩm bán chạy và nhật ký hoạt động hệ thống BOW.</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              Dashboard Điều hành Tác chiến
+            </h1>
+          </div>
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 sm:mt-1">
+            Theo dõi dòng tiền, tiếp nhận xử lý đơn hàng khẩn cấp và giám sát hệ sinh thái BOW.
+          </p>
         </div>
 
-        {/* Global Time Filter Controls */}
-        <div className="flex items-center gap-1 bg-white dark:bg-[#131C32] p-1.5 rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A]/50 shadow-2xs self-start sm:self-auto">
-          <span className="text-[10px] font-black uppercase text-slate-400 px-2">Thời gian:</span>
-          {[
-            { key: '7d', label: '7 ngày' },
-            { key: '30d', label: '30 ngày' },
-            { key: '90d', label: '3 tháng' },
-            { key: '12m', label: '12 tháng' },
-          ].map((r) => (
+        {/* Global Time Filter (Mobile-first full scrollable / Desktop compact) */}
+        <div className="flex items-center justify-between sm:justify-start gap-1 bg-white dark:bg-[#131C32] p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A]/50 shadow-2xs w-full sm:w-auto overflow-x-auto no-scrollbar scrollbar-none">
+          <span className="text-[9.5px] sm:text-[10px] font-black uppercase text-slate-400 px-1.5 sm:px-2 shrink-0">Kỳ xem:</span>
+          {(['7d', '30d', '90d', '12m'] as RangeMode[]).map((r) => (
             <button
-              key={r.key}
+              key={r}
               type="button"
-              onClick={() => setActiveRange(r.key as RangeMode)}
-              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${activeRange === r.key
-                ? 'bg-gradient-to-r from-[#19A7FF] to-[#2563EB] text-white shadow-xs font-black'
+              onClick={() => setActiveRange(r)}
+              className={`rounded-lg sm:rounded-xl px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold transition-all whitespace-nowrap flex-1 sm:flex-initial text-center ${activeRange === r
+                ? 'bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-white shadow-xs font-black'
                 : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
             >
-              {r.label}
+              {rangeLabelMap[r]}
             </button>
           ))}
         </div>
       </div>
 
-      {/* 4 MAIN KPI CARDS */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[
-          {
-            key: 'revenue',
-            label: 'Tổng doanh thu',
-            value: `${stats.totalRevenue.toLocaleString('vi-VN')}đ`,
-            change: changes.revenue.text,
-            isPos: changes.revenue.isPos,
-            icon: '💰',
-            accentColor: 'from-[#19A7FF]/20 to-[#2563EB]/20 border-[#2563EB]/30 text-[#2563EB] dark:text-[#35A8FF]',
-            strokeColor: '#2563EB',
-            svgPath: 'M 0,22 Q 20,8 40,25 T 80,10 T 120,28'
-          },
-          {
-            key: 'orders',
-            label: 'Tổng đơn hàng',
-            value: stats.totalOrders.toLocaleString('vi-VN'),
-            change: changes.orders.text,
-            isPos: changes.orders.isPos,
-            icon: '📦',
-            accentColor: 'from-rose-500/20 to-red-600/20 border-rose-500/30 text-rose-500',
-            strokeColor: '#EF4444',
-            svgPath: 'M 0,30 Q 25,10 50,25 T 100,5 T 120,15'
-          },
-          {
-            key: 'products',
-            label: 'Sản phẩm hiện có',
-            value: stats.totalProducts.toLocaleString('vi-VN'),
-            change: changes.products.text,
-            isPos: changes.products.isPos,
-            icon: '🛍',
-            accentColor: 'from-emerald-500/20 to-teal-600/20 border-emerald-500/30 text-emerald-500',
-            strokeColor: '#10B981',
-            svgPath: 'M 0,18 Q 30,30 60,10 T 120,5'
-          },
-          {
-            key: 'users',
-            label: 'Tổng thành viên',
-            value: stats.totalUsers.toLocaleString('vi-VN'),
-            change: changes.users.text,
-            isPos: changes.users.isPos,
-            icon: '👤',
-            accentColor: 'from-amber-500/20 to-orange-600/20 border-amber-500/30 text-amber-500',
-            strokeColor: '#F59E0B',
-            svgPath: 'M 0,25 Q 35,5 70,20 T 120,10'
-          },
-        ].map((c) => (
-          <div
-            key={c.key}
-            className="group relative rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-4 shadow-xs hover:shadow-card hover:border-[#2563EB]/40 dark:hover:border-[#35A8FF]/40 transition-all duration-300 flex flex-col justify-between overflow-hidden"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className={`h-8 w-8 rounded-xl bg-gradient-to-br ${c.accentColor} border flex items-center justify-center text-sm shrink-0 shadow-2xs group-hover:scale-105 transition-transform`}>
-                  {c.icon}
-                </span>
-                <span className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
-                  {c.label}
-                </span>
-              </div>
+      {/* 1️⃣ SINGLE KPI BAR (Gom 1 Hàng Thống Kê Duy Nhất) */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
+        {/* Card 1: Doanh thu trong kỳ */}
+        <div className="rounded-[18px] sm:rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3 sm:p-4 shadow-xs hover:border-[#2563EB]/40 dark:hover:border-[#35A8FF]/40 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200/50 dark:border-blue-800/40 flex items-center justify-center text-xs sm:text-sm shrink-0">
+                💰
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                Doanh thu
+              </span>
+            </div>
+            <span
+              className={`inline-flex items-center rounded-full px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-black shrink-0 ${rangeMetrics.isRevenuePos
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50'
+                : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/50'
+                }`}
+            >
+              {rangeMetrics.revenueChangeText}
+            </span>
+          </div>
 
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black shrink-0 ${c.isPos
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/40'
-                : 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400 border border-red-200/50 dark:border-red-800/40'
-                }`}>
-                {c.change}
+          <div className="mt-2.5 sm:mt-3">
+            <span className="text-base sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight block truncate">
+              {loading ? (
+                <span className="inline-block h-6 sm:h-7 w-24 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+              ) : (
+                `${rangeMetrics.currentRevenue.toLocaleString('vi-VN')}đ`
+              )}
+            </span>
+            <span className="text-[9.5px] sm:text-[10px] text-slate-400 font-semibold block mt-0.5 sm:mt-1 truncate">
+              Trong {rangeLabelMap[activeRange]} qua
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Tổng đơn hàng + Order Health Breakdown + Drill-down (Ý tưởng 1 & 4) */}
+        <div className="rounded-[18px] sm:rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3 sm:p-4 shadow-xs hover:border-[#2563EB]/40 dark:hover:border-[#35A8FF]/40 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200/50 dark:border-purple-800/40 flex items-center justify-center text-xs sm:text-sm shrink-0">
+                📦
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                Tổng đơn tạo
+              </span>
+            </div>
+            <Link
+              to="/admin/orders?status=completed"
+              title="Bấm xem các đơn đã hoàn tất"
+              className="inline-flex items-center rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-black border border-purple-200/50 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              {rangeMetrics.completedOrdersCount} xong ↗
+            </Link>
+          </div>
+
+          <div className="mt-2.5 sm:mt-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-base sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight block truncate">
+                {loading ? (
+                  <span className="inline-block h-6 sm:h-7 w-16 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+                ) : (
+                  `${rangeMetrics.totalOrdersCount} đơn`
+                )}
+              </span>
+              <span className="text-[9px] sm:text-[10px] text-slate-400 font-semibold truncate ml-1">
+                {rangeLabelMap[activeRange]}
               </span>
             </div>
 
-            <div className="mt-3.5 flex items-baseline justify-between gap-2">
-              <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
-                {loading ? <span className="inline-block h-7 w-20 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /> : c.value}
-              </span>
+            {/* Mini Health Multi-Bar */}
+            <div className="mt-2 sm:mt-2.5 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
+              {rangeMetrics.totalOrdersCount === 0 ? (
+                <div className="h-full w-full bg-slate-200 dark:bg-slate-700 opacity-40" />
+              ) : (
+                <>
+                  {rangeMetrics.completedPct > 0 && (
+                    <div
+                      style={{ width: `${rangeMetrics.completedPct}%` }}
+                      className="h-full bg-emerald-500 transition-all duration-500"
+                      title={`Đã xong: ${rangeMetrics.completedOrdersCount} đơn`}
+                    />
+                  )}
+                  {rangeMetrics.pendingPct > 0 && (
+                    <div
+                      style={{ width: `${rangeMetrics.pendingPct}%` }}
+                      className="h-full bg-amber-400 transition-all duration-500"
+                      title={`Chờ thanh toán: ${rangeMetrics.pendingPaymentCount} đơn`}
+                    />
+                  )}
+                  {rangeMetrics.cancelledPct > 0 && (
+                    <div
+                      style={{ width: `${rangeMetrics.cancelledPct}%` }}
+                      className="h-full bg-rose-500 transition-all duration-500"
+                      title={`Đã hủy: ${rangeMetrics.cancelledCount} đơn`}
+                    />
+                  )}
+                  {rangeMetrics.refundedPct > 0 && (
+                    <div
+                      style={{ width: `${rangeMetrics.refundedPct}%` }}
+                      className="h-full bg-purple-500 transition-all duration-500"
+                      title={`Hoàn tiền: ${rangeMetrics.refundedCount} đơn`}
+                    />
+                  )}
+                </>
+              )}
+            </div>
 
-              <div className="w-16 h-7 shrink-0 opacity-85 group-hover:opacity-100 transition-opacity">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 120 40">
-                  <path
-                    d={c.svgPath}
-                    fill="none"
-                    stroke={c.strokeColor}
-                    strokeWidth={2.5}
-                    strokeLinecap="round"
-                  />
-                </svg>
+            {/* Breakdown Status Pills with Drill-down Links */}
+            <div className="mt-1.5 sm:mt-2 flex items-center justify-between text-[9.5px] sm:text-[10.5px] font-bold">
+              <Link
+                to="/admin/orders?status=completed"
+                className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                title="Xem đơn đã hoàn tất"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                {rangeMetrics.completedOrdersCount} xong
+              </Link>
+              <Link
+                to="/admin/orders?status=cancelled"
+                className="flex items-center gap-1 text-rose-500 dark:text-rose-400 hover:underline cursor-pointer"
+                title="Xem đơn đã hủy"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
+                {rangeMetrics.cancelledCount} hủy
+              </Link>
+              <Link
+                to="/admin/orders?status=refunded"
+                className="flex items-center gap-1 text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+                title="Xem đơn đã hoàn tiền"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-500 shrink-0" />
+                {rangeMetrics.refundedCount} hoàn
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: AOV (Giá trị TB/Đơn) */}
+        <div className="rounded-[18px] sm:rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3 sm:p-4 shadow-xs hover:border-[#2563EB]/40 dark:hover:border-[#35A8FF]/40 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/50 dark:border-emerald-800/40 flex items-center justify-center text-xs sm:text-sm shrink-0">
+                🎯
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                Giá trị TB/Đơn
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-2.5 sm:mt-3">
+            <span className="text-base sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight block truncate">
+              {loading ? (
+                <span className="inline-block h-6 sm:h-7 w-20 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+              ) : rangeMetrics.completedOrdersCount === 0 || rangeMetrics.currentRevenue === 0 ? (
+                <span className="text-slate-400 dark:text-slate-500 font-bold">—</span>
+              ) : (
+                `${rangeMetrics.aov.toLocaleString('vi-VN')}đ`
+              )}
+            </span>
+            <span className="text-[9.5px] sm:text-[10px] text-slate-400 font-semibold block mt-0.5 sm:mt-1 truncate">
+              {rangeMetrics.completedOrdersCount > 0
+                ? `TB ${rangeMetrics.completedOrdersCount} đơn xong`
+                : 'Chưa có đơn xong'}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Tỷ lệ thành công & Phễu vận hành (Ý tưởng 3) */}
+        <div className="rounded-[18px] sm:rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A] bg-white dark:bg-[#131C32] p-3 sm:p-4 shadow-xs hover:border-[#2563EB]/40 dark:hover:border-[#35A8FF]/40 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/50 dark:border-amber-800/40 flex items-center justify-center text-xs sm:text-sm shrink-0">
+                ⚡
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                Tỷ lệ thành công
+              </span>
+            </div>
+            {rangeMetrics.totalOrdersCount === 0 ? (
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-bold border border-slate-200/70 dark:border-slate-700 shrink-0">
+                Chưa có đơn
+              </span>
+            ) : rangeMetrics.successRate >= 90 ? (
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-black border border-emerald-200/50 shrink-0">
+                Tốt
+              </span>
+            ) : rangeMetrics.successRate >= 70 ? (
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-black border border-blue-200/50 shrink-0">
+                Khá
+              </span>
+            ) : rangeMetrics.successRate > 0 ? (
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-black border border-amber-200/50 shrink-0">
+                Cần cải thiện
+              </span>
+            ) : (
+              <span className="inline-flex items-center whitespace-nowrap rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 px-1.5 sm:px-2 py-0.5 text-[9px] sm:text-[10px] font-black border border-rose-200/50 shrink-0">
+                Lưu ý
+              </span>
+            )}
+          </div>
+
+          <div className="mt-2.5 sm:mt-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-base sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight block truncate">
+                {loading ? (
+                  <span className="inline-block h-6 sm:h-7 w-16 animate-pulse rounded bg-slate-100 dark:bg-slate-800" />
+                ) : (
+                  `${rangeMetrics.successRate}%`
+                )}
+              </span>
+              <span className="text-[9px] sm:text-[10px] text-slate-400 font-semibold truncate ml-1">
+                {rangeMetrics.completedOrdersCount}/{rangeMetrics.totalOrdersCount} xong
+              </span>
+            </div>
+
+            {/* Funnel Sub-Metrics */}
+            <div className="mt-2 sm:mt-2.5 pt-1.5 sm:pt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-[9.5px] sm:text-[10.5px] font-bold">
+              <span className="text-slate-500 dark:text-slate-400 truncate">
+                🔄 Hoàn:{' '}
+                <strong className={rangeMetrics.refundedPct > 5 ? 'text-purple-600 dark:text-purple-400' : 'text-slate-700 dark:text-slate-300'}>
+                  {rangeMetrics.refundedPct.toFixed(0)}%
+                </strong>
+              </span>
+              <span className="text-slate-500 dark:text-slate-400 truncate">
+                🔴 Hủy:{' '}
+                <strong className={rangeMetrics.cancelledPct > 50 ? 'text-rose-500' : 'text-slate-700 dark:text-slate-300'}>
+                  {rangeMetrics.cancelledPct.toFixed(0)}%
+                </strong>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2️⃣ KHỐI PHÂN TÍCH: TỈ LỆ 7:3 (REVENUE CHART & IMMEDIATE ACTIONS) */}
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
+        {/* Cột trái (70% - 8 Cols): Area Chart Doanh thu & Đơn hàng (Ý tưởng 2: Dual Metric Chart) */}
+        <div className="lg:col-span-8 rounded-[20px] sm:rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-3.5 sm:p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
+            <div className="space-y-1">
+              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
+                <span>📈</span> BIỂU ĐỒ DÒNG TIỀN & ĐƠN HÀNG
+              </h3>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10.5px] sm:text-[11px] text-slate-400 font-semibold">
+                <span>
+                  Xu hướng {metricView === 'revenue' ? 'doanh thu thực tế' : 'số lượng đơn'} ({rangeLabelMap[activeRange]}).
+                </span>
+                {metricView === 'orders' && (
+                  <div className="inline-flex items-center gap-2 text-[9.5px] sm:text-[10px] font-bold bg-slate-50 dark:bg-slate-800/80 px-2 sm:px-2.5 py-0.5 rounded-full border border-slate-200/60 dark:border-slate-700/60 whitespace-nowrap shrink-0">
+                    <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#3B82F6]" />
+                      {rangeMetrics.totalOrdersCount} đơn tạo
+                    </span>
+                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+                      {rangeMetrics.completedOrdersCount} đã xong
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        ))}
-      </div>
 
-      {/* QUICK STATS BAR */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/40 dark:bg-emerald-950/20 p-3.5 flex items-center gap-3">
-          <span className="text-xl">⚡</span>
-          <div>
-            <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block">Doanh thu Hôm nay</span>
-            <span className="text-sm font-extrabold text-slate-900 dark:text-white">{stats.todayRevenue.toLocaleString('vi-VN')}đ</span>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 p-3.5 flex items-center gap-3">
-          <span className="text-xl">📈</span>
-          <div>
-            <span className="text-[10px] font-black uppercase text-[#2563EB] dark:text-[#35A8FF] block">Doanh thu 7 Ngày</span>
-            <span className="text-sm font-extrabold text-slate-900 dark:text-white">{stats.rev7d.toLocaleString('vi-VN')}đ</span>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/40 dark:bg-indigo-950/20 p-3.5 flex items-center gap-3">
-          <span className="text-xl">📊</span>
-          <div>
-            <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 block">Doanh thu 30 Ngày</span>
-            <span className="text-sm font-extrabold text-slate-900 dark:text-white">{stats.rev30d.toLocaleString('vi-VN')}đ</span>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-purple-100 dark:border-purple-900/30 bg-purple-50/40 dark:bg-purple-950/20 p-3.5 flex items-center gap-3">
-          <span className="text-xl">🎯</span>
-          <div>
-            <span className="text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 block">Đơn trong kỳ chọn</span>
-            <span className="text-sm font-extrabold text-slate-900 dark:text-white">{rangeFilteredOrders.length} đơn</span>
-          </div>
-        </div>
-      </div>
-
-      {/* REVENUE CHART & ACTION NEEDED */}
-      <div className="grid gap-6 lg:grid-cols-12">
-        {/* Revenue Chart (8 Cols) */}
-        <div className="lg:col-span-8 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
-            <div>
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Doanh thu dòng tiền</h3>
-              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Biểu đồ tổng hợp doanh số từ các đơn hàng thực tế ({activeRange}).</p>
-            </div>
-
-            <div className="flex gap-1 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl">
-              {[
-                { key: '7d', label: '7 ngày' },
-                { key: '30d', label: '30 ngày' },
-                { key: '90d', label: '3 tháng' },
-                { key: '12m', label: '12 tháng' },
-              ].map((r) => (
-                <button
-                  key={r.key}
-                  type="button"
-                  onClick={() => setActiveRange(r.key as RangeMode)}
-                  className={`rounded-lg px-2.5 py-1 text-[10px] font-bold transition-all ${activeRange === r.key
-                    ? 'bg-white dark:bg-[#131C32] text-[#2563EB] dark:text-[#35A8FF] shadow-xs font-extrabold'
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
-                    }`}
-                >
-                  {r.label}
-                </button>
-              ))}
+            {/* Metric View Toggle - ALWAYS FIXED AT TOP RIGHT */}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-0.5 sm:p-1 rounded-xl shrink-0 self-start sm:self-auto ml-auto">
+              <button
+                type="button"
+                onClick={() => setMetricView('revenue')}
+                className={`rounded-lg px-2 sm:px-2.5 py-1 text-[10.5px] sm:text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${metricView === 'revenue'
+                  ? 'bg-white dark:bg-[#131C32] text-[#2563EB] dark:text-[#35A8FF] shadow-xs font-black'
+                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                  }`}
+              >
+                💰 Doanh thu (₫)
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetricView('orders')}
+                className={`rounded-lg px-2 sm:px-2.5 py-1 text-[10.5px] sm:text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${metricView === 'orders'
+                  ? 'bg-white dark:bg-[#131C32] text-[#2563EB] dark:text-[#35A8FF] shadow-xs font-black'
+                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                  }`}
+              >
+                📦 Số lượng đơn
+              </button>
             </div>
           </div>
 
-          {/* Dynamic SVG chart */}
-          <div className="mt-4 w-full h-[160px] relative">
-            <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
+          {/* Area Chart SVG */}
+          <div className="mt-4 w-full h-[180px] relative overflow-hidden" onMouseLeave={() => setHoveredIdx(null)}>
+            <svg className="w-full h-full" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none">
               <defs>
-                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#19A7FF" stopOpacity="0.18" />
-                  <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
+                <linearGradient id="cockpitGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={metricView === 'revenue' ? '#00A3FF' : '#3B82F6'} stopOpacity="0.35" />
+                  <stop offset="100%" stopColor={metricView === 'revenue' ? '#2563EB' : '#1D4ED8'} stopOpacity="0.0" />
+                </linearGradient>
+                <linearGradient id="completedOrdersGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10B981" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#059669" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
-              <line x1="0" y1={chartHeight - 15} x2={chartWidth} y2={chartHeight - 15} stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/40" />
-              <line x1="0" y1={chartHeight / 2} x2={chartWidth} y2={chartHeight / 2} stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/40" strokeDasharray="4" />
-              <line x1="0" y1="15" x2={chartWidth} y2="15" stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/40" />
+              {/* Y-Axis Text Labels */}
+              <text x={padLeft - 6} y={topY + 3} fill="#94A3B8" fontSize="8.5" fontWeight="700" textAnchor="end" className="dark:fill-slate-500 font-mono">
+                {formatYAxis(maxVal)}
+              </text>
+              <text x={padLeft - 6} y={midY + 3} fill="#94A3B8" fontSize="8.5" fontWeight="700" textAnchor="end" className="dark:fill-slate-500 font-mono">
+                {formatYAxis(maxVal / 2)}
+              </text>
+              <text x={padLeft - 6} y={bottomY + 3} fill="#94A3B8" fontSize="8.5" fontWeight="700" textAnchor="end" className="dark:fill-slate-500 font-mono">
+                0
+              </text>
 
-              <path d={areaD} fill="url(#chartGradient)" />
-              <path d={pathD} fill="none" stroke="#2563EB" strokeWidth={3} strokeLinecap="round" />
+              {/* Grid Lines */}
+              <line x1={padLeft} y1={topY} x2={chartWidth - padRight} y2={topY} stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/40" strokeDasharray="3 3" />
+              <line x1={padLeft} y1={midY} x2={chartWidth - padRight} y2={midY} stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/40" strokeDasharray="3 3" />
+              <line x1={padLeft} y1={bottomY} x2={chartWidth - padRight} y2={bottomY} stroke="#E8F1FF" strokeWidth={1} className="dark:stroke-slate-800/60" />
 
+              {/* Area Fills */}
+              <path d={areaD} fill="url(#cockpitGradient)" />
+              {metricView === 'orders' && completedAreaD && (
+                <path d={completedAreaD} fill="url(#completedOrdersGradient)" />
+              )}
+
+              {/* Primary Line (Smooth Spline) */}
+              <path
+                d={pathD}
+                fill="none"
+                stroke={metricView === 'revenue' ? '#2563EB' : '#3B82F6'}
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+
+              {/* Secondary Line for Completed Orders (Dual Metric Spline) */}
+              {metricView === 'orders' && completedPathD && (
+                <path
+                  d={completedPathD}
+                  fill="none"
+                  stroke="#10B981"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+
+              {/* Primary Nodes */}
               {points.map((p, idx) => {
-                const [x, y] = p.split(',');
-                const val = currentChart.values[idx] || 0;
+                const [x, y] = p.split(',').map(Number);
+                const isHovered = hoveredIdx === idx;
                 return (
-                  <g key={idx} className="group">
+                  <g key={`primary-${idx}`} className="cursor-pointer">
+                    {/* Invisible larger hover zone */}
                     <circle
                       cx={x}
                       cy={y}
-                      r={4.5}
-                      fill="#FFFFFF"
-                      stroke="#2563EB"
-                      strokeWidth={2.5}
-                      className="cursor-pointer hover:r-6 transition-all"
+                      r={14}
+                      fill="transparent"
+                      onMouseEnter={() => setHoveredIdx(idx)}
                     />
-                    <title>{`${currentChart.labels[idx] || ''}: ${val.toLocaleString('vi-VN')}đ`}</title>
+                    {/* Visual node */}
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={isHovered ? 5.5 : 3.5}
+                      fill={isHovered ? (metricView === 'revenue' ? '#2563EB' : '#3B82F6') : '#FFFFFF'}
+                      stroke={metricView === 'revenue' ? '#2563EB' : '#3B82F6'}
+                      strokeWidth={isHovered ? 2.5 : 2}
+                      className="transition-all duration-150"
+                    />
                   </g>
                 );
               })}
+
+              {/* Secondary Nodes (Completed Orders) */}
+              {metricView === 'orders' && completedPoints.map((p, idx) => {
+                const [x, y] = p.split(',').map(Number);
+                const isHovered = hoveredIdx === idx;
+                return (
+                  <g key={`completed-${idx}`} className="cursor-pointer">
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={isHovered ? 5.5 : 3.5}
+                      fill={isHovered ? '#10B981' : '#FFFFFF'}
+                      stroke="#10B981"
+                      strokeWidth={isHovered ? 2.5 : 2}
+                      className="transition-all duration-150"
+                    />
+                  </g>
+                );
+              })}
+
+              {/* Hover Tooltip in SVG */}
+              {hoveredIdx !== null && points[hoveredIdx] && (
+                (() => {
+                  const [x, y] = points[hoveredIdx].split(',').map(Number);
+                  const val = chartValues[hoveredIdx] || 0;
+                  const completedVal = completedChartValues[hoveredIdx] || 0;
+                  const label = activeChartData?.labels?.[hoveredIdx] || '';
+                  const tooltipY = Math.max(22, y - 24);
+                  const tooltipX = Math.min(Math.max(x, padLeft + 55), chartWidth - padRight - 55);
+
+                  return (
+                    <g className="pointer-events-none transition-all duration-150">
+                      {/* Vertical dotted guide line */}
+                      <line
+                        x1={x}
+                        y1={topY}
+                        x2={x}
+                        y2={bottomY}
+                        stroke={metricView === 'revenue' ? '#2563EB' : '#3B82F6'}
+                        strokeWidth={1.2}
+                        strokeDasharray="3 3"
+                        opacity={0.7}
+                      />
+                      {/* Tooltip background badge */}
+                      <rect
+                        x={tooltipX - 60}
+                        y={tooltipY - (metricView === 'orders' ? 32 : 22)}
+                        width={120}
+                        height={metricView === 'orders' ? 44 : 28}
+                        rx={8}
+                        fill="#0F172A"
+                        className="dark:fill-[#1E2A4A] shadow-md"
+                      />
+                      {/* Tooltip text */}
+                      <text
+                        x={tooltipX}
+                        y={tooltipY - (metricView === 'orders' ? 20 : 10)}
+                        fill="#94A3B8"
+                        fontSize="9"
+                        fontWeight="bold"
+                        textAnchor="middle"
+                      >
+                        {label}
+                      </text>
+                      {metricView === 'revenue' ? (
+                        <text
+                          x={tooltipX}
+                          y={tooltipY + 2}
+                          fill="#FFFFFF"
+                          fontSize="10"
+                          fontWeight="900"
+                          textAnchor="middle"
+                          fontFamily="monospace"
+                        >
+                          {`${val.toLocaleString('vi-VN')}đ`}
+                        </text>
+                      ) : (
+                        <>
+                          <text
+                            x={tooltipX}
+                            y={tooltipY - 6}
+                            fill="#60A5FA"
+                            fontSize="9.5"
+                            fontWeight="800"
+                            textAnchor="middle"
+                            fontFamily="monospace"
+                          >
+                            🔵 Đơn tạo: {val}
+                          </text>
+                          <text
+                            x={tooltipX}
+                            y={tooltipY + 6}
+                            fill="#34D399"
+                            fontSize="9.5"
+                            fontWeight="800"
+                            textAnchor="middle"
+                            fontFamily="monospace"
+                          >
+                            🟢 Đã xong: {completedVal}
+                          </text>
+                        </>
+                      )}
+                    </g>
+                  );
+                })()
+              )}
             </svg>
           </div>
 
-          <div className="flex justify-between border-t border-slate-100 dark:border-slate-800/60 pt-3 text-[10px] text-slate-400 font-bold px-1">
-            {currentChart.labels.map((lbl, idx) => (
-              <span key={idx}>{lbl}</span>
+          <div
+            className="flex justify-between border-t border-slate-100 dark:border-slate-800/60 pt-2.5 sm:pt-3 text-[9px] sm:text-[10px] text-slate-400 font-bold overflow-hidden"
+            style={{ paddingLeft: `${padLeft}px`, paddingRight: `${padRight}px` }}
+          >
+            {activeChartData?.labels?.map((lbl, idx) => (
+              <span
+                key={idx}
+                className={`transition-colors ${hoveredIdx === idx ? 'text-[#2563EB] dark:text-[#35A8FF] font-black scale-105' : ''}`}
+              >
+                {lbl}
+              </span>
             ))}
           </div>
         </div>
 
-        {/* ⚠️ CẦN XỬ LÝ (4 Cols) */}
-        <div className="lg:col-span-4 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between">
+        {/* Cột phải (30% - 4 Cols): Hub "Cần xử lý ngay" (Immediate Action Center) */}
+        <div className="lg:col-span-4 rounded-[20px] sm:rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-3.5 sm:p-5 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <span>⚠️</span> CẦN XỬ LÝ
-              </h3>
-              {totalActionNeeded > 0 && (
-                <span className="inline-flex items-center rounded-full bg-rose-50 dark:bg-rose-950/30 px-2 py-0.5 text-[10px] font-black text-rose-600 dark:text-rose-400 border border-rose-200/50">
-                  {totalActionNeeded} tác vụ
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  {totalUrgentActions > 0 && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  )}
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${totalUrgentActions > 0 ? 'bg-rose-500' : 'bg-emerald-500'}`} />
+                </span>
+                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                  CẦN XỬ LÝ NGAY
+                </h3>
+              </div>
+              {totalUrgentActions > 0 ? (
+                <span className="inline-flex items-center rounded-full bg-rose-50 dark:bg-rose-950/40 px-2 sm:px-2.5 py-0.5 text-[9.5px] sm:text-[10px] font-black text-rose-600 dark:text-rose-400 border border-rose-200/50">
+                  {totalUrgentActions} việc gấp
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2 sm:px-2.5 py-0.5 text-[9.5px] sm:text-[10px] font-black text-emerald-600 dark:text-emerald-400 border border-emerald-200/50">
+                  Đã sạch việc
                 </span>
               )}
             </div>
 
-            <div className="mt-4 space-y-3">
-              {/* Item 1: Đơn chờ bàn giao */}
-              <Link
-                to="/admin/orders?status=pending_delivery"
-                className="flex items-center justify-between p-3 rounded-2xl border border-rose-100 dark:border-rose-900/30 bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping shrink-0" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Đơn chờ bàn giao</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-black text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/50 px-2 py-0.5 rounded-lg">
-                    {actionCounts.pendingDelivery}
-                  </span>
-                  <span className="text-slate-400 group-hover:translate-x-1 transition-transform">→</span>
-                </div>
-              </Link>
-
-              {/* Item 2: Đơn cần xử lý */}
-              <Link
-                to="/admin/orders?status=processing"
-                className="flex items-center justify-between p-3 rounded-2xl border border-amber-100 dark:border-amber-900/30 bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Đơn cần xử lý</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-black text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-lg">
-                    {actionCounts.processing}
-                  </span>
-                  <span className="text-slate-400 group-hover:translate-x-1 transition-transform">→</span>
-                </div>
-              </Link>
-
-              {/* Item 3: Ticket cần phản hồi */}
+            {/* List of High-Priority Badges */}
+            <div className="mt-3 sm:mt-3.5 space-y-2 sm:space-y-2.5">
+              {/* 🔴 Ticket chờ hỗ trợ */}
               <Link
                 to="/admin/tickets?status=pending"
-                className="flex items-center justify-between p-3 rounded-2xl border border-blue-100 dark:border-blue-900/30 bg-blue-50/40 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition group"
+                className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-rose-100 dark:border-rose-900/40 bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-100/60 dark:hover:bg-rose-950/40 transition group shadow-2xs"
               >
-                <div className="flex items-center gap-2.5">
-                  <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Ticket cần phản hồi</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-black text-[#2563EB] dark:text-[#35A8FF] bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-lg">
-                    {actionCounts.pendingTickets}
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-rose-500 text-white flex items-center justify-center text-xs sm:text-sm font-bold shadow-rose-500/20 shrink-0">
+                    🎫
                   </span>
-                  <span className="text-slate-400 group-hover:translate-x-1 transition-transform">→</span>
+                  <div className="min-w-0">
+                    <span className="text-[11.5px] sm:text-xs font-bold text-slate-900 dark:text-slate-100 block truncate">
+                      Ticket chờ phản hồi
+                    </span>
+                    <span className="text-[9.5px] sm:text-[10px] text-rose-600 dark:text-rose-400 font-semibold block truncate">
+                      {actionHub.pendingTickets > 0
+                        ? `Lâu nhất: ${actionHub.oldestTicketWait}`
+                        : 'Không có ticket chờ'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[11px] sm:text-xs font-black text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/60 px-2 py-0.5 rounded-lg">
+                    {actionHub.pendingTickets}
+                  </span>
+                  <span className="text-slate-400 group-hover:translate-x-1 transition-transform text-xs">›</span>
+                </div>
+              </Link>
+
+              {/* 🟡 Đơn hàng chờ bàn giao */}
+              <Link
+                to="/admin/orders?status=pending_delivery"
+                className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-100/60 dark:hover:bg-amber-950/40 transition group shadow-2xs"
+              >
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-amber-500 text-white flex items-center justify-center text-xs sm:text-sm font-bold shadow-amber-500/20 shrink-0">
+                    📦
+                  </span>
+                  <div className="min-w-0">
+                    <span className="text-[11.5px] sm:text-xs font-bold text-slate-900 dark:text-slate-100 block truncate">
+                      Đơn chờ bàn giao account
+                    </span>
+                    <span className="text-[9.5px] sm:text-[10px] text-amber-600 dark:text-amber-400 font-semibold block truncate">
+                      Cần cấp tài khoản cho khách
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[11px] sm:text-xs font-black text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-lg">
+                    {actionHub.pendingDelivery}
+                  </span>
+                  <span className="text-slate-400 group-hover:translate-x-1 transition-transform text-xs">›</span>
+                </div>
+              </Link>
+
+              {/* ⏰ Đơn sắp hết hạn (1-3 ngày) */}
+              <Link
+                to="/admin/orders?status=expiring_soon"
+                className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-sky-100 dark:border-sky-900/40 bg-sky-50/50 dark:bg-sky-950/20 hover:bg-sky-100/60 dark:hover:bg-sky-950/40 transition group shadow-2xs"
+              >
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-sky-500 text-white flex items-center justify-center text-xs sm:text-sm font-bold shadow-sky-500/20 shrink-0">
+                    ⏰
+                  </span>
+                  <div className="min-w-0">
+                    <span className="text-[11.5px] sm:text-xs font-bold text-slate-900 dark:text-slate-100 block truncate">
+                      Đơn sắp hết hạn (1-3 ngày)
+                    </span>
+                    <span className="text-[9.5px] sm:text-[10px] text-sky-600 dark:text-sky-400 font-semibold block truncate">
+                      Nhắc khách gia hạn dịch vụ
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[11px] sm:text-xs font-black text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900/60 px-2 py-0.5 rounded-lg">
+                    {actionHub.expiringSoon}
+                  </span>
+                  <span className="text-slate-400 group-hover:translate-x-1 transition-transform text-xs">›</span>
+                </div>
+              </Link>
+
+              {/* ⭐ Đánh giá chờ duyệt */}
+              <Link
+                to="/admin/reviews?status=pending"
+                className="flex items-center justify-between p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-purple-100 dark:border-purple-900/40 bg-purple-50/50 dark:bg-purple-950/20 hover:bg-purple-100/60 dark:hover:bg-purple-950/40 transition group shadow-2xs"
+              >
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <span className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl bg-purple-500 text-white flex items-center justify-center text-xs sm:text-sm font-bold shadow-purple-500/20 shrink-0">
+                    ⭐
+                  </span>
+                  <div className="min-w-0">
+                    <span className="text-[11.5px] sm:text-xs font-bold text-slate-900 dark:text-slate-100 block truncate">
+                      Review khách hàng mới
+                    </span>
+                    <span className="text-[9.5px] sm:text-[10px] text-purple-600 dark:text-purple-400 font-semibold block truncate">
+                      Duyệt hiển thị sao thực tế
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[11px] sm:text-xs font-black text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/60 px-2 py-0.5 rounded-lg">
+                    {actionHub.pendingReviews}
+                  </span>
+                  <span className="text-slate-400 group-hover:translate-x-1 transition-transform text-xs">›</span>
                 </div>
               </Link>
             </div>
           </div>
 
-          {totalActionNeeded === 0 ? (
-            <div className="mt-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 text-center text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              🎉 Không có việc cần xử lý!
-            </div>
-          ) : (
-            <p className="mt-4 text-[10px] text-slate-400 text-center font-semibold">
-              Bấm vào từng mục để tới trang quản lý xử lý nhanh.
-            </p>
-          )}
+          <div className="mt-2.5 sm:mt-3 text-center">
+            <span className="text-[9.5px] sm:text-[10px] text-slate-400 font-semibold">
+              Bấm vào từng mục để xử lý ngay tức thì
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* TOP SẢN PHẨM (6 COLS) & TRẠNG THÁI ĐƠN HÀNG (6 COLS) */}
-      <div className="grid gap-6 lg:grid-cols-12">
-        {/* TOP SẢN PHẨM BÁN CHẠY (6 Cols) */}
-        <div className="lg:col-span-6 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between">
+      {/* 3️⃣ KHỐI CHUYÊN SÂU: SẢN PHẨM & CƠ CẤU DOANH THU (GRID 5:5) */}
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
+        {/* Top Sản phẩm bán chạy (6 Cols - 50%) */}
+        <div className="lg:col-span-6 rounded-[20px] sm:rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-3.5 sm:p-5 shadow-xs flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
               <div>
                 <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                   <span>🏆</span> TOP SẢN PHẨM BÁN CHẠY
                 </h3>
-                <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Top 5 sản phẩm có số đơn bán nhiều nhất ({activeRange}).</p>
+                <p className="text-[10.5px] sm:text-[11px] text-slate-400 font-semibold mt-0.5">
+                  Top 5 sản phẩm đạt doanh số cao nhất ({rangeLabelMap[activeRange]}).
+                </p>
               </div>
-              <Link to="/admin/products" className="text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline">
-                Quản lý ›
+              <Link to="/admin/products" className="text-[10.5px] sm:text-[11px] font-bold text-[#2563EB] dark:text-[#35A8FF] hover:underline shrink-0 ml-2">
+                Quản lý kho ›
               </Link>
             </div>
 
             {rangeTopProducts.length === 0 ? (
-              <p className="py-8 text-center text-xs font-medium text-slate-400">Chưa có dữ liệu bán hàng trong khoảng thời gian này.</p>
+              /* Professional Empty State */
+              <div className="py-8 sm:py-10 px-4 text-center flex flex-col items-center justify-center">
+                <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-2xl sm:text-3xl mb-2 sm:mb-3 shadow-inner">
+                  🛍️
+                </div>
+                <h4 className="text-xs font-black text-slate-700 dark:text-slate-300">
+                  Chưa có dữ liệu bán hàng trong {rangeLabelMap[activeRange]} qua
+                </h4>
+                <p className="text-[10.5px] sm:text-[11px] text-slate-400 max-w-xs mt-1 leading-relaxed">
+                  Hãy thử đổi bộ lọc thời gian sang 30 ngày hoặc 12 tháng, hoặc đẩy mạnh chiến dịch khuyến mãi.
+                </p>
+              </div>
             ) : (
-              <div className="mt-4 space-y-3.5">
+              <div className="mt-3.5 sm:mt-4 space-y-3 sm:space-y-3.5">
                 {rangeTopProducts.map((p, idx) => (
-                  <div key={p.name} className="space-y-1.5">
+                  <div key={p.name} className="space-y-1 sm:space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className={`h-5 w-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${idx === 0
-                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
-                          : idx === 1
-                            ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
-                            : idx === 2
-                              ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
-                              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                          }`}>
+                      <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                        <span
+                          className={`h-5 w-5 rounded-full text-[10px] font-black flex items-center justify-center shrink-0 ${idx === 0
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300'
+                            : idx === 1
+                              ? 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'
+                              : idx === 2
+                                ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
+                                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                            }`}
+                        >
                           #{idx + 1}
                         </span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200 truncate" title={p.name}>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 truncate text-[11px] sm:text-xs" title={p.name}>
                           {p.name}
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0 font-mono text-[10.5px] sm:text-[11px] ml-2">
                         <span className="text-slate-400 font-semibold">{p.salesCount} đơn</span>
-                        <span className="font-extrabold text-[#2563EB] dark:text-[#35A8FF]">{p.revenue.toLocaleString('vi-VN')}đ</span>
+                        <span className="font-extrabold text-[#2563EB] dark:text-[#35A8FF]">
+                          {p.revenue.toLocaleString('vi-VN')}đ
+                        </span>
                       </div>
                     </div>
 
-                    {/* Revenue share progress bar */}
+                    {/* Progress Bar */}
                     <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800/80 rounded-full overflow-hidden flex">
                       <div
-                        className="h-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] rounded-full transition-all duration-500"
+                        className="h-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] rounded-full transition-all duration-500"
                         style={{ width: `${Math.max(p.percentage, 4)}%` }}
                       />
                     </div>
@@ -1061,289 +1468,289 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* TRUNG TÂM ĐIỀU HÀNH & CƠ CẤU DOANH THU (6 Cols) */}
-        <div className="lg:col-span-6 rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs flex flex-col justify-between space-y-4">
+        {/* Tỷ trọng Doanh thu Danh mục (Donut Chart) (6 Cols - 50%) */}
+        <div className="lg:col-span-6 rounded-[20px] sm:rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-3.5 sm:p-5 shadow-xs flex flex-col justify-between">
           <div>
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
               <div>
                 <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                  <span>⚡</span> TRUNG TÂM ĐIỀU HÀNH & CƠ CẤU DOANH MỤC
+                  <span>📊</span> TỶ TRỌNG DOANH THU DANH MỤC
                 </h3>
-                <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Tổng hợp chỉ số vận hành tức thì & cơ cấu doanh thu ({activeRange}).</p>
+                <p className="text-[10.5px] sm:text-[11px] text-slate-400 font-semibold mt-0.5">
+                  Phân bổ dòng tiền theo các nhóm ngành hàng ({rangeLabelMap[activeRange]}).
+                </p>
               </div>
             </div>
 
-            {/* ⚡ Bộ 3 Chỉ số Nhanh (3-in-1 Quick KPI Badges) */}
-            <div className="mt-3.5 grid grid-cols-3 gap-2">
-              {/* 1. Dòng tiền ví người dùng */}
-              <Link
-                to="/admin/users"
-                className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-2.5 sm:p-3 hover:border-emerald-400 dark:hover:border-emerald-600 transition group flex flex-col justify-between shadow-2xs"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <span>💰</span> <span className="hidden xs:inline">Tổng ví</span>
-                  </span>
-                  <span className="text-[10px] text-emerald-500 opacity-70 group-hover:translate-x-0.5 transition-transform">→</span>
-                </div>
-                <div className="mt-1.5">
-                  <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white block truncate">
-                    {operationalKPIs.totalUserBalance.toLocaleString('vi-VN')}đ
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-semibold block truncate">Số dư ví người dùng</span>
-                </div>
-              </Link>
-
-              {/* 2. Đánh giá chờ duyệt */}
-              <Link
-                to="/admin/reviews"
-                className="rounded-2xl border border-amber-100 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 sm:p-3 hover:border-amber-400 dark:hover:border-amber-600 transition group flex flex-col justify-between shadow-2xs"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <span>⭐</span> <span className="hidden xs:inline">Đánh giá</span>
-                  </span>
-                  <span className="text-[10px] text-amber-500 opacity-70 group-hover:translate-x-0.5 transition-transform">→</span>
-                </div>
-                <div className="mt-1.5">
-                  <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white block truncate">
-                    {operationalKPIs.pendingReviewsCount > 0 ? (
-                      <span className="text-amber-600 dark:text-amber-400 font-black">{operationalKPIs.pendingReviewsCount} chờ duyệt</span>
-                    ) : (
-                      <span className="text-slate-700 dark:text-slate-200">Đã duyệt hết</span>
-                    )}
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-semibold block truncate">Kiểm duyệt review</span>
-                </div>
-              </Link>
-
-              {/* 3. Mã giảm giá đang chạy */}
-              <Link
-                to="/admin/coupons"
-                className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/20 p-2.5 sm:p-3 hover:border-blue-400 dark:hover:border-blue-600 transition group flex flex-col justify-between shadow-2xs"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-[#2563EB] dark:text-[#35A8FF] flex items-center gap-1">
-                    <span>🎟️</span> <span className="hidden xs:inline">Voucher</span>
-                  </span>
-                  <span className="text-[10px] text-blue-500 opacity-70 group-hover:translate-x-0.5 transition-transform">→</span>
-                </div>
-                <div className="mt-1.5">
-                  <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white block truncate">
-                    {operationalKPIs.activeCouponsCount} mã đang chạy
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-semibold block truncate">Chiến dịch khuyến mãi</span>
-                </div>
-              </Link>
-            </div>
-
-            {/* AOV & Completion Rate KPI Chips */}
-            <div className="mt-3 grid grid-cols-2 gap-2.5">
-              <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-[#18243E] p-3">
-                <span className="text-[10px] font-black uppercase text-[#2563EB] dark:text-[#35A8FF] block">Giá trị đơn TB (AOV)</span>
-                <span className="text-base font-black text-slate-900 dark:text-white mt-0.5 block">
-                  {categoryAnalytics.aov.toLocaleString('vi-VN')}đ
-                </span>
-                <span className="text-[9px] font-semibold text-slate-400 block mt-0.5">Doanh thu TB mỗi đơn</span>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-[#18243E] p-3">
-                <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 block">Tỷ lệ hoàn thành</span>
-                <span className="text-base font-black text-slate-900 dark:text-white mt-0.5 block">
-                  {categoryAnalytics.completionRate}%
-                </span>
-                <span className="text-[9px] font-semibold text-slate-400 block mt-0.5">Tỷ lệ đơn bàn giao thành công</span>
-              </div>
-            </div>
-
-            {/* Category Revenue Breakdown */}
-            <div className="mt-3 space-y-2.5">
-              {/* Category 1: AI Tools */}
-              <div className="rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#18243E] p-3 space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">🤖</span>
-                    <span className="font-extrabold text-slate-900 dark:text-white">AI Tools</span>
-                  </div>
-                  <div className="flex items-center gap-2 font-mono text-xs">
-                    <span className="text-slate-400 font-semibold">{categoryAnalytics.aiToolsCount} đơn</span>
-                    <span className="font-extrabold text-[#2563EB] dark:text-[#35A8FF]">
-                      {categoryAnalytics.aiToolsRev.toLocaleString('vi-VN')}đ
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold">
-                  <span>Tỷ trọng doanh thu</span>
-                  <span className="font-mono text-slate-700 dark:text-slate-200">{categoryAnalytics.aiRevPct}%</span>
-                </div>
-
-                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-sky-400 to-[#2563EB] rounded-full transition-all duration-500"
-                    style={{ width: `${Math.max(categoryAnalytics.aiRevPct, categoryAnalytics.aiToolsCount > 0 ? 8 : 0)}%` }}
+            {/* Donut Chart & Legend Container */}
+            <div className="mt-3.5 sm:mt-4 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-4 sm:gap-6">
+              {/* Donut Chart SVG */}
+              <div className="relative w-36 h-36 sm:w-44 sm:h-44 shrink-0 mx-auto sm:mx-0 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  {/* Background Circle */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="38"
+                    fill="transparent"
+                    stroke="#E2E8F0"
+                    strokeWidth="11"
+                    className="dark:stroke-slate-800"
                   />
+
+                  {categoryDistribution.totalPaidRev === 0 ? (
+                    /* Subtle Placeholder Ring when revenue is 0 */
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="38"
+                      fill="transparent"
+                      stroke="#94A3B8"
+                      strokeWidth="3"
+                      strokeDasharray="4 6"
+                      className="opacity-40 dark:opacity-30"
+                    />
+                  ) : (
+                    <>
+                      {/* AI Tools Segment */}
+                      {categoryDistribution.items[0].percentage > 0 && (
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke="#3B82F6"
+                          strokeWidth="11"
+                          strokeDasharray={`${(categoryDistribution.items[0].percentage * 238.76) / 100} 238.76`}
+                          strokeDashoffset="0"
+                          className="transition-all duration-700"
+                        />
+                      )}
+
+                      {/* Premium Apps Segment */}
+                      {categoryDistribution.items[1].percentage > 0 && (
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke="#8B5CF6"
+                          strokeWidth="11"
+                          strokeDasharray={`${(categoryDistribution.items[1].percentage * 238.76) / 100} 238.76`}
+                          strokeDashoffset={`-${(categoryDistribution.items[0].percentage * 238.76) / 100}`}
+                          className="transition-all duration-700"
+                        />
+                      )}
+
+                      {/* Storage Segment */}
+                      {categoryDistribution.items[2].percentage > 0 && (
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke="#10B981"
+                          strokeWidth="11"
+                          strokeDasharray={`${(categoryDistribution.items[2].percentage * 238.76) / 100} 238.76`}
+                          strokeDashoffset={`-${((categoryDistribution.items[0].percentage + categoryDistribution.items[1].percentage) * 238.76) / 100}`}
+                          className="transition-all duration-700"
+                        />
+                      )}
+                    </>
+                  )}
+                </svg>
+
+                {/* Donut Center */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-[9.5px] sm:text-[10px] font-black uppercase text-slate-400">
+                    {categoryDistribution.totalPaidRev === 0 ? 'Dòng tiền' : 'Doanh thu'}
+                  </span>
+                  <span className="text-[11px] sm:text-xs font-black text-slate-900 dark:text-white mt-0.5">
+                    {categoryDistribution.totalPaidRev === 0
+                      ? '0đ'
+                      : categoryDistribution.totalPaidRev >= 1000000
+                        ? `${(categoryDistribution.totalPaidRev / 1000000).toFixed(1)}M`
+                        : `${(categoryDistribution.totalPaidRev / 1000).toFixed(0)}k`}
+                  </span>
                 </div>
               </div>
 
-              {/* Category 2: Premium Apps */}
-              <div className="rounded-2xl border border-[#E8F1FF] dark:border-[#1E2A4A] bg-[#F8FAFC] dark:bg-[#18243E] p-3 space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">📱</span>
-                    <span className="font-extrabold text-slate-900 dark:text-white">Premium Apps</span>
-                  </div>
-                  <div className="flex items-center gap-2 font-mono text-xs">
-                    <span className="text-slate-400 font-semibold">{categoryAnalytics.premiumAppsCount} đơn</span>
-                    <span className="font-extrabold text-purple-600 dark:text-purple-400">
-                      {categoryAnalytics.premiumAppsRev.toLocaleString('vi-VN')}đ
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold">
-                  <span>Tỷ trọng doanh thu</span>
-                  <span className="font-mono text-slate-700 dark:text-slate-200">{categoryAnalytics.appRevPct}%</span>
-                </div>
-
-                <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-700/80 rounded-full overflow-hidden">
+              {/* Legend Badges */}
+              <div className="flex-1 space-y-2 sm:space-y-2.5 w-full">
+                {categoryDistribution.items.map((cat) => (
                   <div
-                    className="h-full bg-gradient-to-r from-purple-400 to-indigo-600 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.max(categoryAnalytics.appRevPct, categoryAnalytics.premiumAppsCount > 0 ? 8 : 0)}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ĐƠN HÀNG MỚI NHẤT */}
-      <div className="rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
-          <div>
-            <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Đơn hàng mới nhất</h3>
-            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Top 5 đơn hàng vừa được khởi tạo trên hệ thống.</p>
-          </div>
-          <Link
-            to="/admin/orders"
-            className="text-xs font-extrabold text-[#2563EB] dark:text-[#35A8FF] hover:underline"
-          >
-            Quản lý tất cả đơn hàng →
-          </Link>
-        </div>
-
-        {recentOrders.length === 0 ? (
-          <p className="py-6 text-center text-xs font-medium text-slate-400">Chưa có đơn hàng nào trong hệ thống.</p>
-        ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-left text-xs font-semibold">
-              <thead>
-                <tr className="text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-100 dark:border-slate-800/50">
-                  <th className="py-2.5 px-2">Mã đơn</th>
-                  <th className="py-2.5 px-2">Sản phẩm</th>
-                  <th className="py-2.5 px-2">Khách hàng</th>
-                  <th className="py-2.5 px-2">Giá tiền</th>
-                  <th className="py-2.5 px-2">Trạng thái</th>
-                  <th className="py-2.5 px-2 text-right">Thời gian</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-700 dark:text-slate-300">
-                {recentOrders.map((ord) => (
-                  <tr key={ord.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/30 transition-colors">
-                    <td className="py-3 px-2 font-mono font-bold text-slate-900 dark:text-white">
-                      #{ord.payment_code || ord.id.substring(0, 8)}
-                    </td>
-                    <td className="py-3 px-2">
-                      <span className="font-bold text-slate-900 dark:text-white">{ord.product_name || 'N/A'}</span>
-                      {ord.plan_label && <span className="block text-[10px] text-slate-400">{ord.plan_label}</span>}
-                    </td>
-                    <td className="py-3 px-2 text-slate-500 dark:text-slate-400">
-                      {ord.profiles?.full_name || 'Thành viên'}
-                    </td>
-                    <td className="py-3 px-2 font-extrabold text-[#2563EB]">
-                      {Number(ord.price || 0).toLocaleString('vi-VN')}đ
-                    </td>
-                    <td className="py-3 px-2">
-                      {getStatusBadge(ord.status)}
-                    </td>
-                    <td className="py-3 px-2 text-right font-mono text-[11px] text-slate-400">
-                      {formatRelativeTime(ord.created_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* HOẠT ĐỘNG GẦN ĐÂY - TIMELINE HIỆN ĐẠI */}
-      <div className="rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-3.5">
-          <div>
-            <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <span>⚡</span> HOẠT ĐỘNG GẦN ĐÂY
-            </h3>
-            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">5 thao tác mới nhất được ghi nhận từ hệ thống Nhật ký hoạt động.</p>
-          </div>
-          <Link
-            to="/admin/activity"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition shadow-2xs shrink-0"
-          >
-            <span>Xem tất cả nhật ký →</span>
-          </Link>
-        </div>
-
-        {activities.length === 0 ? (
-          <p className="mt-4 text-xs font-medium text-slate-400 text-center py-4">Chưa có hoạt động nào được ghi nhận.</p>
-        ) : (
-          <div className="mt-4 relative before:absolute before:left-4.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-100 dark:before:bg-slate-800/80 space-y-2.5">
-            {activities.map((act) => (
-              <Link
-                key={act.id}
-                to={act.link}
-                className="group flex gap-3.5 items-center p-2.5 sm:p-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800/40 border border-transparent hover:border-slate-200/60 dark:hover:border-slate-700/50 transition relative"
-              >
-                {/* Semantic Icon with Gradient */}
-                <span className={`h-9 w-9 rounded-2xl flex items-center justify-center text-sm shrink-0 font-bold shadow-xs relative z-10 transition-transform group-hover:scale-110 ${act.iconBg}`}>
-                  {act.icon}
-                </span>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug group-hover:text-[#2563EB] dark:group-hover:text-[#35A8FF] transition-colors truncate">
-                    {act.text}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-semibold flex-wrap">
-                    <span className="font-mono">{act.time}</span>
-                    <span>•</span>
-                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
-                      act.role === 'admin'
-                        ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-200/40'
-                        : act.role === 'user'
-                          ? 'bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] border border-blue-200/40'
-                          : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/40'
-                    }`}>
-                      {act.role === 'admin' ? '🛡️ Admin' : act.role === 'user' ? '👤 Khách hàng' : '⚙️ Hệ thống'}
-                    </span>
-                    {act.tag && act.tag !== act.role && (
-                      <span className="text-slate-500 dark:text-slate-400 truncate max-w-[150px]">
-                        {act.tag}
+                    key={cat.name}
+                    className="flex items-center justify-between p-2 sm:p-2.5 rounded-lg sm:rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-[11px] sm:text-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                      <span className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                        {cat.icon} {cat.name}
                       </span>
-                    )}
+                    </div>
+                    <div className="flex items-center gap-2 font-mono shrink-0 ml-2">
+                      <span className="text-slate-400 font-semibold">{cat.count} đơn</span>
+                      <span className="font-black text-slate-900 dark:text-white">
+                        {categoryDistribution.totalPaidRev > 0 ? `${cat.percentage}%` : '0đ'}
+                      </span>
+                    </div>
                   </div>
-                </div>
-
-                {/* Action Arrow */}
-                <span className="text-slate-300 dark:text-slate-600 group-hover:text-[#2563EB] dark:group-hover:text-[#35A8FF] group-hover:translate-x-1 transition-all text-xs font-bold shrink-0">
-                  →
-                </span>
-              </Link>
-            ))}
+                ))}
+              </div>
+            </div>
           </div>
-        )}
+        </div>
+      </div>
+
+      {/* 4️⃣ DƯỚI CÙNG: ĐƠN HÀNG MỚI (60%) & NHẬT KÝ HỆ THỐNG (40%) */}
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-12">
+        {/* Bảng Đơn hàng mới (7 Cols - 60%) */}
+        <div className="lg:col-span-7 rounded-[20px] sm:rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-3.5 sm:p-5 shadow-xs overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
+            <div>
+              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                ĐƠN HÀNG MỚI NHẤT
+              </h3>
+              <p className="text-[10.5px] sm:text-[11px] text-slate-400 font-semibold mt-0.5">
+                Top 5 đơn hàng vừa được khởi tạo trên hệ thống.
+              </p>
+            </div>
+            <Link
+              to="/admin/orders"
+              className="text-[11px] sm:text-xs font-extrabold text-[#2563EB] dark:text-[#35A8FF] hover:underline shrink-0 ml-2"
+            >
+              Quản lý tất cả đơn hàng →
+            </Link>
+          </div>
+
+          {recentOrders.length === 0 ? (
+            <div className="py-8 sm:py-10 px-4 text-center flex flex-col items-center justify-center">
+              <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-2xl sm:text-3xl mb-2 sm:mb-3 shadow-inner">
+                📦
+              </div>
+              <h4 className="text-xs font-black text-slate-700 dark:text-slate-300">
+                Chưa có đơn hàng nào
+              </h4>
+              <p className="text-[10.5px] sm:text-[11px] text-slate-400 max-w-xs mt-1 leading-relaxed">
+                Đơn hàng mới từ khách hàng sẽ hiển thị tại đây theo thời gian thực.
+              </p>
+            </div>
+          ) : (
+            /* Dedicated Table Horizontal Scrollbar inside Card */
+            <div className="mt-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-blue-400/40 dark:scrollbar-thumb-blue-500/40 scrollbar-track-slate-100 dark:scrollbar-track-slate-800/60">
+              <table className="w-full min-w-[560px] text-left text-xs font-semibold">
+                <thead>
+                  <tr className="text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-100 dark:border-slate-800/50">
+                    <th className="py-2.5 px-2">Sản phẩm</th>
+                    <th className="py-2.5 px-2">Khách hàng</th>
+                    <th className="py-2.5 px-2">Giá tiền</th>
+                    <th className="py-2.5 px-2 text-center">Trạng thái</th>
+                    <th className="py-2.5 px-2 text-right">Thời gian</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-700 dark:text-slate-300">
+                  {recentOrders.map((ord) => (
+                    <tr key={ord.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/30 transition-colors">
+                      <td className="py-3 px-2">
+                        <span className="font-bold text-slate-900 dark:text-white block truncate max-w-[160px]">
+                          {ord.product_name || 'N/A'}
+                        </span>
+                        {ord.plan_label && (
+                          <span className="text-[10px] text-slate-400 block truncate max-w-[160px] mt-0.5">
+                            {ord.plan_label}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-2">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block truncate max-w-[130px]">
+                          {ord.profiles?.full_name || 'Khách hàng'}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 block truncate mt-0.5">
+                          #{ord.payment_code || ord.id.substring(0, 8)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 font-extrabold text-[#2563EB] dark:text-[#35A8FF] whitespace-nowrap">
+                        {Number(ord.price || 0).toLocaleString('vi-VN')}đ
+                      </td>
+                      <td className="py-3 px-2 text-center whitespace-nowrap">
+                        {getStatusBadge(ord.status)}
+                      </td>
+                      <td className="py-3 px-2 text-right text-[10px] text-slate-400 font-medium whitespace-nowrap font-mono">
+                        {formatRelativeTime(ord.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Timeline Feed Nhật ký Hệ thống (5 Cols - 40%) */}
+        <div className="lg:col-span-5 rounded-[20px] sm:rounded-[24px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 bg-white dark:bg-[#131C32] p-3.5 sm:p-5 shadow-xs overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-3">
+            <div>
+              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <span>⚡</span> NHẬT KÝ HỆ THỐNG
+              </h3>
+              <p className="text-[10.5px] sm:text-[11px] text-slate-400 font-semibold mt-0.5">
+                Hoạt động realtime ghi nhận từ Audit Logs.
+              </p>
+            </div>
+            <Link
+              to="/admin/activity"
+              className="text-[11px] sm:text-xs font-bold text-slate-500 hover:text-[#2563EB] dark:hover:text-[#35A8FF] transition shrink-0 ml-2"
+            >
+              Chi tiết →
+            </Link>
+          </div>
+
+          {activities.length === 0 ? (
+            <div className="py-8 sm:py-10 px-4 text-center flex flex-col items-center justify-center">
+              <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-2xl sm:text-3xl mb-2 sm:mb-3 shadow-inner">
+                📋
+              </div>
+              <h4 className="text-xs font-black text-slate-700 dark:text-slate-300">
+                Chưa có hoạt động nào được ghi nhận
+              </h4>
+              <p className="text-[10.5px] sm:text-[11px] text-slate-400 max-w-xs mt-1 leading-relaxed">
+                Các thao tác xử lý đơn, duyệt đánh giá và trả lời ticket sẽ xuất hiện tại đây.
+              </p>
+            </div>
+          ) : (
+            /* Dedicated Horizontal Scrollbar for Activity log */
+            <div className="mt-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-slate-100 dark:scrollbar-track-slate-800/60">
+              <div className="min-w-[320px] sm:min-w-full space-y-2 sm:space-y-2.5">
+                {activities.map((act) => (
+                  <Link
+                    key={act.id}
+                    to={act.link}
+                    className="group flex gap-2.5 sm:gap-3 items-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-850/50 border border-transparent hover:border-slate-200/60 dark:hover:border-slate-700/50 transition"
+                  >
+                    <span className={`h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs shrink-0 font-bold shadow-xs transition-transform group-hover:scale-105 ${act.iconBg}`}>
+                      {act.icon}
+                    </span>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11.5px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug group-hover:text-[#2563EB] dark:group-hover:text-[#35A8FF] transition-colors truncate">
+                        {act.text}
+                      </p>
+                      <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 text-[9.5px] sm:text-[10px] text-slate-400 font-semibold">
+                        <span className="font-mono">{act.time}</span>
+                        <span>•</span>
+                        <span className="truncate">{act.tag}</span>
+                      </div>
+                    </div>
+
+                    <span className="text-slate-300 dark:text-slate-600 group-hover:text-[#2563EB] group-hover:translate-x-0.5 transition-all text-xs font-bold shrink-0">
+                      ›
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

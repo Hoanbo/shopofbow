@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import { Pagination } from '../../components/admin/Pagination';
 
-const ITEMS_PER_PAGE = 8;
+const ITEMS_PER_PAGE = 6;
 
 interface AffiliateConversionRow {
   id: string;
@@ -232,30 +232,42 @@ export default function AdminAffiliates() {
       )}
 
       {/* Filter / Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center gap-3 rounded-[22px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-3.5 shadow-xs">
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl w-full sm:w-auto overflow-x-auto">
-          {(['all', 'completed', 'pending', 'cancelled'] as const).map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition capitalize whitespace-nowrap ${
-                statusFilter === st
-                  ? 'bg-white dark:bg-[#1E2A4A] text-blue-600 dark:text-blue-400 shadow-xs'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'
-              }`}
-            >
-              {st === 'all'
-                ? 'Tất cả'
-                : st === 'completed'
-                ? '✅ Đã cộng hoa hồng'
-                : st === 'pending'
-                ? '⏳ Chờ hoàn tất'
-                : '❌ Đã hủy'}
-            </button>
-          ))}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-[22px] border border-[#E8F1FF] dark:border-slate-800 bg-white dark:bg-[#131C32] p-3.5 shadow-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+          {[
+            { key: 'all' as const, label: 'Tất cả', count: conversions.length },
+            { key: 'completed' as const, label: 'Đã cộng hoa hồng', count: conversions.filter((c) => c.status === 'completed').length },
+            { key: 'pending' as const, label: 'Chờ duyệt', count: conversions.filter((c) => c.status === 'pending').length },
+            { key: 'cancelled' as const, label: 'Đã hủy', count: conversions.filter((c) => c.status === 'cancelled').length },
+          ].map((st) => {
+            const isActive = statusFilter === st.key;
+            return (
+              <button
+                key={st.key}
+                type="button"
+                onClick={() => setStatusFilter(st.key)}
+                className={`group inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-[#2563EB] text-white font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-semibold'
+                }`}
+              >
+                <span>{st.label}</span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold font-mono transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+                  }`}
+                >
+                  {st.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="relative flex-1 w-full">
+        <div className="relative flex-1 max-w-xs w-full">
           <input
             type="text"
             value={searchQuery}
@@ -389,7 +401,10 @@ export default function AdminAffiliates() {
         totalItems={filtered.length}
         itemsPerPage={ITEMS_PER_PAGE}
         itemLabel="giao dịch tiếp thị"
-        onPageChange={setCurrentPage}
+        onPageChange={(p) => {
+          setCurrentPage(p);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
     </div>
   );

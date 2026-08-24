@@ -46,9 +46,15 @@ export default function ProductCard({ item, base }: Props) {
         <h3 className="line-clamp-1 font-bold text-ink">{item.name}</h3>
         <p className="line-clamp-2 text-xs text-ink-muted sm:text-sm">{item.tagline}</p>
 
-        <div className="mt-auto flex items-center gap-1 pt-2 text-xs text-ink-muted">
-          <StarIcon className="h-3.5 w-3.5 text-amber-400" />
-          <span className="font-semibold text-ink-soft">{item.rating}</span>
+        <div className="mt-auto flex items-center gap-1.5 pt-2 text-xs text-ink-muted">
+          {item.rating != null && Number(item.rating) > 0 ? (
+            <div className="flex items-center gap-1">
+              <StarIcon className="h-3.5 w-3.5 text-amber-400" />
+              <span className="font-semibold text-ink-soft">{Number(item.rating).toFixed(1)}</span>
+            </div>
+          ) : (
+            <span className="text-[11px] font-medium text-slate-400">Chưa có đánh giá</span>
+          )}
           <span>· Đã bán {item.sold >= 1000 ? (item.sold / 1000).toFixed(1) + 'k' : item.sold}</span>
         </div>
 

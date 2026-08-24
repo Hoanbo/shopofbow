@@ -469,23 +469,18 @@ export default function AdminPrompts() {
         </>
       )}
 
-      {/* Pagination Bar & Limit Selector */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 sm:p-4 bg-white dark:bg-[#131C32] rounded-[22px] border border-[#E8F1FF] dark:border-[#1E2A4A]/50 shadow-xs">
-
-        {totalPages > 1 && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filteredPrompts.length}
-            itemsPerPage={itemsPerPage}
-            itemLabel="Prompt"
-            onPageChange={(p) => {
-              setCurrentPage(p);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          />
-        )}
-      </div>
+      {/* Pagination Bar */}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredPrompts.length}
+        itemsPerPage={itemsPerPage}
+        itemLabel="Prompt"
+        onPageChange={(p) => {
+          setCurrentPage(p);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
 
       {/* Create / Edit Modal - 3-Tier Centered & Mobile Ready */}
       {showEditorModal && createPortal(

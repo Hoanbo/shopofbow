@@ -33,10 +33,15 @@ type AdminReview = {
 export default function AdminReviews() {
   const [searchParams] = useSearchParams();
   const targetSearch = searchParams.get('q') || searchParams.get('search') || searchParams.get('id');
+  const statusParam = searchParams.get('status') || searchParams.get('filter') || searchParams.get('tab');
 
   const [reviews, setReviews] = useState<AdminReview[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>(
+    statusParam && ['all', 'pending', 'approved', 'rejected'].includes(statusParam)
+      ? statusParam
+      : 'all'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReview, setSelectedReview] = useState<AdminReview | null>(null);
   const [adminNote, setAdminNote] = useState('');
@@ -48,6 +53,12 @@ export default function AdminReviews() {
       setSearchQuery(targetSearch);
     }
   }, [targetSearch]);
+
+  useEffect(() => {
+    if (statusParam && ['all', 'pending', 'approved', 'rejected'].includes(statusParam)) {
+      setFilterStatus(statusParam);
+    }
+  }, [statusParam]);
 
   const fetchReviews = async () => {
     setLoading(true);
@@ -213,7 +224,7 @@ export default function AdminReviews() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const REVIEWS_PER_PAGE = 10;
+  const REVIEWS_PER_PAGE = 6;
   const totalPages = Math.ceil(filtered.length / REVIEWS_PER_PAGE);
   const paginatedReviews = filtered.slice((currentPage - 1) * REVIEWS_PER_PAGE, currentPage * REVIEWS_PER_PAGE);
 
@@ -285,24 +296,36 @@ export default function AdminReviews() {
         {/* Status Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
           {[
-            { key: 'all', label: `Tất cả (${totalCount})` },
-            { key: 'pending', label: `🟡 Chờ duyệt (${pendingCount})` },
-            { key: 'approved', label: `🟢 Đã duyệt (${approvedCount})` },
-            { key: 'rejected', label: `🔴 Từ chối (${rejectedCount})` },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setFilterStatus(tab.key)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition shrink-0 cursor-pointer whitespace-nowrap ${
-                filterStatus === tab.key
-                  ? 'bg-[#2563EB] text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { key: 'all', label: 'Tất cả', count: totalCount },
+            { key: 'pending', label: 'Chờ duyệt', count: pendingCount },
+            { key: 'approved', label: 'Đã duyệt', count: approvedCount },
+            { key: 'rejected', label: 'Từ chối', count: rejectedCount },
+          ].map((tab) => {
+            const isActive = filterStatus === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setFilterStatus(tab.key)}
+                className={`group inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-[#2563EB] text-white font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60 font-semibold'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold font-mono transition-colors ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Search Bar */}
@@ -528,18 +551,17 @@ export default function AdminReviews() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="p-4 bg-white dark:bg-[#18243E] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filtered.length}
-            itemsPerPage={REVIEWS_PER_PAGE}
-            itemLabel="đánh giá"
-            onPageChange={(p) => setCurrentPage(p)}
-          />
-        </div>
-      )}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        itemsPerPage={REVIEWS_PER_PAGE}
+        itemLabel="đánh giá"
+        onPageChange={(p) => {
+          setCurrentPage(p);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
 
       {/* Moderation Modal - Fixed in Viewport via Portal with internal scroll */}
       {selectedReview && createPortal(

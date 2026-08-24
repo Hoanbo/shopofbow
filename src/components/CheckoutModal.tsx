@@ -299,7 +299,17 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
 
       if (rpcErr) throw rpcErr;
       if (!data?.success) {
-        throw new Error(data?.message || 'Không thể tạo đơn hàng thanh toán.');
+        let msg = data?.message || 'Không thể tạo đơn hàng thanh toán.';
+        if (msg === 'coupon_first_order_only') {
+          msg = 'Mã giảm giá này chỉ áp dụng cho đơn hàng đầu tiên của bạn.';
+        } else if (msg === 'coupon_user_limit_reached') {
+          msg = 'Bạn đã sử dụng hết lượt cho mã giảm giá này.';
+        } else if (msg === 'coupon_usage_limit_reached') {
+          msg = 'Mã giảm giá đã hết lượt sử dụng trên hệ thống.';
+        } else if (msg === 'invalid_coupon') {
+          msg = 'Mã giảm giá không hợp lệ hoặc đã hết hạn.';
+        }
+        throw new Error(msg);
       }
 
       const createdOrderId = data.order_id ?? null;
