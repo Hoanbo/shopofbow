@@ -52,6 +52,11 @@
   }
 }
 
+/* Hide floating contact buttons when modal or popup is open */
+body.modal-open .contact-fab-stack {
+  display: none !important;
+}
+
 /* hide scrollbar for horizontal scrollers on mobile */
 .no-scrollbar::-webkit-scrollbar,
 .scrollbar-none::-webkit-scrollbar {

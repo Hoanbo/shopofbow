@@ -108,7 +108,7 @@ export function ContactFab() {
   const phoneUrl = `tel:${phoneRaw.replace(/\s+/g, '')}`;
 
   return (
-    <div className="fixed bottom-24 right-4 z-40 flex flex-col gap-3 md:bottom-6">
+    <div className="contact-fab-stack fixed bottom-24 right-4 z-40 flex flex-col gap-3 md:bottom-6">
       {/* Facebook Button matching my-card style */}
       <a
         href={fbUrl}

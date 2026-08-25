@@ -271,9 +271,9 @@ export default function AdminLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F5F9FF] dark:bg-[#0B1224] transition-colors duration-300 text-slate-900 dark:text-slate-100 flex flex-col font-sans w-full max-w-full overflow-x-hidden">
-      {/* Top Navbar */}
-      <header className="sticky top-0 z-40 h-[70px] sm:h-[76px] bg-white/95 dark:bg-[#131C32]/95 backdrop-blur-md border-b border-[#E8F1FF] dark:border-[#1E2A4A]/50 transition-colors duration-300">
+    <div className="min-h-screen bg-[#F5F9FF] dark:bg-[#0B1224] transition-colors duration-300 text-slate-900 dark:text-slate-100 flex flex-col font-sans w-full max-w-full">
+      {/* Top Navbar - Sticky Header */}
+      <header className="sticky top-0 z-40 h-[70px] sm:h-[76px] bg-white/95 dark:bg-[#131C32]/95 backdrop-blur-md border-b border-[#E8F1FF] dark:border-[#1E2A4A]/50 transition-colors duration-300 shadow-xs">
         <div className="h-full px-3.5 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
           
           {/* Logo & Menu Trigger */}
@@ -463,7 +463,7 @@ export default function AdminLayout() {
         )}
 
         {/* Main Routing Content viewport */}
-        <main className="min-w-0 flex-1 w-full max-w-full overflow-x-hidden animate-fade-in">
+        <main className="min-w-0 flex-1 w-full max-w-full animate-fade-in">
           <Outlet />
         </main>
       </div>
