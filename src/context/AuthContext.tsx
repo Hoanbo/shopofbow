@@ -25,6 +25,8 @@ interface AuthValue {
   isCtv: boolean;
   balance: number;
   profile: UserProfile | null;
+  mfaPending: boolean;
+  checkMfaLevel: () => Promise<boolean>;
   refreshBalance: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
@@ -41,6 +43,8 @@ const AuthContext = createContext<AuthValue>({
   isCtv: false,
   balance: 0,
   profile: null,
+  mfaPending: false,
+  checkMfaLevel: async () => false,
   refreshBalance: async () => {},
   refreshProfile: async () => {},
   signIn: async () => {},
@@ -55,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [balance, setBalance] = useState<number>(0);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mfaPending, setMfaPending] = useState(false);
 
   // isAdmin là giá trị DERIVED từ session + profile role (chỉ hoankb4@gmail.com hoặc role admin)
   const isAdmin = useMemo(() => {
@@ -135,6 +140,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const checkMfaLevel = async (): Promise<boolean> => {
+      try {
+        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+          setMfaPending(true);
+          return true;
+        } else {
+          setMfaPending(false);
+          return false;
+        }
+      } catch {
+        setMfaPending(false);
+        return false;
+      }
+    };
+
     supabase.auth
       .getSession()
       .then(async ({ data }) => {
@@ -142,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(data.session);
           if (data.session?.user?.id) {
             await fetchProfile(data.session.user.id);
+            await checkMfaLevel();
           }
           cleanUrlHash();
         }
@@ -160,6 +182,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(s);
         if (s?.user?.id) {
           await fetchProfile(s.user.id);
+          await checkMfaLevel();
+        } else {
+          setMfaPending(false);
         }
         setLoading(false);
         cleanUrlHash();
@@ -171,6 +196,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sub.subscription.unsubscribe();
     };
   }, []);
+
+  const checkMfaLevel = async (): Promise<boolean> => {
+    try {
+      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+        setMfaPending(true);
+        return true;
+      } else {
+        setMfaPending(false);
+        return false;
+      }
+    } catch {
+      setMfaPending(false);
+      return false;
+    }
+  };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -205,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/login`,
         queryParams: {
           prompt: 'select_account',
         },
@@ -218,10 +259,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setSession(null);
     setBalance(0);
+    setMfaPending(false);
   };
 
   return (
-    <AuthContext.Provider value={{ session, loading, isAdmin, isCtv, balance, profile, refreshBalance, refreshProfile, signIn, signUp, verifyOtp, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, loading, isAdmin, isCtv, balance, profile, mfaPending, checkMfaLevel, refreshBalance, refreshProfile, signIn, signUp, verifyOtp, signInWithGoogle, signOut }}>
       {/* Chỉ render App sau khi auth khởi tạo xong — tránh mọi redirect chạy
           khi session chưa được phục hồi (F5 bị logout, redirect sai). */}
       {loading ? (

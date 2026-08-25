@@ -620,10 +620,13 @@ function OrderCard({
 }
 
 export default function Dashboard() {
-  const { session, balance, refreshBalance, loading: authLoading, isAdmin } = useAuth();
+  const { session, balance, refreshBalance, loading: authLoading, isAdmin, profile } = useAuth();
   const { favoriteProducts, loadingFavorites, toggleFavorite } = useFavorites();
   const [searchParams, setSearchParams] = useSearchParams();
   const nav = useNavigate();
+
+  const userAvatarUrl = profile?.avatar_url || session?.user?.user_metadata?.avatar_url || null;
+  const userDisplayName = profile?.full_name || session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Thành viên';
 
   // Tab State
   const activeTab = searchParams.get('tab') || 'overview';
@@ -932,12 +935,16 @@ export default function Dashboard() {
           <div className="rounded-[28px] border border-[#E7EEF8] dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-xs">
             {/* Header info */}
             <div className="flex items-center gap-3 border-b border-slate-50 dark:border-slate-800 pb-5">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-sm font-black text-white shadow-xs">
-                {(session.user.email || 'U').charAt(0).toUpperCase()}
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-sm font-black text-white shadow-xs overflow-hidden border border-slate-200 dark:border-slate-700">
+                {userAvatarUrl ? (
+                  <img src={userAvatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                ) : (
+                  (session.user.email || 'U').charAt(0).toUpperCase()
+                )}
               </div>
               <div className="min-w-0 flex-1">
                 <h4 className="text-sm font-extrabold text-[#0F172A] dark:text-white truncate">
-                  {session.user.user_metadata.full_name || 'Thành viên'}
+                  {userDisplayName}
                 </h4>
                 <p className="text-[10px] text-slate-400 font-semibold truncate mt-0.5">{session.user.email}</p>
               </div>

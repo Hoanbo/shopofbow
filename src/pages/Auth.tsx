@@ -9,7 +9,7 @@ import newLogo from '../assets/new-logover2.png';
 type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'forgot_otp' | 'update_password' | '2fa';
 
 export default function Auth() {
-  const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading, isAdmin } = useAuth();
+  const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,15 +34,49 @@ export default function Auth() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  // Nguồn redirect DUY NHẤT: chỉ chạy khi auth đã load xong VÀ đã có session.
-  // Tuyệt đối KHÔNG redirect khi đang ở các bước khôi phục mật khẩu hoặc đang đợi 2FA.
+  // Nguồn redirect DUY NHẤT: Kiểm tra xem tài khoản có cài đặt 2FA (MFA) không
+  // Bắt buộc xác thực 2FA cho cả đăng nhập Email/Password lẫn đăng nhập qua Google OAuth
   useEffect(() => {
     if (loading || !session) return;
     if (mode === 'forgot' || mode === 'forgot_otp' || mode === 'update_password' || mode === '2fa') return;
 
-    const dest = loc.state?.from ?? (isAdmin ? '/admin' : '/');
-    nav(dest, { replace: true });
-  }, [session, loading, isAdmin, nav, loc.state?.from, mode]);
+    let isSubscribed = true;
+
+    const checkMfaStatusAndRedirect = async () => {
+      try {
+        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+          const { data: factors } = await supabase.auth.mfa.listFactors();
+          const totpFactor = factors?.totp?.find((f) => f.status === 'verified');
+          if (totpFactor && isSubscribed) {
+            const { data: challengeData, error: challengeErr } = await supabase.auth.mfa.challenge({
+              factorId: totpFactor.id,
+            });
+            if (!challengeErr && challengeData) {
+              setMfaFactorId(totpFactor.id);
+              setMfaChallengeId(challengeData.id);
+              setTwoFactorCode('');
+              setMode('2fa');
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Auth] Error checking MFA level:', err);
+      }
+
+      if (isSubscribed) {
+        const dest = loc.state?.from ?? '/';
+        nav(dest, { replace: true });
+      }
+    };
+
+    checkMfaStatusAndRedirect();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [session, loading, nav, loc.state?.from, mode]);
 
   // Handler: Đăng nhập
   const handleSignIn = async (e: FormEvent) => {
@@ -222,7 +256,7 @@ export default function Auth() {
       });
       if (verifyErr) throw verifyErr;
       setSuccess('Xác thực 2 lớp thành công!');
-      const dest = loc.state?.from ?? (isAdmin ? '/admin' : '/');
+      const dest = loc.state?.from ?? '/';
       nav(dest, { replace: true });
     } catch (err: any) {
       setError('Mã xác thực 2FA không chính xác hoặc đã hết hạn.');

@@ -104,8 +104,11 @@ const navGroups: NavGroup[] = [
 ];
 
 export default function AdminLayout() {
-  const { signOut, session } = useAuth();
+  const { signOut, session, profile } = useAuth();
   const nav = useNavigate();
+
+  const adminAvatarUrl = profile?.avatar_url || session?.user?.user_metadata?.avatar_url || null;
+  const adminDisplayName = profile?.full_name || session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Admin';
   
   // Layout States
   const [openDrawer, setOpenDrawer] = useState(false);
@@ -401,12 +404,16 @@ export default function AdminLayout() {
 
             {/* User Profile Info */}
             <div className="hidden items-center gap-2.5 sm:flex border-l border-slate-100 dark:border-slate-800 pl-3.5">
-              <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-[#19A7FF] to-[#2563EB] text-xs font-black text-white flex items-center justify-center shadow-xs">
-                {(session?.user.email || 'A').charAt(0).toUpperCase()}
+              <div className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-tr from-[#19A7FF] to-[#2563EB] text-xs font-black text-white flex items-center justify-center shadow-xs overflow-hidden border border-slate-200 dark:border-slate-700">
+                {adminAvatarUrl ? (
+                  <img src={adminAvatarUrl} alt="Admin Avatar" className="h-full w-full object-cover" />
+                ) : (
+                  (session?.user.email || 'A').charAt(0).toUpperCase()
+                )}
               </div>
               <div className="text-left leading-none">
                 <span className="block text-xs font-black text-slate-900 dark:text-white truncate max-w-[120px]">
-                  {session?.user.user_metadata.full_name || 'Admin'}
+                  {adminDisplayName}
                 </span>
                 <span className="text-[9px] font-bold text-slate-400 mt-0.5 block truncate max-w-[120px]">
                   {session?.user.email}

@@ -23,7 +23,7 @@ interface HeaderNotification {
 }
 
 export default function Header() {
-  const { session, loading, balance, signOut, isAdmin, isCtv } = useAuth();
+  const { session, loading, balance, signOut, isAdmin, isCtv, profile } = useAuth();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
@@ -31,6 +31,9 @@ export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const loc = useLocation();
   const nav = useNavigate();
+
+  const userAvatarUrl = profile?.avatar_url || session?.user?.user_metadata?.avatar_url || null;
+  const userDisplayName = profile?.full_name || session?.user?.user_metadata?.full_name || session?.user?.email?.split('@')[0] || 'Thành viên';
 
   // Theme State
   const [theme, setTheme] = useState(() => {
@@ -173,12 +176,7 @@ export default function Header() {
     }
   };
 
-  // Vietnamese first word of name extraction (e.g. Nguyễn Văn Hoàn -> Nguyễn)
-  const displayName = session?.user?.user_metadata?.full_name
-    ? session.user.user_metadata.full_name.trim().split(' ')[0]
-    : isAdmin
-      ? 'Admin'
-      : 'Thành viên';
+
 
   return (
     <header
@@ -404,9 +402,9 @@ export default function Header() {
                       : 'border border-transparent md:border-slate-200 md:dark:border-slate-800 md:bg-slate-50/40 md:dark:bg-slate-900/20 pl-1 pr-1 py-1 md:pl-2 md:pr-3 md:py-1 hover:border-[#00A3FF]'
                       }`}
                   >
-                    {session.user.user_metadata.avatar_url ? (
+                    {userAvatarUrl ? (
                       <img
-                        src={session.user.user_metadata.avatar_url}
+                        src={userAvatarUrl}
                         alt="Avatar"
                         className="h-[32px] w-[32px] md:h-[28px] md:w-[28px] rounded-full object-cover border border-slate-200 dark:border-slate-700 md:border-transparent"
                       />
@@ -421,7 +419,7 @@ export default function Header() {
                       ) : isCtv ? (
                         <span className="block text-[11px] font-black uppercase text-amber-600 dark:text-amber-400">👑 CTV Sỉ</span>
                       ) : (
-                        <span className="block text-[11px] font-black text-slate-800 dark:text-slate-200">{displayName}</span>
+                        <span className="block text-[11px] font-black text-slate-800 dark:text-slate-200">{userDisplayName}</span>
                       )}
                       <svg className="h-3 w-3 text-slate-400 dark:text-slate-500 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -434,7 +432,7 @@ export default function Header() {
                     <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800">
                       <div className="flex items-center justify-between gap-1">
                         <span className="block truncate text-xs font-black text-[#0F172A] dark:text-white">
-                          {session.user.user_metadata.full_name || 'Thành viên'}
+                          {userDisplayName}
                         </span>
                         {isCtv && (
                           <span className="shrink-0 rounded-md bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.5 text-[9px] font-black text-amber-700 dark:text-amber-300">
