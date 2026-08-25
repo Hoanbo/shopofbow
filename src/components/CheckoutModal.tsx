@@ -346,9 +346,13 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
   // Generate VietQR URL with final discounted price
   const vietQrUrl = `https://img.vietqr.io/image/${BANK_CONFIG.bankId}-${BANK_CONFIG.accountNo}-compact2.jpg?amount=${finalPrice}&addInfo=${paymentCode}&accountName=${encodeURIComponent(BANK_CONFIG.accountName)}`;
 
-  // Find if WELCOME20 coupon is available to suggest
-  const welcomeCoupon = suggestedCoupons.find(c => c.code.toUpperCase() === 'WELCOME20');
-  const showWelcomeSuggestion = isFirstOrderUser && welcomeCoupon && !appliedCoupon;
+  // Find if a coupon is available to suggest (prefer first_order_only if user is eligible, or any active coupon)
+  const suggestedCouponToDisplay = suggestedCoupons.find(c => {
+    if (!c.is_active) return false;
+    if (c.first_order_only) return isFirstOrderUser;
+    return true;
+  });
+  const showCouponSuggestion = Boolean(suggestedCouponToDisplay && !appliedCoupon);
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-2.5 sm:p-4">
@@ -444,18 +448,26 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
                 )}
               </div>
 
-              {/* Coupon Suggestion for First-Order user */}
-              {showWelcomeSuggestion && (
+              {/* Dynamic Coupon Suggestion */}
+              {showCouponSuggestion && suggestedCouponToDisplay && (
                 <div className="flex items-center justify-between gap-2 rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 p-2 text-xs text-amber-800 dark:text-amber-300">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-sm">🎁</span>
                     <span className="truncate text-[11px]">
-                      Giảm <strong>20K</strong> đơn đầu: <strong>WELCOME20</strong>
+                      {suggestedCouponToDisplay.discount_type === 'percentage' ? (
+                        <>
+                          Giảm <strong>{suggestedCouponToDisplay.discount_value}%</strong>{suggestedCouponToDisplay.first_order_only ? ' đơn đầu' : ''}: <strong className="font-mono">{suggestedCouponToDisplay.code}</strong>
+                        </>
+                      ) : (
+                        <>
+                          Giảm <strong>{Number(suggestedCouponToDisplay.discount_value || 0) >= 1000 ? `${(Number(suggestedCouponToDisplay.discount_value) / 1000).toLocaleString('vi-VN')}K` : `${Number(suggestedCouponToDisplay.discount_value).toLocaleString('vi-VN')}đ`}</strong>{suggestedCouponToDisplay.first_order_only ? ' đơn đầu' : ''}: <strong className="font-mono">{suggestedCouponToDisplay.code}</strong>
+                        </>
+                      )}
                     </span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleApplyCoupon('WELCOME20')}
+                    onClick={() => handleApplyCoupon(suggestedCouponToDisplay.code)}
                     className="shrink-0 rounded-md bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-0.5 text-[10.5px] font-black transition cursor-pointer shadow-xs"
                   >
                     Áp dụng

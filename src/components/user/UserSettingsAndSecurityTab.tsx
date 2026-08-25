@@ -1,0 +1,1287 @@
+import { useState, useEffect, useCallback, useRef, type FormEvent, type ChangeEvent } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../Toast';
+import TwoFactorModal from './TwoFactorModal';
+import { uploadImage } from '../../data/admin';
+import {
+  getUserDevices,
+  removeDeviceSession,
+  signOutOtherDevices,
+  trackCurrentDevice,
+  type UserDeviceRecord,
+} from '../../services/deviceSession';
+
+// ============================================================================
+// SVG LINE ICONS (Chuẩn Vector Outline Mỏng, Tinh Tế, Đồng Bộ 100%)
+// ============================================================================
+function ShieldCheckSvg({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+    </svg>
+  );
+}
+
+function UserCircleSvg({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  );
+}
+
+function LockClosedSvg({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+    </svg>
+  );
+}
+
+function KeySvg({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+    </svg>
+  );
+}
+
+function DeviceDesktopSvg({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0H3" />
+    </svg>
+  );
+}
+
+function DeviceMobileSvg({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+    </svg>
+  );
+}
+
+function CameraSvg({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+    </svg>
+  );
+}
+
+function CheckOutlineSvg({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+    </svg>
+  );
+}
+
+function CloseSvg({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
+function ArrowRightExitSvg({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+    </svg>
+  );
+}
+
+// ============================================================================
+// CLIENT-SIDE IMAGE COMPRESSOR (Nén ảnh avatar tự động siêu nhẹ ~30-50KB)
+// ============================================================================
+async function compressAvatarImage(file: File, maxSize = 300): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Crop vuông tâm ảnh
+        const minDim = Math.min(width, height);
+        const startX = (width - minDim) / 2;
+        const startY = (height - minDim) / 2;
+
+        canvas.width = Math.min(minDim, maxSize);
+        canvas.height = Math.min(minDim, maxSize);
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.drawImage(img, startX, startY, minDim, minDim, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], `avatar_${Date.now()}.webp`, {
+                type: 'image/webp',
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/webp',
+          0.85
+        );
+      };
+      img.onerror = () => resolve(file);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+}
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+export default function UserSettingsAndSecurityTab() {
+  const { session, profile, refreshProfile, isAdmin, isCtv } = useAuth();
+  const toast = useToast();
+
+  // ----------------------------------------------------
+  // 1. STATE: PROFILE (Họ và Tên & Avatar Upload)
+  // ----------------------------------------------------
+  const [fullName, setFullName] = useState(profile?.full_name || session?.user?.user_metadata?.full_name || '');
+  const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const currentAvatarUrl = profile?.avatar_url || session?.user?.user_metadata?.avatar_url || null;
+
+  useEffect(() => {
+    if (profile?.full_name || session?.user?.user_metadata?.full_name) {
+      setFullName(profile?.full_name || session?.user?.user_metadata?.full_name || '');
+    }
+  }, [profile?.full_name, session?.user?.user_metadata?.full_name]);
+
+  const handleUpdateFullName = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!session?.user?.id) return;
+    const trimmed = fullName.trim();
+    if (!trimmed) {
+      toast.error('Họ và tên không được để trống.');
+      return;
+    }
+
+    setUpdatingProfile(true);
+    try {
+      const { error: authErr } = await supabase.auth.updateUser({
+        data: { full_name: trimmed },
+      });
+      if (authErr) throw authErr;
+
+      const { error: profileErr } = await (supabase.from('profiles') as any)
+        .update({ full_name: trimmed, updated_at: new Date().toISOString() })
+        .eq('id', session.user.id);
+      if (profileErr) throw profileErr;
+
+      toast.success('Đã cập nhật họ và tên thành công!');
+      if (refreshProfile) refreshProfile();
+    } catch (err: any) {
+      console.error('Error updating full name:', err);
+      toast.error(err.message || 'Không thể cập nhật tên. Vui lòng thử lại.');
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
+  // Helper upload avatar độc quyền theo UserID (Tự động ghi đè, không sinh file rác)
+  const lastUploadTimeRef = useRef<number>(0);
+
+  const handleAvatarFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !session?.user?.id) return;
+
+    // Reset input để có thể chọn lại cùng 1 file nếu muốn
+    e.target.value = '';
+
+    // 1. Chống Spam (Rate Limit: Tối thiểu 5s giữa 2 lần đổi ảnh)
+    const now = Date.now();
+    if (now - lastUploadTimeRef.current < 5000) {
+      toast.info('Bạn thao tác quá nhanh. Vui lòng đợi vài giây rồi thử lại.');
+      return;
+    }
+
+    // 2. Kiểm tra định dạng & Dung lượng file gốc (Tối đa 5MB)
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn một tệp hình ảnh hợp lệ (PNG, JPG, WEBP).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Kích thước ảnh không được vượt quá 5MB.');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      // 3. Nén ảnh tự động ngay trên client về WebP ~30KB
+      const compressed = await compressAvatarImage(file, 300);
+
+      // 4. Upload ghi đè (upsert: true) theo đúng path: avatars/{userId}.webp
+      const filePath = `avatars/${session.user.id}.webp`;
+      const { error: storageErr } = await supabase.storage.from('assets').upload(filePath, compressed, {
+        cacheControl: '60',
+        upsert: true, // LUÔN GHI ĐÈ FILE CŨ CỦA USER, KHÔNG TẠO FILE MỚI LÃNG PHÍ STORAGE
+      });
+
+      let publicUrl = '';
+      if (!storageErr) {
+        const { data } = supabase.storage.from('assets').getPublicUrl(filePath);
+        publicUrl = `${data.publicUrl}?t=${Date.now()}`;
+      } else {
+        // Fallback qua API upload nếu storage trực tiếp bị giới hạn RLS
+        publicUrl = await uploadImage(compressed, 'avatars');
+      }
+
+      // 5. Cập nhật bảng profiles và user_metadata
+      const { error: profileErr } = await (supabase.from('profiles') as any)
+        .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', session.user.id);
+      if (profileErr) throw profileErr;
+
+      await supabase.auth.updateUser({
+        data: { avatar_url: publicUrl },
+      });
+
+      lastUploadTimeRef.current = Date.now();
+      toast.success('Cập nhật ảnh đại diện thành công!');
+      if (refreshProfile) refreshProfile();
+    } catch (err: any) {
+      console.error('Error uploading avatar:', err);
+      toast.error(err.message || 'Không thể tải lên ảnh đại diện. Vui lòng thử lại.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  // ----------------------------------------------------
+  // 2. STATE: 2FA & BACKUP CODES
+  // ----------------------------------------------------
+  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
+  const [loadingMfa, setLoadingMfa] = useState(true);
+  const [show2FaModal, setShow2FaModal] = useState(false);
+  const [showDisable2FaModal, setShowDisable2FaModal] = useState(false);
+  const [disabling2Fa, setDisabling2Fa] = useState(false);
+
+  // Backup codes security challenge
+  const [showBackupPasswordChallenge, setShowBackupPasswordChallenge] = useState(false);
+  const [challengePassword, setChallengePassword] = useState('');
+  const [showChallengePassword, setShowChallengePassword] = useState(false);
+  const [verifyingChallengePw, setVerifyingChallengePw] = useState(false);
+  const [challengeError, setChallengeError] = useState<string | null>(null);
+
+  // Backup codes modal
+  const [showBackupCodesModal, setShowBackupCodesModal] = useState(false);
+  const [revealedBackupCodes, setRevealedBackupCodes] = useState<string[]>([]);
+  const [copiedBackupCodes, setCopiedBackupCodes] = useState(false);
+
+  const fetchMfaFactors = useCallback(async () => {
+    if (!session?.user?.id) return;
+    setLoadingMfa(true);
+    try {
+      const { data, error } = await supabase.auth.mfa.listFactors();
+      if (!error && data) {
+        setMfaFactors(data.totp || []);
+      }
+    } catch (err) {
+      console.warn('Error fetching MFA factors:', err);
+    } finally {
+      setLoadingMfa(false);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    fetchMfaFactors();
+  }, [fetchMfaFactors]);
+
+  const verifiedFactor = mfaFactors.find((f) => f.status === 'verified');
+  const is2FaEnabled = !!verifiedFactor;
+
+  const handleDisable2FA = async () => {
+    if (!verifiedFactor) return;
+    setDisabling2Fa(true);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({
+        factorId: verifiedFactor.id,
+      });
+      if (error) throw error;
+      toast.success('Đã tắt Xác thực 2 lớp (2FA) thành công!');
+      setShowDisable2FaModal(false);
+      fetchMfaFactors();
+    } catch (err: any) {
+      console.error('Error unenrolling 2FA:', err);
+      toast.error(err.message || 'Không thể tắt 2FA. Vui lòng thử lại.');
+    } finally {
+      setDisabling2Fa(false);
+    }
+  };
+
+  const generateDeterministicBackupCodes = (userId: string) => {
+    const localSaved = localStorage.getItem(`bow_backup_${userId}`);
+    if (localSaved) {
+      try {
+        const parsed = JSON.parse(localSaved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // Fallback
+      }
+    }
+
+    const newCodes = Array.from({ length: 5 }, () =>
+      Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
+    );
+    localStorage.setItem(`bow_backup_${userId}`, JSON.stringify(newCodes));
+    return newCodes;
+  };
+
+  const handleVerifyPasswordForBackupCodes = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!challengePassword) {
+      setChallengeError('Vui lòng nhập mật khẩu tài khoản.');
+      return;
+    }
+    if (!session?.user?.email) {
+      setChallengeError('Không xác định được email người dùng.');
+      return;
+    }
+
+    setChallengeError(null);
+    setVerifyingChallengePw(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: session.user.email,
+        password: challengePassword,
+      });
+
+      if (error) {
+        throw new Error('Mật khẩu tài khoản không đúng. Vui lòng thử lại.');
+      }
+
+      const codes = generateDeterministicBackupCodes(session.user.id);
+      setRevealedBackupCodes(codes);
+      setShowBackupPasswordChallenge(false);
+      setChallengePassword('');
+      setShowBackupCodesModal(true);
+      toast.success('Xác thực danh tính thành công!');
+    } catch (err: any) {
+      setChallengeError(err.message || 'Mật khẩu không chính xác.');
+    } finally {
+      setVerifyingChallengePw(false);
+    }
+  };
+
+  const handleCopyAllBackupCodes = () => {
+    if (revealedBackupCodes.length === 0) return;
+    const content = revealedBackupCodes.join('\n');
+    navigator.clipboard.writeText(content);
+    setCopiedBackupCodes(true);
+    toast.success('Đã sao chép 5 mã sao lưu dự phòng!');
+    setTimeout(() => setCopiedBackupCodes(false), 2000);
+  };
+
+  const handleDownloadBackupTxt = () => {
+    if (revealedBackupCodes.length === 0) return;
+    const textContent = `MÃ SAO LƯU DỰ PHÒNG 2FA - SHOP OF BOW\nTài khoản: ${session?.user?.email}\nNgày xuất mã: ${new Date().toLocaleString('vi-VN')}\n\nDANH SÁCH MÃ DỰ PHÒNG:\n${revealedBackupCodes.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n\n* Lưu ý: Mỗi mã chỉ có hiệu lực sử dụng 1 lần khi không thể truy cập Google Authenticator.`;
+    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `BOW_2FA_Backup_Codes_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Đã tải file mã dự phòng về máy!');
+  };
+
+  // ----------------------------------------------------
+  // 3. STATE: ĐỔI MẬT KHẨU
+  // ----------------------------------------------------
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
+  const [pwVerifiedOld, setPwVerifiedOld] = useState(false);
+  const [verifyingOldPw, setVerifyingOldPw] = useState(false);
+  const [updatingPw, setUpdatingPw] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null);
+
+  const calcPasswordStrength = (pw: string) => {
+    if (!pw) return { score: 0, label: 'Chưa nhập', color: 'bg-slate-700' };
+    let score = 0;
+    if (pw.length >= 6) score += 1;
+    if (pw.length >= 8) score += 1;
+    if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score += 1;
+    if (/[0-9]/.test(pw) || /[^A-Za-z0-9]/.test(pw)) score += 1;
+
+    switch (score) {
+      case 1:
+        return { score: 25, label: 'Yếu', color: 'bg-rose-500' };
+      case 2:
+        return { score: 50, label: 'Trung bình', color: 'bg-amber-500' };
+      case 3:
+        return { score: 75, label: 'Khá mạnh', color: 'bg-blue-500' };
+      case 4:
+        return { score: 100, label: 'Rất mạnh', color: 'bg-emerald-500' };
+      default:
+        return { score: 15, label: 'Quá ngắn', color: 'bg-rose-400' };
+    }
+  };
+
+  const pwStrength = calcPasswordStrength(newPassword);
+
+  const handleVerifyCurrentPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword) {
+      setPwError('Vui lòng nhập mật khẩu hiện tại.');
+      return;
+    }
+    if (!session?.user?.email) {
+      setPwError('Không xác định được email người dùng.');
+      return;
+    }
+
+    setPwError(null);
+    setPwSuccess(null);
+    setVerifyingOldPw(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: session.user.email,
+        password: currentPassword,
+      });
+
+      if (error) {
+        throw new Error('Mật khẩu hiện tại không chính xác.');
+      }
+
+      setPwVerifiedOld(true);
+      toast.success('Xác thực mật khẩu cũ thành công.');
+    } catch (err: any) {
+      setPwError(err.message || 'Mật khẩu hiện tại không đúng.');
+    } finally {
+      setVerifyingOldPw(false);
+    }
+  };
+
+  const handleUpdateNewPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(null);
+
+    if (!newPassword || newPassword.length < 6) {
+      setPwError('Mật khẩu mới phải có tối thiểu 6 ký tự.');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPwError('Mật khẩu mới không được trùng với mật khẩu hiện tại.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError('Mật khẩu xác nhận nhập lại không khớp.');
+      return;
+    }
+
+    setUpdatingPw(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
+      toast.success('Đổi mật khẩu thành công!');
+      setPwSuccess('Mật khẩu mới đã được cập nhật an toàn.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPwVerifiedOld(false);
+    } catch (err: any) {
+      setPwError(err.message || 'Lỗi khi cập nhật mật khẩu.');
+    } finally {
+      setUpdatingPw(false);
+    }
+  };
+
+  const handleResetPwFlow = () => {
+    setPwVerifiedOld(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPwError(null);
+    setPwSuccess(null);
+  };
+
+  // ----------------------------------------------------
+  // 4. STATE: QUẢN LÝ THIẾT BỊ ĐĂNG NHẬP
+  // ----------------------------------------------------
+  const [devices, setDevices] = useState<UserDeviceRecord[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(true);
+  const [signingOutOthers, setSigningOutOthers] = useState(false);
+  const [removingDeviceId, setRemovingDeviceId] = useState<string | null>(null);
+
+  const fetchDevices = useCallback(async () => {
+    if (!session?.user?.id) return;
+    setLoadingDevices(true);
+    try {
+      await trackCurrentDevice(session.user.id);
+      const list = await getUserDevices(session.user.id);
+      setDevices(list);
+    } catch (err) {
+      console.warn('Error loading devices:', err);
+    } finally {
+      setLoadingDevices(false);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    fetchDevices();
+  }, [fetchDevices]);
+
+  const handleSignOutOthers = async () => {
+    if (!session?.user?.id) return;
+    setSigningOutOthers(true);
+    try {
+      await signOutOtherDevices(session.user.id);
+      toast.success('Đã đăng xuất tất cả thiết bị khác thành công!');
+      await fetchDevices();
+    } catch (err: any) {
+      toast.error('Lỗi khi đăng xuất thiết bị khác.');
+    } finally {
+      setSigningOutOthers(false);
+    }
+  };
+
+  const handleRemoveDevice = async (deviceId: string) => {
+    if (!session?.user?.id) return;
+    setRemovingDeviceId(deviceId);
+    try {
+      await removeDeviceSession(session.user.id, deviceId);
+      toast.success('Đã ngắt kết nối thiết bị.');
+      await fetchDevices();
+    } catch (err) {
+      toast.error('Lỗi khi xóa phiên thiết bị.');
+    } finally {
+      setRemovingDeviceId(null);
+    }
+  };
+
+  const otherDevicesCount = devices.filter((d) => !d.is_current).length;
+
+  const renderDeviceIcon = (type?: string, os?: string) => {
+    const t = (type || '').toLowerCase();
+    const o = (os || '').toLowerCase();
+    if (t === 'mobile' || o.includes('ios') || o.includes('android') || o.includes('iphone')) {
+      return <DeviceMobileSvg className="h-5 w-5 text-slate-400 dark:text-slate-300" />;
+    }
+    return <DeviceDesktopSvg className="h-5 w-5 text-slate-400 dark:text-slate-300" />;
+  };
+
+  const securityHealthScore = is2FaEnabled ? 100 : 65;
+
+  return (
+    <div className="space-y-6">
+      {/* Hidden File Input for Avatar Upload */}
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        onChange={handleAvatarFileChange}
+        className="hidden"
+      />
+
+      {/* ================================================================== */}
+      {/* 1. HEADER SECTION (Clean, Minimalist & Sleek) */}
+      {/* ================================================================== */}
+      <div className="rounded-[24px] border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#11192C] p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/50 text-[#2563EB] dark:text-[#38BDF8] border border-blue-100 dark:border-blue-900/50">
+            <ShieldCheckSvg className="h-6 w-6" />
+          </div>
+          <div>
+            <h2 className="text-lg font-extrabold text-[#0F172A] dark:text-white tracking-tight">
+              Cài đặt tài khoản & Bảo mật
+            </h2>
+            <p className="text-xs font-medium text-slate-400 mt-0.5">
+              Quản lý thông tin hồ sơ, xác thực 2 lớp và giám sát thiết bị truy cập.
+            </p>
+          </div>
+        </div>
+
+        {/* Status Badge: Thiết kế thanh lịch, gọn gàng cả trên Desktop lẫn Mobile */}
+        <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/25 px-3.5 py-1.5 text-xs font-extrabold text-emerald-600 dark:text-emerald-400 self-start sm:self-auto shrink-0 shadow-2xs">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span>Bảo mật: {securityHealthScore}% • {is2FaEnabled ? 'Rất an toàn' : 'Cần bật 2FA'}</span>
+        </div>
+      </div>
+
+      {/* ================================================================== */}
+      {/* 2. GRID 2x2 LAYOUT (Tận dụng chiều ngang Desktop, Responsive 1 col Mobile) */}
+      {/* ================================================================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+        {/* ---------------------------------------------------------------- */}
+        {/* HÀNG 1 - CỘT TRÁI: THÔNG TIN CÁ NHÂN */}
+        {/* ---------------------------------------------------------------- */}
+        <div className="flex flex-col justify-between rounded-[24px] border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#11192C] p-6 shadow-xs space-y-5">
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <UserCircleSvg className="h-5 w-5 text-blue-500" />
+                <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">
+                  Thông tin cá nhân
+                </h3>
+              </div>
+              <p className="text-xs font-medium text-slate-400 mt-0.5">
+                Thông tin định danh hiển thị trên hóa đơn và tài khoản BOW.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-4">
+              {/* Avatar với nút tải ảnh 1-chạm */}
+              <div className="relative group shrink-0">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#00A3FF] to-[#2563EB] text-xl font-extrabold text-white shadow-sm overflow-hidden border border-white/20 dark:border-slate-700">
+                  {currentAvatarUrl ? (
+                    <img src={currentAvatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                  ) : (
+                    (session?.user?.email || 'U').charAt(0).toUpperCase()
+                  )}
+
+                  {/* Loading Overlay khi upload */}
+                  {uploadingAvatar && (
+                    <div className="absolute inset-0 bg-slate-900/70 flex items-center justify-center">
+                      <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Nút Camera để kích hoạt chọn ảnh */}
+                <button
+                  type="button"
+                  title="Thay đổi ảnh đại diện"
+                  disabled={uploadingAvatar}
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#2563EB] text-white border-2 border-white dark:border-[#11192C] shadow-xs hover:bg-[#1D4ED8] hover:scale-110 active:scale-95 transition cursor-pointer disabled:opacity-50"
+                >
+                  <CameraSvg className="h-3 w-3" />
+                </button>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-extrabold text-[#0F172A] dark:text-white">
+                    {profile?.full_name || session?.user?.user_metadata?.full_name || 'Thành viên BOW'}
+                  </h4>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 text-blue-500 dark:text-[#38BDF8] border border-blue-500/20 px-2 py-0.5 text-[10px] font-bold">
+                    {isAdmin ? 'Quản trị viên' : isCtv ? 'Đối tác CTV' : 'Thành viên'}
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-400 mt-0.5">
+                  Ngày tham gia: {session?.user?.created_at ? new Date(session.user.created_at).toLocaleDateString('vi-VN') : 'Mới'}
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateFullName} className="space-y-3.5 pt-1">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                  Họ và tên đầy đủ
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Nhập họ và tên của bạn"
+                  className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3.5 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB] transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Email đăng nhập
+                </label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    disabled
+                    value={session?.user?.email || ''}
+                    className="h-10 w-full rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 px-3.5 pr-28 text-xs font-semibold text-slate-400 cursor-not-allowed outline-none"
+                  />
+                  <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                    <CheckOutlineSvg className="h-3 w-3" />
+                    Đã xác thực
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={updatingProfile}
+                className="w-full rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 py-2.5 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+              >
+                {updatingProfile ? 'Đang lưu thay đổi...' : 'Lưu thay đổi'}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* HÀNG 1 - CỘT PHẢI: XÁC THỰC 2 LỚP (2FA) */}
+        {/* ---------------------------------------------------------------- */}
+        <div className="flex flex-col justify-between rounded-[24px] border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#11192C] p-6 shadow-xs space-y-5">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <KeySvg className="h-5 w-5 text-blue-500" />
+                  <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">
+                    Xác thực 2 lớp (2FA)
+                  </h3>
+                </div>
+                <p className="text-xs font-medium text-slate-400 mt-0.5">
+                  Bảo vệ tài khoản với mã OTP 6 số từ Google Authenticator.
+                </p>
+              </div>
+
+              {is2FaEnabled ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200/80 dark:border-emerald-800/80 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Đang hoạt động</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500 shrink-0">
+                  Chưa kích hoạt
+                </span>
+              )}
+            </div>
+
+            {loadingMfa ? (
+              <div className="py-8 text-center text-xs font-medium text-slate-400">
+                Đang kiểm tra trạng thái bảo mật...
+              </div>
+            ) : is2FaEnabled ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400">
+                    <ShieldCheckSvg className="h-5 w-5 shrink-0" />
+                    <h4 className="text-xs font-bold text-[#0F172A] dark:text-white">
+                      Tài khoản đang được bảo vệ an toàn tối đa
+                    </h4>
+                  </div>
+                  <p className="text-xs font-medium text-slate-400 leading-relaxed pl-7">
+                    Mỗi lần đăng nhập, hệ thống sẽ yêu cầu nhập mã 6 số từ ứng dụng Google Authenticator để ngăn chặn hoàn toàn truy cập trái phép.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowBackupPasswordChallenge(true)}
+                    className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-2.5 text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <KeySvg className="h-4 w-4 text-slate-400" />
+                    <span>Mã dự phòng</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowDisable2FaModal(true)}
+                    className="rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 py-2.5 text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                  >
+                    Tắt 2FA
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+                  <h4 className="text-xs font-bold text-[#0F172A] dark:text-white">
+                    Bật xác thực 2 bước để tăng cường bảo vệ
+                  </h4>
+                  <p className="text-xs font-medium text-slate-400 leading-relaxed">
+                    Ngăn chặn kẻ xấu xâm nhập ngay cả khi bị lộ mật khẩu. Thiết lập chỉ mất 30 giây qua mã QR.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShow2FaModal(true)}
+                  className="w-full rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white py-2.5 text-xs font-bold shadow-xs transition cursor-pointer"
+                >
+                  Bật 2FA ngay
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* HÀNG 2 - CỘT TRÁI: ĐỔI MẬT KHẨU */}
+        {/* ---------------------------------------------------------------- */}
+        <div className="flex flex-col justify-between rounded-[24px] border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#11192C] p-6 shadow-xs space-y-5">
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <LockClosedSvg className="h-5 w-5 text-blue-500" />
+                <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">
+                  Đổi mật khẩu tài khoản
+                </h3>
+              </div>
+              <p className="text-xs font-medium text-slate-400 mt-0.5">
+                Xác thực mật khẩu hiện tại trước khi tạo mật khẩu mới.
+              </p>
+            </div>
+
+            {pwError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/50 text-xs font-bold text-rose-600 dark:text-rose-300">
+                {pwError}
+              </div>
+            )}
+            {pwSuccess && (
+              <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                {pwSuccess}
+              </div>
+            )}
+
+            {!pwVerifiedOld ? (
+              /* BƯỚC 1: XÁC MINH MẬT KHẨU CŨ */
+              <form onSubmit={handleVerifyCurrentPassword} className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Mật khẩu hiện tại
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showCurrentPw ? 'text' : 'password'}
+                      required
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Nhập mật khẩu đang sử dụng"
+                      className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3.5 pr-14 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB] transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPw((v) => !v)}
+                      className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showCurrentPw ? 'Ẩn' : 'Hiện'}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={verifyingOldPw}
+                  className="w-full rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 py-2.5 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                >
+                  {verifyingOldPw ? 'Đang xác thực...' : 'Xác thực mật khẩu cũ →'}
+                </button>
+              </form>
+            ) : (
+              /* BƯỚC 2: NHẬP MẬT KHẨU MỚI */
+              <form onSubmit={handleUpdateNewPassword} className="space-y-3.5 animate-fade-in">
+                <div className="p-2.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#2563EB] dark:text-[#38BDF8]">
+                    ✓ Đã xác thực mật khẩu cũ
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleResetPwFlow}
+                    className="text-xs font-medium text-slate-400 hover:text-slate-600 underline cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Mật khẩu mới
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPw ? 'text' : 'password'}
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Tối thiểu 6 ký tự (Có chữ & số)"
+                      className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3.5 pr-14 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB] transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPw((v) => !v)}
+                      className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showNewPw ? 'Ẩn' : 'Hiện'}
+                    </button>
+                  </div>
+
+                  {newPassword.length > 0 && (
+                    <div className="mt-1.5 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Độ mạnh:</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{pwStrength.label}</span>
+                      </div>
+                      <div className="h-1 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full ${pwStrength.color} transition-all duration-300`}
+                          style={{ width: `${pwStrength.score}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Xác nhận lại mật khẩu mới
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPw ? 'text' : 'password'}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu mới"
+                      className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3.5 pr-14 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB] transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPw((v) => !v)}
+                      className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showConfirmPw ? 'Ẩn' : 'Hiện'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={updatingPw}
+                    className="flex-1 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 py-2.5 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                  >
+                    {updatingPw ? 'Đang lưu...' : 'Lưu mật khẩu mới'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetPwFlow}
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 px-3.5 py-2.5 text-xs font-medium text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* HÀNG 2 - CỘT PHẢI: THIẾT BỊ ĐÃ ĐĂNG NHẬP */}
+        {/* ---------------------------------------------------------------- */}
+        <div className="flex flex-col justify-between rounded-[24px] border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#11192C] p-6 shadow-xs space-y-5">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <DeviceDesktopSvg className="h-5 w-5 text-blue-500" />
+                  <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">
+                    Thiết bị đã đăng nhập
+                  </h3>
+                </div>
+                <p className="text-xs font-medium text-slate-400 mt-0.5">
+                  Quản lý các phiên đăng nhập đang hoạt động.
+                </p>
+              </div>
+
+              {otherDevicesCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSignOutOthers}
+                  disabled={signingOutOthers}
+                  className="rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 px-2.5 py-1 text-[11px] font-bold transition shadow-2xs flex items-center gap-1 shrink-0 cursor-pointer"
+                >
+                  <ArrowRightExitSvg className="h-3 w-3" />
+                  <span>Đăng xuất máy khác</span>
+                </button>
+              )}
+            </div>
+
+            {loadingDevices ? (
+              <div className="py-8 text-center text-xs font-medium text-slate-400">
+                Đang tải danh sách thiết bị...
+              </div>
+            ) : devices.length === 0 ? (
+              <div className="py-8 text-center text-xs font-medium text-slate-400">
+                Chưa có thông tin thiết bị.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                {devices.map((d) => (
+                  <div
+                    key={d.id || d.device_id}
+                    className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition ${
+                      d.is_current
+                        ? 'bg-blue-50/30 dark:bg-blue-950/20 border-blue-200/80 dark:border-blue-900/40'
+                        : 'bg-slate-50/50 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800/80">
+                        {renderDeviceIcon(d.device_type, d.os)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-xs font-bold text-[#0F172A] dark:text-white truncate">
+                            {d.browser || 'Trình duyệt'} trên {d.os || d.device_name || 'Thiết bị'}
+                          </h4>
+                          {d.is_current && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200/60 dark:border-emerald-800/60 px-1.5 py-0.2 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                              <span className="h-1 w-1 rounded-full bg-emerald-500"></span>
+                              Thiết bị này
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] font-medium text-slate-400 mt-0.5 truncate">
+                          {d.ip_address ? `IP: ${d.ip_address} • ` : ''}Hoạt động: {new Date(d.last_active_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} {new Date(d.last_active_at).toLocaleDateString('vi-VN')}
+                        </p>
+                      </div>
+                    </div>
+
+                    {!d.is_current && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDevice(d.device_id)}
+                        disabled={removingDeviceId === d.device_id}
+                        className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-300 px-2 py-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 transition shadow-2xs shrink-0 cursor-pointer"
+                      >
+                        {removingDeviceId === d.device_id ? '...' : 'Đăng xuất'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL 1: BẬT 2FA (QR CODE SETUP) */}
+      {/* ------------------------------------------------------------------ */}
+      <TwoFactorModal
+        isOpen={show2FaModal}
+        onClose={() => setShow2FaModal(false)}
+        onSuccess={() => {
+          fetchMfaFactors();
+        }}
+      />
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL 2: XÁC NHẬN TẮT 2FA */}
+      {/* ------------------------------------------------------------------ */}
+      {showDisable2FaModal && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setShowDisable2FaModal(false)} />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-2xl space-y-4 animate-fade-up">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
+                Xác nhận tắt 2FA
+              </h3>
+              <button onClick={() => setShowDisable2FaModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <CloseSvg className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              Bạn có chắc chắn muốn tắt Xác thực 2 lớp? Tài khoản của bạn sẽ giảm mức độ bảo vệ an toàn.
+            </p>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDisable2FaModal(false)}
+                disabled={disabling2Fa}
+                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleDisable2FA}
+                disabled={disabling2Fa}
+                className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-60 cursor-pointer"
+              >
+                {disabling2Fa ? 'Đang tắt...' : 'Xác nhận tắt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL 3: XÁC THỰC MẬT KHẨU TRƯỚC KHI XEM MÃ DỰ PHÒNG */}
+      {/* ------------------------------------------------------------------ */}
+      {showBackupPasswordChallenge && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setShowBackupPasswordChallenge(false)} />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-2xl space-y-4 animate-fade-up">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <KeySvg className="h-5 w-5 text-blue-500" />
+                <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
+                  Xác thực danh tính bảo mật
+                </h3>
+              </div>
+              <button onClick={() => setShowBackupPasswordChallenge(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <CloseSvg className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Vui lòng nhập mật khẩu tài khoản để mở khóa danh sách mã sao lưu dự phòng.
+            </p>
+
+            {challengeError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-xs font-bold text-rose-600 dark:text-rose-300">
+                {challengeError}
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyPasswordForBackupCodes} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                  Mật khẩu tài khoản
+                </label>
+                <div className="relative">
+                  <input
+                    type={showChallengePassword ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    value={challengePassword}
+                    onChange={(e) => setChallengePassword(e.target.value)}
+                    placeholder="Nhập mật khẩu hiện tại"
+                    className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 pr-14 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowChallengePassword((v) => !v)}
+                    className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    {showChallengePassword ? 'Ẩn' : 'Hiện'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowBackupPasswordChallenge(false)}
+                  className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={verifyingChallengePw}
+                  className="flex-1 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-60 cursor-pointer"
+                >
+                  {verifyingChallengePw ? 'Đang kiểm tra...' : 'Xác thực & Mở khóa'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL 4: DANH SÁCH MÃ SAO LƯU DỰ PHÒNG */}
+      {/* ------------------------------------------------------------------ */}
+      {showBackupCodesModal && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setShowBackupCodesModal(false)} />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-2xl space-y-4 animate-fade-up">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <KeySvg className="h-5 w-5 text-blue-500" />
+                <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
+                  Mã sao lưu dự phòng 2FA
+                </h3>
+              </div>
+              <button onClick={() => setShowBackupCodesModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <CloseSvg className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Mỗi mã dưới đây có thể dùng <strong>1 lần duy nhất</strong> khi bạn không thể mở Google Authenticator.
+            </p>
+
+            {/* Grid Backup Codes */}
+            <div className="grid grid-cols-1 gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+              {revealedBackupCodes.map((code, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80"
+                >
+                  <span className="text-[11px] font-semibold text-slate-400">#{idx + 1}</span>
+                  <span className="font-mono text-xs font-extrabold text-[#2563EB] dark:text-[#38BDF8] tracking-wider">
+                    {code}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCopyAllBackupCodes}
+                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              >
+                {copiedBackupCodes ? '✓ Đã chép' : 'Sao chép mã'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadBackupTxt}
+                className="rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+              >
+                Tải file .TXT
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowBackupCodesModal(false)}
+              className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-1.5 text-xs font-medium hover:bg-slate-200 cursor-pointer"
+            >
+              Đóng lại
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

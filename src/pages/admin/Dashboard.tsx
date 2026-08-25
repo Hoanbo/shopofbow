@@ -1636,53 +1636,98 @@ export default function Dashboard() {
               </p>
             </div>
           ) : (
-            /* Dedicated Table Horizontal Scrollbar inside Card */
-            <div className="mt-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-blue-400/40 dark:scrollbar-thumb-blue-500/40 scrollbar-track-slate-100 dark:scrollbar-track-slate-800/60">
-              <table className="w-full min-w-[560px] text-left text-xs font-semibold">
-                <thead>
-                  <tr className="text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-100 dark:border-slate-800/50">
-                    <th className="py-2.5 px-2">Sản phẩm</th>
-                    <th className="py-2.5 px-2">Khách hàng</th>
-                    <th className="py-2.5 px-2">Giá tiền</th>
-                    <th className="py-2.5 px-2 text-center">Trạng thái</th>
-                    <th className="py-2.5 px-2 text-right">Thời gian</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-700 dark:text-slate-300">
-                  {recentOrders.map((ord) => (
-                    <tr key={ord.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/30 transition-colors">
-                      <td className="py-3 px-2">
-                        <span className="font-bold text-slate-900 dark:text-white block truncate max-w-[160px]">
-                          {ord.product_name || 'N/A'}
+            <>
+              {/* Mobile Cards View (< 768px) */}
+              <div className="md:hidden mt-3 space-y-2.5">
+                {recentOrders.map((ord) => (
+                  <div
+                    key={ord.id}
+                    className="p-3 rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-extrabold text-xs text-slate-900 dark:text-white block truncate">
+                          {ord.product_name || 'Sản phẩm'}
                         </span>
                         {ord.plan_label && (
-                          <span className="text-[10px] text-slate-400 block truncate max-w-[160px] mt-0.5">
+                          <span className="text-[10px] text-slate-400 block truncate">
                             {ord.plan_label}
                           </span>
                         )}
-                      </td>
-                      <td className="py-3 px-2">
-                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block truncate max-w-[130px]">
+                      </div>
+                      <div className="shrink-0">{getStatusBadge(ord.status)}</div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100/80 dark:border-slate-800/50">
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block truncate">
                           {ord.profiles?.full_name || 'Khách hàng'}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-400 block truncate mt-0.5">
+                        <span className="text-[9.5px] font-mono text-slate-400 block truncate">
                           #{ord.payment_code || ord.id.substring(0, 8)}
                         </span>
-                      </td>
-                      <td className="py-3 px-2 font-extrabold text-[#2563EB] dark:text-[#35A8FF] whitespace-nowrap">
-                        {Number(ord.price || 0).toLocaleString('vi-VN')}đ
-                      </td>
-                      <td className="py-3 px-2 text-center whitespace-nowrap">
-                        {getStatusBadge(ord.status)}
-                      </td>
-                      <td className="py-3 px-2 text-right text-[10px] text-slate-400 font-medium whitespace-nowrap font-mono">
-                        {formatRelativeTime(ord.created_at)}
-                      </td>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-black text-xs text-[#2563EB] dark:text-[#35A8FF] block">
+                          {Number(ord.price || 0).toLocaleString('vi-VN')}đ
+                        </span>
+                        <span className="text-[9.5px] text-slate-400 font-mono">
+                          {formatRelativeTime(ord.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table (>= 768px) */}
+              <div className="hidden md:block mt-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-blue-400/40 dark:scrollbar-thumb-blue-500/40 scrollbar-track-slate-100 dark:scrollbar-track-slate-800/60">
+                <table className="w-full min-w-[560px] text-left text-xs font-semibold">
+                  <thead>
+                    <tr className="text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-100 dark:border-slate-800/50">
+                      <th className="py-2.5 px-2">Sản phẩm</th>
+                      <th className="py-2.5 px-2">Khách hàng</th>
+                      <th className="py-2.5 px-2">Giá tiền</th>
+                      <th className="py-2.5 px-2 text-center">Trạng thái</th>
+                      <th className="py-2.5 px-2 text-right">Thời gian</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-700 dark:text-slate-300">
+                    {recentOrders.map((ord) => (
+                      <tr key={ord.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/30 transition-colors">
+                        <td className="py-3 px-2">
+                          <span className="font-bold text-slate-900 dark:text-white block truncate max-w-[160px]">
+                            {ord.product_name || 'N/A'}
+                          </span>
+                          {ord.plan_label && (
+                            <span className="text-[10px] text-slate-400 block truncate max-w-[160px] mt-0.5">
+                              {ord.plan_label}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-2">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block truncate max-w-[130px]">
+                            {ord.profiles?.full_name || 'Khách hàng'}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400 block truncate mt-0.5">
+                            #{ord.payment_code || ord.id.substring(0, 8)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2 font-extrabold text-[#2563EB] dark:text-[#35A8FF] whitespace-nowrap">
+                          {Number(ord.price || 0).toLocaleString('vi-VN')}đ
+                        </td>
+                        <td className="py-3 px-2 text-center whitespace-nowrap">
+                          {getStatusBadge(ord.status)}
+                        </td>
+                        <td className="py-3 px-2 text-right text-[10px] text-slate-400 font-medium whitespace-nowrap font-mono">
+                          {formatRelativeTime(ord.created_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 
@@ -1718,36 +1763,33 @@ export default function Dashboard() {
               </p>
             </div>
           ) : (
-            /* Dedicated Horizontal Scrollbar for Activity log */
-            <div className="mt-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-slate-100 dark:scrollbar-track-slate-800/60">
-              <div className="min-w-[320px] sm:min-w-full space-y-2 sm:space-y-2.5">
-                {activities.map((act) => (
-                  <Link
-                    key={act.id}
-                    to={act.link}
-                    className="group flex gap-2.5 sm:gap-3 items-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-850/50 border border-transparent hover:border-slate-200/60 dark:hover:border-slate-700/50 transition"
-                  >
-                    <span className={`h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs shrink-0 font-bold shadow-xs transition-transform group-hover:scale-105 ${act.iconBg}`}>
-                      {act.icon}
-                    </span>
+            <div className="mt-3 space-y-2 sm:space-y-2.5">
+              {activities.map((act) => (
+                <Link
+                  key={act.id}
+                  to={act.link}
+                  className="group flex gap-2.5 sm:gap-3 items-center p-2 sm:p-2.5 rounded-xl sm:rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-850/50 border border-transparent hover:border-slate-200/60 dark:hover:border-slate-700/50 transition"
+                >
+                  <span className={`h-7 w-7 sm:h-8 sm:w-8 rounded-lg sm:rounded-xl flex items-center justify-center text-xs shrink-0 font-bold shadow-xs transition-transform group-hover:scale-105 ${act.iconBg}`}>
+                    {act.icon}
+                  </span>
 
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11.5px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug group-hover:text-[#2563EB] dark:group-hover:text-[#35A8FF] transition-colors truncate">
-                        {act.text}
-                      </p>
-                      <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 text-[9.5px] sm:text-[10px] text-slate-400 font-semibold">
-                        <span className="font-mono">{act.time}</span>
-                        <span>•</span>
-                        <span className="truncate">{act.tag}</span>
-                      </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11.5px] sm:text-xs font-bold text-slate-800 dark:text-slate-200 leading-snug group-hover:text-[#2563EB] dark:group-hover:text-[#35A8FF] transition-colors truncate">
+                      {act.text}
+                    </p>
+                    <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 text-[9.5px] sm:text-[10px] text-slate-400 font-semibold">
+                      <span className="font-mono">{act.time}</span>
+                      <span>•</span>
+                      <span className="truncate">{act.tag}</span>
                     </div>
+                  </div>
 
-                    <span className="text-slate-300 dark:text-slate-600 group-hover:text-[#2563EB] group-hover:translate-x-0.5 transition-all text-xs font-bold shrink-0">
-                      ›
-                    </span>
-                  </Link>
-                ))}
-              </div>
+                  <span className="text-slate-300 dark:text-slate-600 group-hover:text-[#2563EB] group-hover:translate-x-0.5 transition-all text-xs font-bold shrink-0">
+                    ›
+                  </span>
+                </Link>
+              ))}
             </div>
           )}
         </div>

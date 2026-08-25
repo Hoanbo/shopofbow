@@ -15,6 +15,7 @@ export interface UserProfile {
   balance?: number;
   full_name?: string;
   email?: string;
+  avatar_url?: string;
 }
 
 interface AuthValue {

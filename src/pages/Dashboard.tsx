@@ -9,6 +9,8 @@ import { useToast } from '../components/Toast';
 import OrderDeliveredModal from '../components/OrderDeliveredModal';
 import UserTicketsTab from '../components/user/UserTicketsTab';
 import UserAffiliateTab from '../components/user/UserAffiliateTab';
+import UserOverviewTab from '../components/user/UserOverviewTab';
+import UserSettingsAndSecurityTab from '../components/user/UserSettingsAndSecurityTab';
 import CreateTicketModal from '../components/user/CreateTicketModal';
 import UserOrderDetailModal from '../components/user/UserOrderDetailModal';
 import OrderTimeline from '../components/user/OrderTimeline';
@@ -33,15 +35,15 @@ type Order = {
   original_price?: number;
   discount_amount?: number;
   status:
-    | 'pending_payment'
-    | 'pending_delivery'
-    | 'processing'
-    | 'completed'
-    | 'cancelled'
-    | 'refunded'
-    | 'paid'
-    | 'pending'
-    | 'delivering';
+  | 'pending_payment'
+  | 'pending_delivery'
+  | 'processing'
+  | 'completed'
+  | 'cancelled'
+  | 'refunded'
+  | 'paid'
+  | 'pending'
+  | 'delivering';
   payment_code: string;
   notes: string;
   account_details?: string;
@@ -624,14 +626,7 @@ export default function Dashboard() {
   const nav = useNavigate();
 
   // Tab State
-  const activeTab = searchParams.get('tab') || 'orders';
-
-  // Auto redirect admin away from user affiliate tab
-  useEffect(() => {
-    if (isAdmin && activeTab === 'affiliate') {
-      setSearchParams({ tab: 'orders' });
-    }
-  }, [isAdmin, activeTab, setSearchParams]);
+  const activeTab = searchParams.get('tab') || 'overview';
 
   // Orders State & Pagination
   const [orders, setOrders] = useState<Order[]>([]);
@@ -688,7 +683,7 @@ export default function Dashboard() {
 
       if (ordersRes.error) throw ordersRes.error;
       setOrders((ordersRes.data || []) as Order[]);
-      
+
       const revSet = new Set<string>((reviewsRes.data || []).map((r: any) => String(r.order_id)));
       setReviewedOrderIds(revSet);
       setCurrentPage(1);
@@ -951,22 +946,23 @@ export default function Dashboard() {
             {/* Sidebar Tabs */}
             <nav className="mt-4 space-y-1">
               {[
-                { id: 'orders', label: '📋 Lịch sử đơn hàng' },
-                ...(!isAdmin ? [{ id: 'affiliate', label: '🤝 Giới thiệu bạn bè' }] : []),
-                { id: 'tickets', label: '🎫 Yêu cầu hỗ trợ' },
-                { id: 'wallet', label: '💳 Ví tiền & Nạp số dư' },
-                { id: 'profile', label: '👤 Hồ sơ của tôi' },
-                { id: 'favorites', label: '💙 Sản phẩm yêu thích' },
-                { id: 'settings', label: '⚙️ Cài đặt tài khoản' },
+                { id: 'overview', label: '🏠 Tổng quan' },
+                { id: 'orders', label: '📦 Đơn hàng' },
+                { id: 'wallet', label: '💳 Ví & Thanh toán' },
+                { id: 'affiliate', label: '🤝 Giới thiệu bạn bè' },
+                { id: 'favorites', label: '❤️ Yêu thích' },
+                { id: 'tickets', label: '💬 Hỗ trợ' },
+                { id: 'settings', label: '⚙️ Cài đặt' },
               ].map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => setSearchParams({ tab: t.id })}
-                  className={`flex w-full items-center rounded-2xl px-4 py-3 text-xs font-bold transition-all duration-200 ${activeTab === t.id
-                    ? 'bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-xs'
-                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                    }`}
+                  className={`flex w-full items-center rounded-2xl px-4 py-3 text-xs font-bold transition-all duration-200 ${
+                    activeTab === t.id
+                      ? 'bg-blue-50 dark:bg-blue-950/40 text-[#2563EB] dark:text-[#35A8FF] shadow-xs'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                  }`}
                 >
                   {t.label}
                 </button>
@@ -977,31 +973,43 @@ export default function Dashboard() {
 
         {/* CONTENT AREA */}
         <main className="flex-1 min-w-0 space-y-4">
-          {/* Compact Mobile Tabs Strip (1-tap quick switch, ultra-compact) */}
-          <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {[
-              { id: 'orders', label: '📋 Đơn hàng' },
-              ...(!isAdmin ? [{ id: 'affiliate', label: '🤝 Giới thiệu' }] : []),
-              { id: 'tickets', label: '🎫 Hỗ trợ' },
-              { id: 'wallet', label: '💳 Ví tiền' },
-              { id: 'profile', label: '👤 Hồ sơ' },
-              { id: 'favorites', label: '💙 Yêu thích' },
-              { id: 'settings', label: '⚙️ Cài đặt' },
-            ].map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setSearchParams({ tab: t.id })}
-                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition-all whitespace-nowrap ${
-                  activeTab === t.id
-                    ? 'bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-white shadow-xs'
-                    : 'bg-white dark:bg-[#18243E] text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          {/* Mobile Sticky Sub-Header Tabs (Ghim cố định khi cuộn trang, 1 chạm chuyển tab tức thì) */}
+          <div className="lg:hidden sticky top-16 sm:top-20 z-30 -mx-4 px-4 sm:-mx-6 sm:px-6 py-2.5 bg-slate-100/90 dark:bg-[#0B132B]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 transition-all duration-300 shadow-2xs">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none touch-pan-x py-0.5">
+              {[
+                { id: 'overview', label: '🏠 Tổng quan' },
+                { id: 'orders', label: '📦 Đơn hàng' },
+                { id: 'wallet', label: '💳 Ví & Nạp' },
+                { id: 'affiliate', label: '🤝 Giới thiệu' },
+                { id: 'favorites', label: '❤️ Yêu thích' },
+                { id: 'tickets', label: '💬 Hỗ trợ' },
+                { id: 'settings', label: '⚙️ Cài đặt' },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSearchParams({ tab: t.id })}
+                  className={`shrink-0 inline-flex items-center justify-center min-h-[38px] rounded-full px-3.5 py-1.5 text-xs font-bold transition-all whitespace-nowrap active:scale-95 shadow-xs ${
+                    activeTab === t.id
+                      ? 'bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-white shadow-md font-extrabold'
+                      : 'bg-white dark:bg-[#18243E] text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* TAB: OVERVIEW */}
+          {activeTab === 'overview' && (
+            <UserOverviewTab
+              orders={orders}
+              onNavigateTab={(tabId) => setSearchParams({ tab: tabId })}
+              onOpenOrderDetail={(detailOrder) => setSelectedDetailOrder(detailOrder)}
+              onRefreshOrders={fetchOrders}
+            />
+          )}
 
           {/* TAB: ORDERS */}
           {activeTab === 'orders' && (
@@ -1109,6 +1117,11 @@ export default function Dashboard() {
                 );
               })()}
             </div>
+          )}
+
+          {/* TAB: AFFILIATE */}
+          {activeTab === 'affiliate' && (
+            <UserAffiliateTab />
           )}
 
           {/* TAB: WALLET */}
@@ -1424,17 +1437,8 @@ export default function Dashboard() {
           {/* TAB: SUPPORT TICKETS */}
           {activeTab === 'tickets' && <UserTicketsTab />}
 
-          {/* TAB: SETTINGS */}
-          {activeTab === 'settings' && (
-            <div className="rounded-[28px] border border-[#E7EEF8] bg-white p-6 shadow-xs">
-              <h2 className="text-lg font-black text-[#0F172A] border-b border-slate-50 pb-3">Cài đặt tài khoản</h2>
-              <div className="mt-5 space-y-4 max-w-md">
-                <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4 text-xs text-slate-600 leading-relaxed font-medium">
-                  🔒 Để thay đổi thông tin bảo mật, đổi mật khẩu hoặc xóa tài khoản, vui lòng liên hệ Admin qua kênh hỗ trợ Zalo/Messenger của BOW để được xác minh danh tính và hỗ trợ trực tiếp.
-                </div>
-              </div>
-            </div>
-          )}
+          {/* TAB: SETTINGS & SECURITY */}
+          {activeTab === 'settings' && <UserSettingsAndSecurityTab />}
         </main>
       </div>
 

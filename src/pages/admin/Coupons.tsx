@@ -437,10 +437,12 @@ export default function AdminCoupons() {
   };
 
   // Fetch Usages History (Batch Hydration)
+  // Fetch Usages History (Batch Hydration with Orders Auto-Sync)
   const handleViewUsages = async (c: Coupon) => {
     setSelectedUsageCoupon(c);
     setLoadingUsages(true);
     try {
+      // 1. Fetch usages from coupon_usages
       const { data: rawUsages, error } = await (supabase
         .from('coupon_usages') as any)
         .select('*')
@@ -449,7 +451,51 @@ export default function AdminCoupons() {
 
       if (error) throw error;
 
-      const usageList = rawUsages || [];
+      // 2. Also fetch orders that used this coupon code or coupon_id
+      const { data: relatedOrders } = await (supabase
+        .from('orders') as any)
+        .select('id, user_id, payment_code, product_name, price, original_price, discount_amount, created_at, status')
+        .or(`coupon_id.eq.${c.id},coupon_code.ilike.${c.code}`)
+        .in('status', ['paid', 'pending_delivery', 'processing', 'delivering', 'completed'])
+        .order('created_at', { ascending: false });
+
+      const usageList = [...(rawUsages || [])];
+      const recordedOrderIds = new Set(usageList.map((u: any) => u.order_id).filter(Boolean));
+
+      // Merge any completed orders with this coupon that were not yet in coupon_usages
+      for (const ord of relatedOrders || []) {
+        if (!recordedOrderIds.has(ord.id)) {
+          const disc = ord.discount_amount || 0;
+          const orig = ord.original_price || (Number(ord.price || 0) + Number(disc));
+          const fin = ord.price;
+          const syntheticUsage = {
+            id: `ord_${ord.id}`,
+            coupon_id: c.id,
+            user_id: ord.user_id,
+            order_id: ord.id,
+            original_amount: orig,
+            discount_amount: disc,
+            final_amount: fin,
+            created_at: ord.created_at,
+          };
+          usageList.push(syntheticUsage);
+
+          // Auto backfill to coupon_usages table in DB
+          (supabase.from('coupon_usages') as any)
+            .insert({
+              coupon_id: c.id,
+              user_id: ord.user_id,
+              order_id: ord.id,
+              original_amount: orig,
+              discount_amount: disc,
+              final_amount: fin,
+              created_at: ord.created_at,
+            })
+            .then(() => {})
+            .catch(() => {});
+        }
+      }
+
       if (usageList.length === 0) {
         setUsages([]);
         return;
@@ -464,18 +510,27 @@ export default function AdminCoupons() {
           ? (supabase.from('profiles') as any).select('id, full_name, email').in('id', userIds)
           : { data: [] },
         orderIds.length
-          ? (supabase.from('orders') as any).select('id, payment_code, product_name').in('id', orderIds)
+          ? (supabase.from('orders') as any).select('id, payment_code, product_name, price, original_price').in('id', orderIds)
           : { data: [] },
       ]);
 
       const profilesMap = new Map((profilesRes.data || []).map((p: any) => [p.id, p]));
       const ordersMap = new Map((ordersRes.data || []).map((o: any) => [o.id, o]));
 
-      const hydrated = usageList.map((u: any) => ({
-        ...u,
-        profiles: profilesMap.get(u.user_id),
-        orders: ordersMap.get(u.order_id),
-      }));
+      const hydrated = usageList.map((u: any) => {
+        const ord: any = ordersMap.get(u.order_id);
+        const orig = Number(u.original_amount) > 0 ? Number(u.original_amount) : Number(ord?.original_price || (Number(ord?.price || 0) + Number(u.discount_amount || 0)));
+        const fin = Number(u.final_amount) > 0 ? Number(u.final_amount) : Number(ord?.price || Math.max(0, orig - Number(u.discount_amount || 0)));
+        return {
+          ...u,
+          original_amount: orig,
+          final_amount: fin,
+          profiles: profilesMap.get(u.user_id),
+          orders: ord,
+        };
+      });
+
+      hydrated.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       setUsages(hydrated);
     } catch (err: any) {

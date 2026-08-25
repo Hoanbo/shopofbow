@@ -6,7 +6,7 @@ import { CheckIcon } from '../components/icons';
 import { mapAuthError } from '../lib/authErrors';
 import newLogo from '../assets/new-logover2.png';
 
-type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'forgot_otp' | 'update_password';
+type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'forgot_otp' | 'update_password' | '2fa';
 
 export default function Auth() {
   const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading, isAdmin } = useAuth();
@@ -15,6 +15,9 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpToken, setOtpToken] = useState('');
+  const [mfaFactorId, setMfaFactorId] = useState('');
+  const [mfaChallengeId, setMfaChallengeId] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -32,10 +35,10 @@ export default function Auth() {
   }, [resendCooldown]);
 
   // Nguồn redirect DUY NHẤT: chỉ chạy khi auth đã load xong VÀ đã có session.
-  // Tuyệt đối KHÔNG redirect khi đang ở các bước khôi phục mật khẩu (forgot / forgot_otp / update_password).
+  // Tuyệt đối KHÔNG redirect khi đang ở các bước khôi phục mật khẩu hoặc đang đợi 2FA.
   useEffect(() => {
     if (loading || !session) return;
-    if (mode === 'forgot' || mode === 'forgot_otp' || mode === 'update_password') return;
+    if (mode === 'forgot' || mode === 'forgot_otp' || mode === 'update_password' || mode === '2fa') return;
 
     const dest = loc.state?.from ?? (isAdmin ? '/admin' : '/');
     nav(dest, { replace: true });
@@ -49,6 +52,23 @@ export default function Auth() {
     setBusy(true);
     try {
       await signIn(email, password);
+      // Kiểm tra xem tài khoản có cài đặt 2FA (MFA) không
+      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const totpFactor = factors?.totp?.find((f) => f.status === 'verified');
+        if (totpFactor) {
+          const { data: challengeData, error: challengeErr } = await supabase.auth.mfa.challenge({
+            factorId: totpFactor.id,
+          });
+          if (challengeErr) throw challengeErr;
+          setMfaFactorId(totpFactor.id);
+          setMfaChallengeId(challengeData.id);
+          setTwoFactorCode('');
+          setMode('2fa');
+          return;
+        }
+      }
     } catch (err) {
       setError(mapAuthError(err, 'signin'));
     } finally {
@@ -185,6 +205,32 @@ export default function Auth() {
     }
   };
 
+  const handleVerify2FA = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!twoFactorCode || twoFactorCode.length < 6) {
+      setError('Vui lòng nhập đủ 6 chữ số từ ứng dụng Authenticator.');
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    setBusy(true);
+    try {
+      const { error: verifyErr } = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: mfaChallengeId,
+        code: twoFactorCode.trim(),
+      });
+      if (verifyErr) throw verifyErr;
+      setSuccess('Xác thực 2 lớp thành công!');
+      const dest = loc.state?.from ?? (isAdmin ? '/admin' : '/');
+      nav(dest, { replace: true });
+    } catch (err: any) {
+      setError('Mã xác thực 2FA không chính xác hoặc đã hết hạn.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     setError(null);
     try {
@@ -237,6 +283,7 @@ export default function Auth() {
             {mode === 'forgot' && 'Quên mật khẩu'}
             {mode === 'forgot_otp' && 'Nhập mã OTP khôi phục'}
             {mode === 'update_password' && 'Đặt lại mật khẩu mới'}
+            {mode === '2fa' && 'Xác thực 2 lớp (2FA)'}
           </h1>
           <p className="mt-1.5 text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
             {mode === 'signin' && 'Đăng nhập để quản lý số dư và lịch sử mua hàng.'}
@@ -245,6 +292,7 @@ export default function Auth() {
             {mode === 'forgot' && 'Nhập email của bạn để nhận mã OTP khôi phục mật khẩu.'}
             {mode === 'forgot_otp' && `Nhập mã OTP 6 số đã được gửi đến ${email}`}
             {mode === 'update_password' && 'Vui lòng nhập mật khẩu mới cho tài khoản của bạn.'}
+            {mode === '2fa' && 'Mở ứng dụng Google Authenticator hoặc Authy để lấy mã 6 chữ số.'}
           </p>
 
           {/* Thanh Tiến Trình 3 Bước cho Quên Mật Khẩu */}
@@ -581,8 +629,49 @@ export default function Auth() {
           </form>
         )}
 
+        {/* Form 2FA (Two-Factor Authentication) */}
+        {mode === '2fa' && (
+          <form onSubmit={handleVerify2FA} className="mt-6 space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 text-center">
+                Mã xác thực 6 chữ số
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                autoFocus
+                required
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="123456"
+                className="h-14 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center text-2xl font-black tracking-widest outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 text-[#0F172A] dark:text-white"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={busy || twoFactorCode.length < 6}
+              className="w-full rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-3 text-sm font-bold text-white shadow-md transition-all duration-300 hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-[1.01] disabled:opacity-60"
+            >
+              {busy ? 'Đang kiểm tra mã...' : 'Xác thực & Đăng nhập'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signin');
+                setError(null);
+                setTwoFactorCode('');
+              }}
+              className="w-full text-center text-xs font-bold text-slate-500 dark:text-slate-400 hover:underline pt-2"
+            >
+              ← Quay lại đăng nhập
+            </button>
+          </form>
+        )}
+
         {/* Divider for Social Login */}
-        {mode !== 'otp' && mode !== 'forgot' && mode !== 'forgot_otp' && mode !== 'update_password' && (
+        {mode !== 'otp' && mode !== 'forgot' && mode !== 'forgot_otp' && mode !== 'update_password' && mode !== '2fa' && (
           <>
             <div className="relative mt-6">
               <div className="absolute inset-0 flex items-center">
@@ -623,7 +712,7 @@ export default function Auth() {
         )}
 
         {/* Footer Toggle Mode Links */}
-        {mode !== 'otp' && mode !== 'forgot' && mode !== 'forgot_otp' && mode !== 'update_password' && (
+        {mode !== 'otp' && mode !== 'forgot' && mode !== 'forgot_otp' && mode !== 'update_password' && mode !== '2fa' && (
           <div className="mt-6 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
             {mode === 'signin' ? (
               <>

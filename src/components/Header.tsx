@@ -4,7 +4,6 @@ import SearchBar from './SearchBar';
 import { SearchIcon, AppIcon, HeadsetIcon, SparkIcon } from './icons';
 import newLogo from '../assets/new-logover2.png';
 import { useAuth } from '../context/AuthContext';
-import { useFavorites } from '../context/FavoritesContext';
 import { supabase } from '../lib/supabase';
 import { useRealtimeEvent } from '../services/realtime';
 import { resolveNotificationDestination } from '../utils/notificationRouter';
@@ -25,7 +24,6 @@ interface HeaderNotification {
 
 export default function Header() {
   const { session, loading, balance, signOut, isAdmin, isCtv } = useAuth();
-  const { favoriteProducts } = useFavorites();
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
@@ -317,7 +315,7 @@ export default function Header() {
 
                 {/* Notifications Dropdown Panel */}
                 {showNotifMenu && (
-                  <div className="absolute right-0 top-[calc(100%+12px)] z-50 w-80 sm:w-96 rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-3 shadow-2xl text-left animate-fade-up">
+                  <div className="fixed inset-x-3 top-[60px] sm:absolute sm:inset-x-auto sm:right-0 sm:top-[calc(100%+12px)] z-50 sm:w-96 rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-3 shadow-2xl text-left animate-fade-up">
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 px-2 pb-2.5 pt-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-black text-[#0F172A] dark:text-white">Thông báo</span>
@@ -432,7 +430,7 @@ export default function Header() {
                   </button>
 
                   {/* Dropdown Menu */}
-                  <div className={`absolute right-0 top-[calc(100%+8px)] z-50 w-60 sm:w-64 rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#1e293b] p-2 shadow-hero text-left animate-fade-up ${showUserMenu ? 'block' : 'hidden'}`}>
+                  <div className={`absolute right-0 top-[calc(100%+8px)] z-50 w-60 sm:w-64 max-w-[calc(100vw-24px)] rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#1e293b] p-2 shadow-hero text-left animate-fade-up ${showUserMenu ? 'block' : 'hidden'}`}>
                     <div className="px-3.5 py-2.5 border-b border-slate-100 dark:border-slate-800">
                       <div className="flex items-center justify-between gap-1">
                         <span className="block truncate text-xs font-black text-[#0F172A] dark:text-white">
@@ -453,91 +451,15 @@ export default function Header() {
                     </div>
 
                     <div className="py-1.5 space-y-0.5">
-                      {isAdmin && (
-                        <Link
-                          to="/admin"
-                          onClick={() => setShowUserMenu(false)}
-                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-black text-[#2563EB] dark:text-[#35A8FF] bg-blue-50/60 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition mb-1"
-                        >
-                          <svg className="h-4 w-4 text-[#2563EB] dark:text-[#35A8FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                          </svg>
-                          🛡️ Trang quản trị Admin
-                        </Link>
-                      )}
-
                       <Link
-                        to="/dashboard?tab=profile"
+                        to="/dashboard"
                         onClick={() => setShowUserMenu(false)}
                         className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-[#0F172A] dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition"
                       >
                         <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                         </svg>
-                        👤 Hồ sơ của tôi
-                      </Link>
-                      <Link
-                        to="/dashboard?tab=orders"
-                        onClick={() => setShowUserMenu(false)}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-[#0F172A] dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition"
-                      >
-                        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                        📋 Lịch sử đơn hàng
-                      </Link>
-
-                      {!isAdmin && (
-                        <Link
-                          to="/dashboard?tab=affiliate"
-                          onClick={() => setShowUserMenu(false)}
-                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition"
-                        >
-                          <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                          🤝 Giới thiệu bạn bè
-                        </Link>
-                      )}
-
-                      <Link
-                        to="/dashboard?tab=tickets"
-                        onClick={() => setShowUserMenu(false)}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-[#0F172A] dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition"
-                      >
-                        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                        </svg>
-                        🎫 Yêu cầu hỗ trợ
-                      </Link>
-
-                      <Link
-                        to="/dashboard?tab=wallet"
-                        onClick={() => setShowUserMenu(false)}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-[#0F172A] dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition"
-                      >
-                        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                        </svg>
-                        💳 Ví tiền & Nạp số dư
-                      </Link>
-
-                      <Link
-                        to="/dashboard?tab=favorites"
-                        onClick={() => setShowUserMenu(false)}
-                        className="flex w-full items-center justify-between gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-[#0F172A] dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                          </svg>
-                          💙 Sản phẩm yêu thích
-                        </div>
-                        {favoriteProducts.length > 0 && (
-                          <span className="rounded-full bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/50 px-2 py-0.5 text-[10px] font-black text-rose-500">
-                            {favoriteProducts.length}
-                          </span>
-                        )}
+                        🏠 Trang tổng quan
                       </Link>
 
                       <Link
@@ -551,6 +473,19 @@ export default function Header() {
                         </svg>
                         ⚙️ Cài đặt tài khoản
                       </Link>
+
+                      {isAdmin && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-black text-[#2563EB] dark:text-[#35A8FF] bg-blue-50/60 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition mt-1"
+                        >
+                          <svg className="h-4 w-4 text-[#2563EB] dark:text-[#35A8FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                          🛡️ Quản trị Admin
+                        </Link>
+                      )}
 
                       <button
                         onClick={() => {

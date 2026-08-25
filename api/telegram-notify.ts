@@ -352,6 +352,25 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
   }
 
   try {
+    // 1. Gỡ tổ hợp nút trên tin nhắn thanh toán trước đó (nếu có) khi đơn chuyển sang Đã giao / Hoàn tiền / Đã hủy
+    if (['order_completed', 'order_refunded', 'order_cancelled'].includes(orderEvent) && (order as any).tg_message_id) {
+      try {
+        const TG_EDIT_MARKUP = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageReplyMarkup`;
+        await fetch(TG_EDIT_MARKUP, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: TELEGRAM_CHAT_ID,
+            message_id: (order as any).tg_message_id,
+            reply_markup: { inline_keyboard: [] },
+          }),
+        });
+      } catch (editErr) {
+        console.warn('[telegram-notify] Không thể gỡ nút trên tin nhắn cũ:', editErr);
+      }
+    }
+
+    // 2. Gửi tin nhắn thông báo mới
     const res = await fetch(TELEGRAM_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -371,7 +390,8 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
     }
 
     const messageId = data.result?.message_id;
-    if (messageId && orderEvent === 'new_order') {
+    // Lưu ID tin nhắn có nút bấm (đơn mới bằng ví hoặc thanh toán SePay thành công) để gỡ nút sau này
+    if (messageId && (orderEvent === 'new_order' || orderEvent === 'order_paid' || orderEvent === 'order_processing')) {
       try {
         await supabase.from('orders').update({ tg_message_id: messageId }).eq('id', (order as any).id);
       } catch (err) {

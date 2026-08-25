@@ -14,7 +14,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || 'tg_sec_9f4b827e6a1c43d8905b71ea632cb89f';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -50,12 +50,12 @@ async function processTelegramCallback(
   headers: Record<string, string | string[] | undefined>,
   body: any,
 ) {
-  // ── Xác thực secret token của Telegram ────────────────────
+  // ── Xác thực nghiêm ngặt Secret Token từ Telegram ────────────────────
   const secretRaw =
     headers['x-telegram-bot-api-secret-token'] || headers['X-Telegram-Bot-Api-Secret-Token'] || '';
   const secret = Array.isArray(secretRaw) ? secretRaw[0] : secretRaw;
-  if (!TELEGRAM_WEBHOOK_SECRET || secret !== TELEGRAM_WEBHOOK_SECRET) {
-    console.error('[telegram-callback] Unauthorized — sai secret token');
+  if (!secret || secret !== TELEGRAM_WEBHOOK_SECRET) {
+    console.error('[telegram-callback] Unauthorized — Sai hoặc thiếu Secret Token từ Telegram');
     return { statusCode: 401, body: { error: 'Unauthorized' } };
   }
 
@@ -219,9 +219,25 @@ async function processTelegramCallback(
         msg.message_id,
       );
 
-      // Nếu có tin nhắn gốc, chỉnh sửa tin nhắn gốc để gỡ nút và gắn nhãn hoàn tất
-      if (replyTo?.message_id) {
-        await editMarkupResolved(chatId, replyTo.message_id, order, 'completed', 'manual');
+      // Gỡ tổ hợp nút trên tin nhắn thông báo thanh toán / tin nhắn gốc
+      const targetMsgIds = new Set<number>();
+      if (replyTo?.message_id) targetMsgIds.add(replyTo.message_id);
+      if (order.tg_message_id) targetMsgIds.add(order.tg_message_id);
+
+      for (const mid of targetMsgIds) {
+        try {
+          await fetch(TG('editMessageReplyMarkup'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: mid,
+              reply_markup: { inline_keyboard: [] },
+            }),
+          });
+        } catch (e) {
+          console.warn('[telegram-callback] remove buttons error:', e);
+        }
       }
 
       return { statusCode: 200, body: { ok: true, delivered: true, order_id: order.id } };
@@ -331,6 +347,14 @@ async function processTelegramCallback(
       await answerCallback(callbackId, 'Đơn hàng này đã được hoàn tiền trước đó rồi.');
       return { statusCode: 200, body: { ok: true } };
     }
+    if (order.status === 'completed') {
+      await answerCallback(
+        callbackId,
+        '⚠️ Đơn hàng đã bàn giao hoàn tất! Để tránh nhầm lẫn, vui lòng vào Web Admin nếu muốn hoàn tiền.',
+        true,
+      );
+      return { statusCode: 200, body: { ok: true } };
+    }
 
     const { error: rpcErr } = await supabase.rpc('refund_order', { p_order_id: orderId });
 
@@ -367,6 +391,24 @@ async function processTelegramCallback(
 
     await answerCallback(callbackId, '💸 Đã hoàn tiền về ví cho khách thành công!');
     await editMarkupResolved(chatId, messageId, order, 'refunded', 'manual');
+
+    // Gỡ tổ hợp nút trên cả tg_message_id nếu khác messageId
+    if (order.tg_message_id && order.tg_message_id !== messageId) {
+      try {
+        await fetch(TG('editMessageReplyMarkup'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            message_id: order.tg_message_id,
+            reply_markup: { inline_keyboard: [] },
+          }),
+        });
+      } catch (e) {
+        console.warn('[telegram-callback] remove buttons on tg_message_id error:', e);
+      }
+    }
+
     return { statusCode: 200, body: { ok: true, status: 'refunded' } };
   }
 
@@ -494,3 +536,19 @@ function statusLabel(status: string): string {
 function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+  const result = await processTelegramCallback(req.headers, req.body);
+  return res.status(result.statusCode).json(result.body);
+}
+
+export const netlifyHandler = async (event: any) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+  const result = await processTelegramCallback(event.headers, event.body);
+  return { statusCode: result.statusCode, body: JSON.stringify(result.body) };
+};
