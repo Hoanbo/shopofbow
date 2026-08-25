@@ -248,29 +248,47 @@ async function processTelegramNotify(headers: Record<string, string | string[] |
 
   if (orderEvent === 'new_order') {
     const isQrPending = (order as any).status === 'pending_payment';
-    text = `🔔 <b>ĐƠN HÀNG MỚI</b>\n\n` +
-      `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
-      `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
-      `📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n` +
-      `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
-      `📋 <b>Gói:</b> ${escapeHtml((order as any).plan_label || 'N/A')}\n` +
-      `💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n` +
-      `💳 <b>Thanh toán:</b> ${isQrPending ? '⏳ Chuyển khoản ngân hàng' : '✅ Đã trừ tiền từ Ví'}\n` +
-      `📝 <b>Ghi chú:</b> ${(order as any).notes ? escapeHtml((order as any).notes) : '—'}\n` +
-      `🕐 <b>Thời gian:</b> ${dateStr}\n\n` +
-      `⚡ <b>BÀN GIAO 1-CHẠM:</b> <i>Reply tin nhắn này kèm nội dung tài khoản để giao ngay cho khách!</i>`;
+    if (isQrPending) {
+      text = `🔔 <b>ĐƠN HÀNG MỚI (CHỜ THANH TOÁN)</b>\n\n` +
+        `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
+        `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+        `📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n` +
+        `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
+        `📋 <b>Gói:</b> ${escapeHtml((order as any).plan_label || 'N/A')}\n` +
+        `💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n` +
+        `💳 <b>Thanh toán:</b> ⏳ Chờ chuyển khoản ngân hàng\n` +
+        `📝 <b>Ghi chú:</b> ${(order as any).notes ? escapeHtml((order as any).notes) : '—'}\n` +
+        `🕐 <b>Thời gian:</b> ${dateStr}\n\n` +
+        `⏳ <i>Đơn hàng đang chờ khách quét mã VietQR. Hệ thống sẽ tự động thông báo & mở nút bàn giao ngay khi nhận được tiền từ SePay!</i>`;
 
-    replyMarkup = {
-      inline_keyboard: [
-        [
-          { text: '⚙️ Đang xử lý', callback_data: `processing:${(order as any).id}` },
-          { text: '🎁 Bàn giao', callback_data: `deliver_guide:${(order as any).id}` },
+      // KHÔNG CUNG CẤP NÚT BÀN GIAO / XỬ LÝ / HOÀN TIỀN CHO ĐƠN CHƯA THANH TOÁN
+      replyMarkup = undefined;
+    } else {
+      // Đơn thanh toán bằng Ví (đã trừ tiền thành công)
+      text = `🔔 <b>ĐƠN HÀNG MỚI (ĐÃ TRỪ TIỀN VÍ)</b>\n\n` +
+        `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +
+        `👤 <b>Khách hàng:</b> ${escapeHtml(customerName)}\n` +
+        `📧 <b>Email:</b> ${escapeHtml(customerEmail)}\n` +
+        `🛍 <b>Sản phẩm:</b> ${escapeHtml((order as any).product_name || 'N/A')}\n` +
+        `📋 <b>Gói:</b> ${escapeHtml((order as any).plan_label || 'N/A')}\n` +
+        `💰 <b>Giá trị:</b> ${vnd((order as any).price)}\n` +
+        `💳 <b>Thanh toán:</b> ✅ Đã trừ tiền từ Ví\n` +
+        `📝 <b>Ghi chú:</b> ${(order as any).notes ? escapeHtml((order as any).notes) : '—'}\n` +
+        `🕐 <b>Thời gian:</b> ${dateStr}\n\n` +
+        `⚡ <b>BÀN GIAO 1-CHẠM:</b> <i>Reply tin nhắn này kèm nội dung tài khoản để giao ngay cho khách!</i>`;
+
+      replyMarkup = {
+        inline_keyboard: [
+          [
+            { text: '⚙️ Đang xử lý', callback_data: `processing:${(order as any).id}` },
+            { text: '🎁 Bàn giao', callback_data: `deliver_guide:${(order as any).id}` },
+          ],
+          [
+            { text: '💸 Hoàn tiền ví', callback_data: `refund:${(order as any).id}` },
+          ],
         ],
-        [
-          { text: '💸 Hoàn tiền ví', callback_data: `refund:${(order as any).id}` },
-        ],
-      ],
-    };
+      };
+    }
   } else if (orderEvent === 'order_paid') {
     text = `🟢 <b>ĐƠN HÀNG ĐÃ THANH TOÁN THÀNH CÔNG</b>\n\n` +
       `📦 <b>Mã đơn:</b> <code>#${escapeHtml((order as any).payment_code || 'N/A')}</code>\n` +

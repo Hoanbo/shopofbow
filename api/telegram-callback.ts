@@ -143,6 +143,15 @@ async function processTelegramCallback(
         return { statusCode: 200, body: { ok: true, already_completed: true } };
       }
 
+      if (order.status === 'pending_payment') {
+        await sendTelegramMessage(
+          chatId,
+          `⚠️ <b>ĐƠN HÀNG #${order.payment_code} CHƯA THANH TOÁN!</b>\nKhách hàng chưa chuyển khoản tiền. Vui lòng đợi khách thanh toán xong trước khi bàn giao!`,
+          msg.message_id,
+        );
+        return { statusCode: 200, body: { ok: true, not_paid: true } };
+      }
+
       // Cập nhật trạng thái Hoàn thành + lưu thông tin tài khoản
       const { error: updErr } = await supabase
         .from('orders')
@@ -258,6 +267,16 @@ async function processTelegramCallback(
   if (findErr || !order) {
     await answerCallback(callbackId, 'Không tìm thấy đơn hàng.');
     return { statusCode: 200, body: { ok: true } };
+  }
+
+  // Chặn thao tác xử lý / bàn giao / hoàn tiền đối với đơn chưa thanh toán
+  if (order.status === 'pending_payment' && action !== 'cancel') {
+    await answerCallback(
+      callbackId,
+      '⚠️ Đơn hàng này CHƯA THANH TOÁN (đang chờ chuyển khoản). Không thể thao tác!',
+      true,
+    );
+    return { statusCode: 200, body: { ok: true, not_paid: true } };
   }
 
   const siteUrl = process.env.VITE_APP_URL || process.env.VITE_SITE_URL || 'https://shopofbow.vercel.app';
