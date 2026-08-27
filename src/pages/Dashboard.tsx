@@ -746,7 +746,7 @@ export default function Dashboard() {
   // Không redirect trong lúc auth đang loading -> tránh F5 bị đá ra /login.
   useEffect(() => {
     if (!authLoading && !session) {
-      nav('/login', { replace: true });
+      nav('/', { replace: true });
     }
   }, [authLoading, session, nav]);
 

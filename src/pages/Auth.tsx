@@ -11,7 +11,7 @@ import { verifyAndConsumeBackupCode } from '../utils/backupCodes';
 type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'forgot_otp' | 'update_password' | '2fa';
 
 export default function Auth() {
-  const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading, checkMfaLevel } = useAuth();
+  const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading, mfaPending, checkMfaLevel } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,10 +39,10 @@ export default function Auth() {
   }, [resendCooldown]);
 
   // Nguồn redirect DUY NHẤT: Kiểm tra xem tài khoản có cài đặt 2FA (MFA) không
-  // Bắt buộc xác thực 2FA cho cả đăng nhập Email/Password lẫn đăng nhập qua Google OAuth
+  // Tự động đồng bộ đa tab Realtime: Nếu tab khác đã nhập 2FA thành công -> Tab này lập tức chuyển vào Homepage
   useEffect(() => {
     if (loading || !session) return;
-    if (mode === 'forgot' || mode === 'forgot_otp' || mode === 'update_password' || mode === '2fa') return;
+    if (mode === 'forgot' || mode === 'forgot_otp' || mode === 'update_password') return;
 
     let isSubscribed = true;
 
@@ -50,6 +50,7 @@ export default function Auth() {
       try {
         const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+          // Vẫn còn yêu cầu 2FA
           const { data: factors } = await supabase.auth.mfa.listFactors();
           const totpFactor = factors?.totp?.find((f) => f.status === 'verified');
           if (totpFactor && isSubscribed) {
@@ -64,7 +65,6 @@ export default function Auth() {
               return;
             }
           }
-          // Bắt buộc dừng lại ở chế độ 2FA, không bao giờ được redirect nếu tài khoản có 2FA
           if (isSubscribed) {
             setMode('2fa');
           }
@@ -75,7 +75,8 @@ export default function Auth() {
         return;
       }
 
-      if (isSubscribed) {
+      // Nếu đã vượt qua 2FA (hoặc không có 2FA, hoặc tab bên cạnh đã verify xong) -> Chuyển vào Homepage
+      if (isSubscribed && !mfaPending) {
         const dest = loc.state?.from ?? '/';
         nav(dest, { replace: true });
       }
@@ -86,7 +87,7 @@ export default function Auth() {
     return () => {
       isSubscribed = false;
     };
-  }, [session, loading, nav, loc.state?.from, mode]);
+  }, [session, loading, mfaPending, nav, loc.state?.from, mode]);
 
   // Handler: Đăng nhập
   const handleSignIn = async (e: FormEvent) => {

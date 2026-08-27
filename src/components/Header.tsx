@@ -486,11 +486,12 @@ export default function Header() {
                       )}
 
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           setShowUserMenu(false);
-                          signOut();
+                          await signOut();
+                          nav('/', { replace: true });
                         }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition border-t border-slate-100 dark:border-slate-800 mt-1.5 pt-2"
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 transition border-t border-slate-100 dark:border-slate-800 mt-1.5 pt-2 cursor-pointer"
                       >
                         <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
