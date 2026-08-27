@@ -34,6 +34,9 @@ function formatRelativeTime(dateStr: string): string {
   return d.toLocaleDateString('vi-VN');
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUuid = (id?: string | null): boolean => !!id && UUID_REGEX.test(id);
+
 export default function ProductReviewsSection({
   productId,
 }: ProductReviewsSectionProps) {
@@ -43,6 +46,13 @@ export default function ProductReviewsSection({
   const [sortBy, setSortBy] = useState<'newest' | 'highest' | 'lowest'>('newest');
 
   const fetchReviews = async () => {
+    // Nếu productId không phải UUID hợp lệ (ví dụ fallback mock 'ai-2', 'ai-3'), không query db để tránh 400 Bad Request
+    if (!productId || !isValidUuid(productId)) {
+      setReviews([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const { data: rawReviews, error } = await (supabase
@@ -72,14 +82,19 @@ export default function ProductReviewsSection({
 
       setReviews(enriched);
     } catch (err) {
-      console.error('Fetch reviews error:', err);
+      console.warn('[ProductReviewsSection] Fetch reviews notice:', err);
+      setReviews([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!productId) return;
+    if (!productId || !isValidUuid(productId)) {
+      setReviews([]);
+      setLoading(false);
+      return;
+    }
     fetchReviews();
 
     const channel = supabase

@@ -5,6 +5,11 @@ import { useToast } from '../Toast';
 import TwoFactorModal from './TwoFactorModal';
 import { uploadImage } from '../../data/admin';
 import {
+  getBackupCodesStats,
+  generateNewBackupCodes,
+  type BackupCodeItem,
+} from '../../utils/backupCodes';
+import {
   getUserDevices,
   removeDeviceSession,
   signOutOtherDevices,
@@ -15,6 +20,33 @@ import {
 // ============================================================================
 // SVG LINE ICONS (Chuẩn Vector Outline Mỏng, Tinh Tế, Đồng Bộ 100%)
 // ============================================================================
+function GoogleSvg({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+    </svg>
+  );
+}
+
+function LinkSvg({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+    </svg>
+  );
+}
+
+function ArrowPathSvg({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+    </svg>
+  );
+}
+
 function ShieldCheckSvg({ className = 'h-5 w-5' }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -282,15 +314,111 @@ export default function UserSettingsAndSecurityTab() {
 
   // Backup codes security challenge
   const [showBackupPasswordChallenge, setShowBackupPasswordChallenge] = useState(false);
+  const [backupActionType, setBackupActionType] = useState<'view' | 'regenerate'>('view');
   const [challengePassword, setChallengePassword] = useState('');
+  const [challengeTotpCode, setChallengeTotpCode] = useState('');
+  const [googleChallengeMethod, setGoogleChallengeMethod] = useState<'totp' | 'email'>('totp');
+  const [emailOtpCode, setEmailOtpCode] = useState('');
+  const [sendingEmailOtp, setSendingEmailOtp] = useState(false);
+  const [emailOtpCooldown, setEmailOtpCooldown] = useState(0);
   const [showChallengePassword, setShowChallengePassword] = useState(false);
   const [verifyingChallengePw, setVerifyingChallengePw] = useState(false);
   const [challengeError, setChallengeError] = useState<string | null>(null);
 
+  // Countdown timer cho OTP Email
+  useEffect(() => {
+    if (emailOtpCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setEmailOtpCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [emailOtpCooldown]);
+
   // Backup codes modal
   const [showBackupCodesModal, setShowBackupCodesModal] = useState(false);
-  const [revealedBackupCodes, setRevealedBackupCodes] = useState<string[]>([]);
+  const [revealedBackupCodes, setRevealedBackupCodes] = useState<BackupCodeItem[]>([]);
   const [copiedBackupCodes, setCopiedBackupCodes] = useState(false);
+  const [copiedSingleCode, setCopiedSingleCode] = useState<string | null>(null);
+  const [showRegenerateConfirmModal, setShowRegenerateConfirmModal] = useState(false);
+
+  // Backup codes statistics
+  const [backupStats, setBackupStats] = useState<{ remaining: number; total: number; codes: BackupCodeItem[] }>({
+    remaining: 10,
+    total: 10,
+    codes: [],
+  });
+
+  // ----------------------------------------------------
+  // KIỂM TRA TRẠNG THÁI TÀI KHOẢN GOOGLE & MẬT KHẨU
+  // ----------------------------------------------------
+  const identities = session?.user?.identities || [];
+  const isGoogleLinked =
+    identities.some((i) => i.provider === 'google') ||
+    session?.user?.app_metadata?.provider === 'google' ||
+    session?.user?.app_metadata?.providers?.includes('google') ||
+    false;
+
+  const googleIdentity = identities.find((i) => i.provider === 'google');
+  const googleEmail =
+    googleIdentity?.identity_data?.email ||
+    (session?.user?.app_metadata?.provider === 'google' ? session?.user?.email : null);
+
+  const [hasCustomPassword, setHasCustomPassword] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    if (session?.user?.id && localStorage.getItem(`bow_has_pwd_${session.user.id}`) === 'true') {
+      return true;
+    }
+    if (session?.user?.app_metadata?.provider === 'email') return true;
+    if (session?.user?.user_metadata?.has_custom_password) return true;
+    return false;
+  });
+
+  const [linkingGoogle, setLinkingGoogle] = useState(false);
+
+  const handleLinkGoogleAccount = async () => {
+    setLinkingGoogle(true);
+    try {
+      const { error } = await supabase.auth.linkIdentity({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard?tab=settings`,
+        },
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      console.error('Error linking Google account:', err);
+      toast.error(err.message || 'Không thể liên kết tài khoản Google.');
+      setLinkingGoogle(false);
+    }
+  };
+
+  const handleSendEmailOtp = async () => {
+    if (!session?.user?.email) return;
+    setSendingEmailOtp(true);
+    setChallengeError(null);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: session.user.email,
+        options: {
+          shouldCreateUser: false,
+        },
+      });
+      if (error) throw error;
+      toast.success(`Đã gửi mã xác nhận 6 số đến ${session.user.email}`);
+      setEmailOtpCooldown(60);
+    } catch (err: any) {
+      console.error('Error sending OTP:', err);
+      setChallengeError(err.message || 'Không thể gửi mã OTP về email. Vui lòng thử lại.');
+    } finally {
+      setSendingEmailOtp(false);
+    }
+  };
+
+  const refreshBackupCodesStats = useCallback(() => {
+    if (!session?.user?.id) return;
+    const stats = getBackupCodesStats(session.user.id);
+    setBackupStats(stats);
+  }, [session?.user?.id]);
 
   const fetchMfaFactors = useCallback(async () => {
     if (!session?.user?.id) return;
@@ -300,12 +428,13 @@ export default function UserSettingsAndSecurityTab() {
       if (!error && data) {
         setMfaFactors(data.totp || []);
       }
+      refreshBackupCodesStats();
     } catch (err) {
       console.warn('Error fetching MFA factors:', err);
     } finally {
       setLoadingMfa(false);
     }
-  }, [session?.user?.id]);
+  }, [session?.user?.id, refreshBackupCodesStats]);
 
   useEffect(() => {
     fetchMfaFactors();
@@ -333,32 +462,19 @@ export default function UserSettingsAndSecurityTab() {
     }
   };
 
-  const generateDeterministicBackupCodes = (userId: string) => {
-    const localSaved = localStorage.getItem(`bow_backup_${userId}`);
-    if (localSaved) {
-      try {
-        const parsed = JSON.parse(localSaved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch {
-        // Fallback
-      }
-    }
-
-    const newCodes = Array.from({ length: 5 }, () =>
-      Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
-    );
-    localStorage.setItem(`bow_backup_${userId}`, JSON.stringify(newCodes));
-    return newCodes;
+  const handleOpenBackupChallenge = (action: 'view' | 'regenerate') => {
+    setBackupActionType(action);
+    setChallengePassword('');
+    setChallengeTotpCode('');
+    setEmailOtpCode('');
+    setChallengeError(null);
+    setShowBackupPasswordChallenge(true);
   };
 
   const handleVerifyPasswordForBackupCodes = async (e: FormEvent) => {
     e.preventDefault();
-    if (!challengePassword) {
-      setChallengeError('Vui lòng nhập mật khẩu tài khoản.');
-      return;
-    }
-    if (!session?.user?.email) {
-      setChallengeError('Không xác định được email người dùng.');
+    if (!session?.user?.email || !session?.user?.id) {
+      setChallengeError('Không xác định được người dùng.');
       return;
     }
 
@@ -366,23 +482,63 @@ export default function UserSettingsAndSecurityTab() {
     setVerifyingChallengePw(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: session.user.email,
-        password: challengePassword,
-      });
-
-      if (error) {
-        throw new Error('Mật khẩu tài khoản không đúng. Vui lòng thử lại.');
+      if (hasCustomPassword) {
+        if (!challengePassword) {
+          throw new Error('Vui lòng nhập mật khẩu tài khoản.');
+        }
+        const { error } = await supabase.auth.signInWithPassword({
+          email: session.user.email,
+          password: challengePassword,
+        });
+        if (error) throw new Error('Mật khẩu tài khoản không đúng. Vui lòng thử lại.');
+      } else if (googleChallengeMethod === 'totp') {
+        if (!challengeTotpCode || challengeTotpCode.length < 6) {
+          throw new Error('Vui lòng nhập đủ 6 số từ Google Authenticator.');
+        }
+        if (verifiedFactor) {
+          const { data: cData, error: cErr } = await supabase.auth.mfa.challenge({
+            factorId: verifiedFactor.id,
+          });
+          if (cErr) throw cErr;
+          const { error: vErr } = await supabase.auth.mfa.verify({
+            factorId: verifiedFactor.id,
+            challengeId: cData.id,
+            code: challengeTotpCode.trim(),
+          });
+          if (vErr) throw new Error('Mã xác thực không đúng hoặc đã hết hạn.');
+        }
+      } else {
+        // googleChallengeMethod === 'email'
+        if (!emailOtpCode || emailOtpCode.trim().length < 6) {
+          throw new Error('Vui lòng nhập đủ 6 chữ số OTP nhận từ email.');
+        }
+        const { error: vErr } = await supabase.auth.verifyOtp({
+          email: session.user.email,
+          token: emailOtpCode.trim(),
+          type: 'email',
+        });
+        if (vErr) throw new Error('Mã OTP email không đúng hoặc đã hết hạn.');
       }
 
-      const codes = generateDeterministicBackupCodes(session.user.id);
-      setRevealedBackupCodes(codes);
+      if (backupActionType === 'regenerate') {
+        const newCodes = generateNewBackupCodes(session.user.id);
+        setRevealedBackupCodes(newCodes);
+        refreshBackupCodesStats();
+        toast.success('Đã tạo mới thành công 10 mã dự phòng 2FA!');
+      } else {
+        const stats = getBackupCodesStats(session.user.id);
+        setRevealedBackupCodes(stats.codes);
+        refreshBackupCodesStats();
+        toast.success('Xác thực danh tính thành công!');
+      }
+
       setShowBackupPasswordChallenge(false);
       setChallengePassword('');
+      setChallengeTotpCode('');
+      setEmailOtpCode('');
       setShowBackupCodesModal(true);
-      toast.success('Xác thực danh tính thành công!');
     } catch (err: any) {
-      setChallengeError(err.message || 'Mật khẩu không chính xác.');
+      setChallengeError(err.message || 'Xác thực không thành công.');
     } finally {
       setVerifyingChallengePw(false);
     }
@@ -390,16 +546,29 @@ export default function UserSettingsAndSecurityTab() {
 
   const handleCopyAllBackupCodes = () => {
     if (revealedBackupCodes.length === 0) return;
-    const content = revealedBackupCodes.join('\n');
+    const content = revealedBackupCodes
+      .filter((c) => !c.used)
+      .map((c) => c.code)
+      .join('\n');
     navigator.clipboard.writeText(content);
     setCopiedBackupCodes(true);
-    toast.success('Đã sao chép 5 mã sao lưu dự phòng!');
+    toast.success('Đã sao chép các mã dự phòng khả dụng!');
     setTimeout(() => setCopiedBackupCodes(false), 2000);
+  };
+
+  const handleCopySingleCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedSingleCode(code);
+    toast.success(`Đã sao chép mã: ${code}`);
+    setTimeout(() => setCopiedSingleCode(null), 2000);
   };
 
   const handleDownloadBackupTxt = () => {
     if (revealedBackupCodes.length === 0) return;
-    const textContent = `MÃ SAO LƯU DỰ PHÒNG 2FA - SHOP OF BOW\nTài khoản: ${session?.user?.email}\nNgày xuất mã: ${new Date().toLocaleString('vi-VN')}\n\nDANH SÁCH MÃ DỰ PHÒNG:\n${revealedBackupCodes.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n\n* Lưu ý: Mỗi mã chỉ có hiệu lực sử dụng 1 lần khi không thể truy cập Google Authenticator.`;
+    const remainingCount = revealedBackupCodes.filter((c) => !c.used).length;
+    const textContent = `MÃ SAO LƯU DỰ PHÒNG 2FA - SHOP OF BOW\nTài khoản: ${session?.user?.email}\nNgày xuất mã: ${new Date().toLocaleString('vi-VN')}\nTrạng thái: Còn ${remainingCount}/${revealedBackupCodes.length} mã khả dụng\n\nDANH SÁCH MÃ DỰ PHÒNG (MỖI MÃ DÙNG 1 LẦN DUY NHẤT):\n${revealedBackupCodes
+      .map((c, i) => `${i + 1}. ${c.code} ${c.used ? `[ĐÃ SỬ DỤNG - ${new Date(c.used_at || '').toLocaleDateString('vi-VN')}]` : '[KHẢ DỤNG]'}`)
+      .join('\n')}\n\n* Lưu ý quan trọng: Mỗi mã dự phòng là phương án cứu hộ duy nhất chỉ dùng được 1 lần khi bạn không thể sử dụng ứng dụng Google Authenticator.`;
     const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -485,7 +654,7 @@ export default function UserSettingsAndSecurityTab() {
     }
   };
 
-  const handleUpdateNewPassword = async (e: FormEvent) => {
+  const handleSetOrUpdatePassword = async (e: FormEvent) => {
     e.preventDefault();
     setPwError(null);
     setPwSuccess(null);
@@ -494,7 +663,7 @@ export default function UserSettingsAndSecurityTab() {
       setPwError('Mật khẩu mới phải có tối thiểu 6 ký tự.');
       return;
     }
-    if (newPassword === currentPassword) {
+    if (hasCustomPassword && newPassword === currentPassword) {
       setPwError('Mật khẩu mới không được trùng với mật khẩu hiện tại.');
       return;
     }
@@ -507,11 +676,20 @@ export default function UserSettingsAndSecurityTab() {
     try {
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
+        data: { has_custom_password: true },
       });
 
       if (error) throw error;
 
-      toast.success('Đổi mật khẩu thành công!');
+      if (session?.user?.id) {
+        localStorage.setItem(`bow_has_pwd_${session.user.id}`, 'true');
+      }
+      setHasCustomPassword(true);
+      toast.success(
+        hasCustomPassword
+          ? 'Đổi mật khẩu thành công!'
+          : 'Thiết lập mật khẩu riêng thành công! Bây giờ bạn có thể đăng nhập bằng cả Google và Email/Mật khẩu.'
+      );
       setPwSuccess('Mật khẩu mới đã được cập nhật an toàn.');
       setCurrentPassword('');
       setNewPassword('');
@@ -785,32 +963,61 @@ export default function UserSettingsAndSecurityTab() {
               </div>
             ) : is2FaEnabled ? (
               <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-2">
-                  <div className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400">
-                    <ShieldCheckSvg className="h-5 w-5 shrink-0" />
-                    <h4 className="text-xs font-bold text-[#0F172A] dark:text-white">
-                      Tài khoản đang được bảo vệ an toàn tối đa
-                    </h4>
+                <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                      <ShieldCheckSvg className="h-5 w-5 shrink-0" />
+                      <h4 className="text-xs font-bold text-[#0F172A] dark:text-white">
+                        Tài khoản đang được bảo vệ an toàn tối đa
+                      </h4>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border shrink-0 ${
+                          backupStats.remaining > 3
+                            ? 'bg-blue-50 dark:bg-blue-950/60 text-[#2563EB] dark:text-[#38BDF8] border-blue-200/80 dark:border-blue-800/80'
+                            : backupStats.remaining > 0
+                            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200/80 dark:border-amber-800/80'
+                            : 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border-rose-200/80 dark:border-rose-800/80'
+                        }`}
+                      >
+                        <KeySvg className="h-3 w-3" />
+                        Còn {backupStats.remaining}/{backupStats.total} mã dự phòng
+                      </span>
+                    </div>
                   </div>
+
                   <p className="text-xs font-medium text-slate-400 leading-relaxed pl-7">
-                    Mỗi lần đăng nhập, hệ thống sẽ yêu cầu nhập mã 6 số từ ứng dụng Google Authenticator để ngăn chặn hoàn toàn truy cập trái phép.
+                    Mỗi lần đăng nhập, bạn cần nhập mã 6 số từ Google Authenticator. Nếu mất điện thoại, bạn có thể dùng 1 trong {backupStats.remaining} mã dự phòng còn lại để cứu hộ.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <div className="grid grid-cols-3 gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => setShowBackupPasswordChallenge(true)}
-                    className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-2.5 text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    onClick={() => handleOpenBackupChallenge('view')}
+                    className="rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-2.5 px-2 text-xs font-bold transition shadow-2xs flex items-center justify-center gap-1 cursor-pointer truncate"
+                    title="Xem danh sách mã dự phòng"
                   >
-                    <KeySvg className="h-4 w-4 text-slate-400" />
-                    <span>Mã dự phòng</span>
+                    <KeySvg className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                    <span className="truncate">Mã dự phòng</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowRegenerateConfirmModal(true)}
+                    className="rounded-xl bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 border border-blue-200/70 dark:border-blue-800/60 text-[#2563EB] dark:text-[#38BDF8] py-2.5 px-2 text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer truncate"
+                    title="Tạo lại 10 mã dự phòng mới"
+                  >
+                    <ArrowPathSvg className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Tạo mã mới</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setShowDisable2FaModal(true)}
-                    className="rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 py-2.5 text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                    className="rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 py-2.5 px-2 text-xs font-bold transition flex items-center justify-center cursor-pointer truncate"
                   >
                     Tắt 2FA
                   </button>
@@ -840,7 +1047,7 @@ export default function UserSettingsAndSecurityTab() {
         </div>
 
         {/* ---------------------------------------------------------------- */}
-        {/* HÀNG 2 - CỘT TRÁI: ĐỔI MẬT KHẨU */}
+        {/* HÀNG 2 - CỘT TRÁI: PHƯƠNG THỨC ĐĂNG NHẬP & MẬT KHẨU */}
         {/* ---------------------------------------------------------------- */}
         <div className="flex flex-col justify-between rounded-[24px] border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#11192C] p-6 shadow-xs space-y-5">
           <div className="space-y-4">
@@ -848,14 +1055,51 @@ export default function UserSettingsAndSecurityTab() {
               <div className="flex items-center gap-2">
                 <LockClosedSvg className="h-5 w-5 text-blue-500" />
                 <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white">
-                  Đổi mật khẩu tài khoản
+                  Phương thức đăng nhập & Mật khẩu
                 </h3>
               </div>
               <p className="text-xs font-medium text-slate-400 mt-0.5">
-                Xác thực mật khẩu hiện tại trước khi tạo mật khẩu mới.
+                Quản lý liên kết tài khoản Google và mật khẩu bảo vệ.
               </p>
             </div>
 
+            {/* 1. KHỐI TÀI KHOẢN LIÊN KẾT GOOGLE */}
+            <div className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+                    <GoogleSvg className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-[#0F172A] dark:text-white flex items-center gap-1.5">
+                      <span>Tài khoản Google</span>
+                    </h4>
+                    <p className="text-[11px] font-medium text-slate-400">
+                      {isGoogleLinked ? googleEmail || session?.user?.email : 'Đăng nhập nhanh 1-chạm không cần mật khẩu'}
+                    </p>
+                  </div>
+                </div>
+
+                {isGoogleLinked ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200/80 dark:border-emerald-800/80 px-2.5 py-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                    <span>Đã liên kết</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleLinkGoogleAccount}
+                    disabled={linkingGoogle}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 shadow-2xs transition disabled:opacity-60 cursor-pointer shrink-0"
+                  >
+                    <LinkSvg className="h-3.5 w-3.5 text-blue-500" />
+                    <span>{linkingGoogle ? 'Đang mở...' : 'Liên kết Google'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 2. KHỐI MẬT KHẨU TÀI KHOẢN */}
             {pwError && (
               <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/50 text-xs font-bold text-rose-600 dark:text-rose-300">
                 {pwError}
@@ -867,9 +1111,90 @@ export default function UserSettingsAndSecurityTab() {
               </div>
             )}
 
-            {!pwVerifiedOld ? (
-              /* BƯỚC 1: XÁC MINH MẬT KHẨU CŨ */
-              <form onSubmit={handleVerifyCurrentPassword} className="space-y-3.5">
+            {!hasCustomPassword ? (
+              /* KỊCH BẢN A: TÀI KHOẢN GOOGLE CHƯA TẠO MẬT KHẨU RIÊNG */
+              <form onSubmit={handleSetOrUpdatePassword} className="space-y-3.5 pt-1">
+                <div className="p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 space-y-1">
+                  <h5 className="text-xs font-bold text-[#2563EB] dark:text-[#38BDF8]">
+                    💡 Thiết lập mật khẩu riêng cho shop
+                  </h5>
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Bạn đang đăng nhập qua Google. Hãy đặt mật khẩu riêng để có thể đăng nhập bằng cả Email và Mật khẩu khi cần.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Mật khẩu mới
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewPw ? 'text' : 'password'}
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Tối thiểu 6 ký tự (Có chữ & số)"
+                      className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3.5 pr-14 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB] transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPw((v) => !v)}
+                      className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showNewPw ? 'Ẩn' : 'Hiện'}
+                    </button>
+                  </div>
+
+                  {newPassword.length > 0 && (
+                    <div className="mt-1.5 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400">Độ mạnh:</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{pwStrength.label}</span>
+                      </div>
+                      <div className="h-1 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div
+                          className={`h-full ${pwStrength.color} transition-all duration-300`}
+                          style={{ width: `${pwStrength.score}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    Xác nhận lại mật khẩu mới
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPw ? 'text' : 'password'}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu mới"
+                      className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3.5 pr-14 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB] transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPw((v) => !v)}
+                      className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showConfirmPw ? 'Ẩn' : 'Hiện'}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={updatingPw}
+                  className="w-full rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] disabled:opacity-60 py-2.5 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                >
+                  {updatingPw ? 'Đang lưu...' : 'Thiết lập mật khẩu riêng'}
+                </button>
+              </form>
+            ) : !pwVerifiedOld ? (
+              /* KỊCH BẢN B (BƯỚC 1): TÀI KHOẢN ĐÃ CÓ MẬT KHẨU - XÁC THỰC CŨ */
+              <form onSubmit={handleVerifyCurrentPassword} className="space-y-3.5 pt-1">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
                     Mật khẩu hiện tại
@@ -902,8 +1227,8 @@ export default function UserSettingsAndSecurityTab() {
                 </button>
               </form>
             ) : (
-              /* BƯỚC 2: NHẬP MẬT KHẨU MỚI */
-              <form onSubmit={handleUpdateNewPassword} className="space-y-3.5 animate-fade-in">
+              /* KỊCH BẢN B (BƯỚC 2): NHẬP MẬT KHẨU MỚI */
+              <form onSubmit={handleSetOrUpdatePassword} className="space-y-3.5 animate-fade-in pt-1">
                 <div className="p-2.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 flex items-center justify-between">
                   <span className="text-xs font-bold text-[#2563EB] dark:text-[#38BDF8]">
                     ✓ Đã xác thực mật khẩu cũ
@@ -1141,7 +1466,7 @@ export default function UserSettingsAndSecurityTab() {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* MODAL 3: XÁC THỰC MẬT KHẨU TRƯỚC KHI XEM MÃ DỰ PHÒNG */}
+      {/* MODAL 3: XÁC THỰC MẬT KHẨU TRƯỚC KHI XEM / TẠO MÃ DỰ PHÒNG */}
       {/* ------------------------------------------------------------------ */}
       {showBackupPasswordChallenge && (
         <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
@@ -1151,7 +1476,7 @@ export default function UserSettingsAndSecurityTab() {
               <div className="flex items-center gap-2">
                 <KeySvg className="h-5 w-5 text-blue-500" />
                 <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
-                  Xác thực danh tính bảo mật
+                  {backupActionType === 'regenerate' ? 'Xác thực để tạo 10 mã mới' : 'Xác thực danh tính bảo mật'}
                 </h3>
               </div>
               <button onClick={() => setShowBackupPasswordChallenge(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
@@ -1160,7 +1485,13 @@ export default function UserSettingsAndSecurityTab() {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Vui lòng nhập mật khẩu tài khoản để mở khóa danh sách mã sao lưu dự phòng.
+              {backupActionType === 'regenerate'
+                ? hasCustomPassword
+                  ? 'Vui lòng nhập mật khẩu tài khoản để xác nhận tạo 10 mã dự phòng mới. Các mã cũ sẽ bị vô hiệu hóa.'
+                  : 'Vui lòng xác thực danh tính để tạo lại 10 mã dự phòng mới.'
+                : hasCustomPassword
+                ? 'Vui lòng nhập mật khẩu tài khoản để mở khóa danh sách mã sao lưu dự phòng.'
+                : 'Vui lòng xác thực danh tính để mở khóa danh sách mã sao lưu dự phòng.'}
             </p>
 
             {challengeError && (
@@ -1169,30 +1500,118 @@ export default function UserSettingsAndSecurityTab() {
               </div>
             )}
 
+            {!hasCustomPassword && (
+              /* TAB SWITCHER DÀNH CHO TÀI KHOẢN GOOGLE */
+              <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800/80 p-1 border border-slate-200/80 dark:border-slate-700/80">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoogleChallengeMethod('totp');
+                    setChallengeError(null);
+                  }}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition cursor-pointer ${
+                    googleChallengeMethod === 'totp'
+                      ? 'bg-white dark:bg-slate-700 text-[#2563EB] dark:text-[#38BDF8] shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                  }`}
+                >
+                  📱 Google Authenticator
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoogleChallengeMethod('email');
+                    setChallengeError(null);
+                  }}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition cursor-pointer ${
+                    googleChallengeMethod === 'email'
+                      ? 'bg-white dark:bg-slate-700 text-[#2563EB] dark:text-[#38BDF8] shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                  }`}
+                >
+                  📧 Gửi OTP về Email
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleVerifyPasswordForBackupCodes} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
-                  Mật khẩu tài khoản
-                </label>
-                <div className="relative">
+              {hasCustomPassword ? (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                    Mật khẩu tài khoản
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showChallengePassword ? 'text' : 'password'}
+                      required
+                      autoFocus
+                      value={challengePassword}
+                      onChange={(e) => setChallengePassword(e.target.value)}
+                      placeholder="Nhập mật khẩu hiện tại"
+                      className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 pr-14 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowChallengePassword((v) => !v)}
+                      className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showChallengePassword ? 'Ẩn' : 'Hiện'}
+                    </button>
+                  </div>
+                </div>
+              ) : googleChallengeMethod === 'totp' ? (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                    Mã xác thực Google Authenticator (6 chữ số)
+                  </label>
                   <input
-                    type={showChallengePassword ? 'text' : 'password'}
+                    type="text"
+                    maxLength={6}
                     required
                     autoFocus
-                    value={challengePassword}
-                    onChange={(e) => setChallengePassword(e.target.value)}
-                    placeholder="Nhập mật khẩu hiện tại"
-                    className="h-10 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 pr-14 text-xs font-semibold text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB]"
+                    value={challengeTotpCode}
+                    onChange={(e) => setChallengeTotpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123456"
+                    className="h-12 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 text-center text-xl font-mono font-bold tracking-widest text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB]"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowChallengePassword((v) => !v)}
-                    className="absolute right-3 top-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                  >
-                    {showChallengePassword ? 'Ẩn' : 'Hiện'}
-                  </button>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Nhập mã 6 số đang hiển thị trên ứng dụng Google Authenticator của bạn.
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Mã xác nhận gửi về Email ({session?.user?.email})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleSendEmailOtp}
+                      disabled={sendingEmailOtp || emailOtpCooldown > 0}
+                      className="text-xs font-bold text-[#2563EB] dark:text-[#38BDF8] hover:underline disabled:opacity-50 cursor-pointer"
+                    >
+                      {sendingEmailOtp
+                        ? 'Đang gửi...'
+                        : emailOtpCooldown > 0
+                        ? `Gửi lại sau (${emailOtpCooldown}s)`
+                        : 'Gửi mã xác nhận'}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    required
+                    autoFocus
+                    value={emailOtpCode}
+                    onChange={(e) => setEmailOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Nhập 6 số từ Email"
+                    className="h-12 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 text-center text-xl font-mono font-bold tracking-widest text-[#0F172A] dark:text-white outline-none focus:border-[#2563EB]"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Bấm &quot;Gửi mã xác nhận&quot; để nhận mã OTP 6 số qua hộp thư của bạn.
+                  </p>
+                </div>
+              )}
 
               <div className="flex gap-2 pt-1">
                 <button
@@ -1207,7 +1626,7 @@ export default function UserSettingsAndSecurityTab() {
                   disabled={verifyingChallengePw}
                   className="flex-1 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-60 cursor-pointer"
                 >
-                  {verifyingChallengePw ? 'Đang kiểm tra...' : 'Xác thực & Mở khóa'}
+                  {verifyingChallengePw ? 'Đang kiểm tra...' : backupActionType === 'regenerate' ? 'Tạo 10 mã mới' : 'Xác thực & Mở khóa'}
                 </button>
               </div>
             </form>
@@ -1216,66 +1635,147 @@ export default function UserSettingsAndSecurityTab() {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* MODAL 4: DANH SÁCH MÃ SAO LƯU DỰ PHÒNG */}
+      {/* MODAL 3.5: XÁC NHẬN TẠO LẠI 10 MÃ DỰ PHÒNG MỚI */}
+      {/* ------------------------------------------------------------------ */}
+      {showRegenerateConfirmModal && (
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setShowRegenerateConfirmModal(false)} />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-2xl space-y-4 animate-fade-up">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <ArrowPathSvg className="h-5 w-5 text-amber-500" />
+                <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
+                  Tạo lại 10 mã dự phòng mới?
+                </h3>
+              </div>
+              <button onClick={() => setShowRegenerateConfirmModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <CloseSvg className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 space-y-1 text-xs text-amber-800 dark:text-amber-300">
+              <p className="font-bold">⚠️ Lưu ý quan trọng:</p>
+              <p>
+                Khi bạn tạo 10 mã mới, <strong>toàn bộ các mã dự phòng cũ trước đây sẽ bị vô hiệu hóa ngay lập tức</strong>. Hãy lưu lại bộ mã mới cẩn thận.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowRegenerateConfirmModal(false)}
+                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRegenerateConfirmModal(false);
+                  handleOpenBackupChallenge('regenerate');
+                }}
+                className="flex-1 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+              >
+                Tiếp tục & Xác thực
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL 4: DANH SÁCH 10 MÃ SAO LƯU DỰ PHÒNG (CHI TIẾT TRẠNG THÁI) */}
       {/* ------------------------------------------------------------------ */}
       {showBackupCodesModal && (
         <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setShowBackupCodesModal(false)} />
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-2xl space-y-4 animate-fade-up">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-2xl space-y-4 animate-fade-up max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <KeySvg className="h-5 w-5 text-blue-500" />
-                <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
-                  Mã sao lưu dự phòng 2FA
-                </h3>
+                <div>
+                  <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
+                    Mã sao lưu dự phòng 2FA
+                  </h3>
+                  <p className="text-[11px] font-medium text-slate-400">
+                    Còn {revealedBackupCodes.filter((c) => !c.used).length}/{revealedBackupCodes.length} mã khả dụng
+                  </p>
+                </div>
               </div>
               <button onClick={() => setShowBackupCodesModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <CloseSvg className="h-5 w-5" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Mỗi mã dưới đây có thể dùng <strong>1 lần duy nhất</strong> khi bạn không thể mở Google Authenticator.
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed shrink-0">
+              Mỗi mã dưới đây có thể dùng <strong>1 lần duy nhất</strong> khi bạn không thể mở Google Authenticator. Sau khi dùng, mã sẽ tự động bị vô hiệu hóa.
             </p>
 
-            {/* Grid Backup Codes */}
-            <div className="grid grid-cols-1 gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
-              {revealedBackupCodes.map((code, idx) => (
+            {/* Grid 10 Backup Codes */}
+            <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 overflow-y-auto max-h-[280px]">
+              {revealedBackupCodes.map((item, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/80"
+                  className={`flex items-center justify-between p-2.5 rounded-xl border transition ${
+                    item.used
+                      ? 'bg-slate-100/70 dark:bg-slate-800/40 border-slate-200/60 dark:border-slate-700/40 opacity-60'
+                      : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 shadow-2xs'
+                  }`}
                 >
-                  <span className="text-[11px] font-semibold text-slate-400">#{idx + 1}</span>
-                  <span className="font-mono text-xs font-extrabold text-[#2563EB] dark:text-[#38BDF8] tracking-wider">
-                    {code}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-bold text-slate-400">#{idx + 1}</span>
+                    <span
+                      className={`font-mono text-xs font-extrabold tracking-wider ${
+                        item.used
+                          ? 'line-through text-slate-400 dark:text-slate-500'
+                          : 'text-[#2563EB] dark:text-[#38BDF8]'
+                      }`}
+                    >
+                      {item.code}
+                    </span>
+                  </div>
+
+                  {item.used ? (
+                    <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 bg-slate-200/80 dark:bg-slate-700/80 px-1.5 py-0.5 rounded">
+                      Đã dùng
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleCopySingleCode(item.code)}
+                      className="text-[10px] font-bold text-slate-500 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer shrink-0"
+                      title="Sao chép mã này"
+                    >
+                      {copiedSingleCode === item.code ? '✓' : 'Chép'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
 
             {/* Actions */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="grid grid-cols-2 gap-2 pt-1 shrink-0">
               <button
                 type="button"
                 onClick={handleCopyAllBackupCodes}
-                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer"
+                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer"
               >
-                {copiedBackupCodes ? '✓ Đã chép' : 'Sao chép mã'}
+                {copiedBackupCodes ? '✓ Đã sao chép tất cả' : 'Sao chép mã chưa dùng'}
               </button>
 
               <button
                 type="button"
                 onClick={handleDownloadBackupTxt}
-                className="rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
+                className="rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] py-2.5 text-xs font-bold text-white shadow-xs transition cursor-pointer"
               >
-                Tải file .TXT
+                Tải file .TXT về máy
               </button>
             </div>
 
             <button
               type="button"
               onClick={() => setShowBackupCodesModal(false)}
-              className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-1.5 text-xs font-medium hover:bg-slate-200 cursor-pointer"
+              className="w-full rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-2 text-xs font-medium hover:bg-slate-200 cursor-pointer shrink-0"
             >
               Đóng lại
             </button>

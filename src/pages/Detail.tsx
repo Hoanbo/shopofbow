@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import type { CatalogItem } from '../data/types';
-import { fetchBySlug, fetchByCategory, fetchAllProducts, fetchFaqs } from '../data/api';
+import { fetchBySlug, fetchByCategory, fetchAllProducts, fetchFaqs, isValidUuid } from '../data/api';
 import { formatVND } from '../data/catalog';
 import { useAsync } from '../hooks/useAsync';
 import { useSeo } from '../hooks/useSeo';
@@ -56,7 +56,7 @@ export default function Detail({ category, base, crumb }: Props) {
   }, [rawItem]);
 
   useEffect(() => {
-    if (!rawItem?.id) return;
+    if (!rawItem?.id || !isValidUuid(rawItem.id)) return;
     const channel = supabase
       .channel(`realtime-product-header-${rawItem.id}`)
       .on(

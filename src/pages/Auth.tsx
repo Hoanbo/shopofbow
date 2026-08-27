@@ -6,6 +6,8 @@ import { CheckIcon } from '../components/icons';
 import { mapAuthError } from '../lib/authErrors';
 import newLogo from '../assets/new-logover2.png';
 
+import { verifyAndConsumeBackupCode } from '../utils/backupCodes';
+
 type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'forgot_otp' | 'update_password' | '2fa';
 
 export default function Auth() {
@@ -18,6 +20,8 @@ export default function Auth() {
   const [mfaFactorId, setMfaFactorId] = useState('');
   const [mfaChallengeId, setMfaChallengeId] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [twoFactorMethod, setTwoFactorMethod] = useState<'totp' | 'backup'>('totp');
+  const [backupCodeInput, setBackupCodeInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -281,6 +285,39 @@ export default function Auth() {
       } catch (cErr) {
         console.warn('Could not refresh MFA challenge:', cErr);
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleVerifyBackupCode = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!backupCodeInput.trim()) {
+      setError('Vui lòng nhập mã dự phòng.');
+      return;
+    }
+    if (!session?.user?.id) {
+      setError('Không xác định được phiên đăng nhập.');
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+    setBusy(true);
+
+    try {
+      const result = verifyAndConsumeBackupCode(session.user.id, backupCodeInput);
+      if (!result.success) {
+        throw new Error(result.error || 'Mã dự phòng không chính xác hoặc đã sử dụng.');
+      }
+
+      await checkMfaLevel();
+      setSuccess(`Xác thực mã dự phòng thành công! (Còn ${result.remaining} mã)`);
+      const dest = loc.state?.from ?? '/';
+      nav(dest, { replace: true });
+    } catch (err: any) {
+      console.error('[Auth] Backup code verification failed:', err);
+      setError(err.message || 'Mã dự phòng không hợp lệ.');
     } finally {
       setBusy(false);
     }
@@ -684,32 +721,97 @@ export default function Auth() {
           </form>
         )}
 
-        {/* Form 2FA (Two-Factor Authentication) */}
+        {/* Form 2FA (Two-Factor Authentication & Backup Codes) */}
         {mode === '2fa' && (
-          <form onSubmit={handleVerify2FA} className="mt-6 space-y-4">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 text-center">
-                Mã xác thực 6 chữ số
-              </label>
-              <input
-                type="text"
-                maxLength={6}
-                autoFocus
-                required
-                value={twoFactorCode}
-                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456"
-                className="h-14 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center text-2xl font-black tracking-widest outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 text-[#0F172A] dark:text-white"
-              />
+          <div className="mt-6 space-y-4">
+            {/* Phương thức xác thực (Tab Switcher) */}
+            <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800/80 p-1 border border-slate-200/80 dark:border-slate-700/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setTwoFactorMethod('totp');
+                  setError(null);
+                }}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition cursor-pointer ${
+                  twoFactorMethod === 'totp'
+                    ? 'bg-white dark:bg-slate-700 text-[#2563EB] dark:text-[#38BDF8] shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Google Authenticator
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTwoFactorMethod('backup');
+                  setError(null);
+                }}
+                className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition cursor-pointer ${
+                  twoFactorMethod === 'backup'
+                    ? 'bg-white dark:bg-slate-700 text-[#2563EB] dark:text-[#38BDF8] shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Mã dự phòng cứu hộ
+              </button>
             </div>
 
-            <button
-              type="submit"
-              disabled={busy || twoFactorCode.length < 6}
-              className="w-full rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-3 text-sm font-bold text-white shadow-md transition-all duration-300 hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-[1.01] disabled:opacity-60"
-            >
-              {busy ? 'Đang kiểm tra mã...' : 'Xác thực & Đăng nhập'}
-            </button>
+            {twoFactorMethod === 'totp' ? (
+              <form onSubmit={handleVerify2FA} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 text-center">
+                    Mã xác thực 6 chữ số
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    autoFocus
+                    required
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123456"
+                    className="h-14 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center text-2xl font-black tracking-widest outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 text-[#0F172A] dark:text-white"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={busy || twoFactorCode.length < 6}
+                  className="w-full rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-3 text-sm font-bold text-white shadow-md transition-all duration-300 hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-[1.01] disabled:opacity-60 cursor-pointer"
+                >
+                  {busy ? 'Đang kiểm tra mã...' : 'Xác thực & Đăng nhập'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyBackupCode} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 text-center">
+                    Nhập mã dự phòng 8 ký tự
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={9}
+                    autoFocus
+                    required
+                    value={backupCodeInput}
+                    onChange={(e) => setBackupCodeInput(e.target.value.toUpperCase())}
+                    placeholder="ABCD-EFGH"
+                    className="h-14 w-full rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-mono text-xl font-black tracking-widest outline-none transition focus:border-[#2563EB] dark:focus:border-[#35A8FF] focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 text-[#0F172A] dark:text-white uppercase"
+                  />
+                  <p className="text-[11px] text-center text-slate-400 mt-1.5">
+                    Mỗi mã dự phòng chỉ dùng được 1 lần khi không có điện thoại.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={busy || backupCodeInput.trim().length < 4}
+                  className="w-full rounded-full bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-3 text-sm font-bold text-white shadow-md transition-all duration-300 hover:from-[#0080E0] hover:to-[#1D4ED8] hover:scale-[1.01] disabled:opacity-60 cursor-pointer"
+                >
+                  {busy ? 'Đang kiểm tra...' : 'Xác thực bằng Mã dự phòng'}
+                </button>
+              </form>
+            )}
 
             <button
               type="button"
@@ -717,12 +819,13 @@ export default function Auth() {
                 setMode('signin');
                 setError(null);
                 setTwoFactorCode('');
+                setBackupCodeInput('');
               }}
-              className="w-full text-center text-xs font-bold text-slate-500 dark:text-slate-400 hover:underline pt-2"
+              className="w-full text-center text-xs font-bold text-slate-500 dark:text-slate-400 hover:underline pt-2 cursor-pointer"
             >
               ← Quay lại đăng nhập
             </button>
-          </form>
+          </div>
         )}
 
         {/* Divider for Social Login */}
