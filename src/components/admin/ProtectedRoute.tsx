@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthContext';
  * hướng là chính xác, không có cửa sổ race.
  */
 export default function ProtectedRoute() {
-  const { session, isAdmin, loading } = useAuth();
+  const { session, isAdmin, loading, mfaPending } = useAuth();
   const loc = useLocation();
 
   // Đang tải / phục hồi phiên đăng nhập từ localStorage → chờ hoàn tất, không redirect sớm
@@ -19,8 +19,8 @@ export default function ProtectedRoute() {
     );
   }
 
-  // Chưa đăng nhập → về trang đăng nhập chung, nhớ đích để quay lại sau khi login.
-  if (!session) {
+  // Chưa đăng nhập hoặc chưa hoàn tất 2FA → về trang đăng nhập chung, nhớ đích để quay lại sau khi login.
+  if (!session || mfaPending) {
     return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
   }
 

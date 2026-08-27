@@ -9,7 +9,7 @@ import newLogo from '../assets/new-logover2.png';
 type Mode = 'signin' | 'signup' | 'otp' | 'forgot' | 'forgot_otp' | 'update_password' | '2fa';
 
 export default function Auth() {
-  const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading } = useAuth();
+  const { session, signIn, signUp, verifyOtp, signInWithGoogle, loading, checkMfaLevel } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -60,9 +60,15 @@ export default function Auth() {
               return;
             }
           }
+          // Bắt buộc dừng lại ở chế độ 2FA, không bao giờ được redirect nếu tài khoản có 2FA
+          if (isSubscribed) {
+            setMode('2fa');
+          }
+          return;
         }
       } catch (err) {
         console.warn('[Auth] Error checking MFA level:', err);
+        return;
       }
 
       if (isSubscribed) {
@@ -255,11 +261,26 @@ export default function Auth() {
         code: twoFactorCode.trim(),
       });
       if (verifyErr) throw verifyErr;
+      await checkMfaLevel();
       setSuccess('Xác thực 2 lớp thành công!');
       const dest = loc.state?.from ?? '/';
       nav(dest, { replace: true });
     } catch (err: any) {
-      setError('Mã xác thực 2FA không chính xác hoặc đã hết hạn.');
+      console.error('[Auth] 2FA verification failed:', err);
+      setError('Mã xác thực 2FA không chính xác hoặc đã hết hạn. Vui lòng thử lại.');
+      // Tạo challenge mới để lần nhập tiếp theo không bị stale challenge
+      try {
+        if (mfaFactorId) {
+          const { data: newChallenge } = await supabase.auth.mfa.challenge({
+            factorId: mfaFactorId,
+          });
+          if (newChallenge) {
+            setMfaChallengeId(newChallenge.id);
+          }
+        }
+      } catch (cErr) {
+        console.warn('Could not refresh MFA challenge:', cErr);
+      }
     } finally {
       setBusy(false);
     }

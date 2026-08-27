@@ -1,15 +1,23 @@
 import { useEffect } from 'react';
-import { Outlet, ScrollRestoration } from 'react-router-dom';
+import { Outlet, ScrollRestoration, Navigate } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import MobileNav from './MobileNav';
 import { ContactFab } from './ContactButtons';
 import { captureReferralFromUrl } from '../utils/affiliate';
+import { useAuth } from '../context/AuthContext';
 
 export default function Layout() {
+  const { session, loading, mfaPending } = useAuth();
+
   useEffect(() => {
     captureReferralFromUrl();
   }, []);
+
+  // Nếu tài khoản đã bật 2FA nhưng phiên này chưa xác thực TOTP -> Chặn mọi trang và chuyển về /login
+  if (!loading && session && mfaPending) {
+    return <Navigate to="/login" replace />;
+  }
   return (
     <div className="flex min-h-dvh flex-col">
       <Header />
