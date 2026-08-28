@@ -91,19 +91,17 @@ Hãy phân tích, rà soát và refactor đoạn code sau theo quy trình 5 bư�
 
 3. ⚡ Tối ưu Hiệu năng & Bộ nhớ:
 - Phân tích độ phức tạp thời gian (Time Complexity - Big O) và không gian (Space Complexity).
-- Tối ưu hóa truy vấn Database (tránh N+1 query), cơ chế Caching (Redis/In-memory) và xử lý bất đồng bộ (Async/Await, Promise.all).
-
-4. 🛠️ Mã nguồn Refactor Hoàn chỉnh:
+- 4. 🛠️ Mã nguồn Refactor Hoàn chỉnh:
 - Viết lại toàn bộ code bằng TypeScript chuẩn mực (Strict Type, không dùng "any", đầy đủ Interface, Generics, Error Handling bằng Result Pattern hoặc Custom Error Class).
 
 5. 🧪 Bộ Unit Test Chuẩn (Jest / Vitest):
 - Viết kèm test case bao quát Happy Path, Edge Cases (dữ liệu null/undefined/boundary) và Failure Handling.
 
 Đoạn code cần xử lý:
-```typescript
+\`\`\`typescript
 [DÁN MÃ NGUỒN CỦA BẠN VÀO ĐÂY]
-```',
-  'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
+\`\`\`',
+  NULL,
   'Mega-Prompt 5 bước biến Claude 3.5 Sonnet / Cursor Pro thành Senior Tech Lead rà soát kiến trúc, bảo mật và refactor code chuẩn enterprise.',
   ARRAY['claude', 'coding', 'typescript', 'architecture', 'security', 'refactor', 'unit-test'],
   428,
@@ -136,7 +134,7 @@ Cấu trúc kịch bản phải tuân theo công thức "Hook - Retain - Reward 
 
 5. 🎬 Gợi ý Chi tiết Biên tập (Editor Notes):
 - B-Roll gợi ý, Font chữ phụ đề, Màu chữ nổi bật và Nhạc nền (Trending Sound BGM).',
-  'https://images.unsplash.com/photo-1611162617474-5b21e879e113?auto=format&fit=crop&w=800&q=80',
+  NULL,
   'Khung kịch bản video ngắn chuẩn tâm lý học hành vi giữ chân người xem và chuyển đổi đơn hàng thần tốc với ChatGPT Plus.',
   ARRAY['chatgpt', 'tiktok', 'viral', 'marketing', 'copywriting', 'video-script'],
   612,
@@ -150,7 +148,7 @@ Cấu trúc kịch bản phải tuân theo công thức "Hook - Retain - Reward 
 Lighting: Three-point studio lighting setup, Profoto B10X with large softbox key light, subtle cyan and golden rim light emphasizing product contours, soft ambient fill light. 
 
 Camera & Optics: Shot on Hasselblad H6D-100c, 90mm Macro Lens f/4, crisp sharp focus on product label, beautiful shallow depth of field, natural surface textures, photorealistic ray-traced reflections and refractions, 8k resolution, advertising quality, magazine cover grade --ar 16:9 --v 6.0 --style raw --q 2',
-  'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+  NULL,
   'Prompt chụp ảnh sản phẩm thương mại chuẩn studio nhiếp ảnh quảng cáo cao cấp với ánh sáng 3 điểm và lens macro siêu thực.',
   ARRAY['midjourney', 'commercial', 'product-photography', 'studio-lighting', '8k', 'advertising'],
   534,
@@ -182,7 +180,7 @@ Yêu cầu kỹ thuật bắt buộc:
 5. 🏷️ Gợi ý Meta SEO:
 - Meta Title (dưới 60 ký tự, chứa từ khóa chính + yếu tố kích thích click).
 - Meta Description (dưới 155 ký tự, tóm tắt giá trị + CTA mạnh mẽ).',
-  'https://images.unsplash.com/photo-1432888622747-4eb9a8efeb07?auto=format&fit=crop&w=800&q=80',
+  NULL,
   'Framework viết bài chuẩn SEO đỉnh cao tối ưu hóa cho thuật toán E-E-A-T và Semantic Search của Google với Claude Pro.',
   ARRAY['claude', 'seo', 'content-marketing', 'google-ranking', 'copywriting', 'eeat'],
   345,
@@ -214,7 +212,7 @@ Yêu cầu kỹ thuật bắt buộc:
 - Vùng tối (Shadows): +14 (Kéo sáng chi tiết áo quần)
 - Độ nét (Sharpen): +25
 - Độ hạt (Film Grain): +10 (Tạo chất phim điện ảnh sang trọng).',
-  'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=800&q=80',
+  NULL,
   'Công thức dựng video ngắn, thiết kế âm thanh SFX và thông số chỉnh màu chuẩn điện ảnh dành riêng cho CapCut Pro.',
   ARRAY['capcut', 'video-editing', 'color-grading', 'sound-design', 'tiktok-reels'],
   489,
@@ -228,7 +226,7 @@ Yêu cầu kỹ thuật bắt buộc:
 Key Elements: Real-time revenue interactive line charts, glowing AI insight widgets, polished transactions data table with status pill badges, modern minimalist sidebar with glowing active icons, clean user profile header with notification indicators.
 
 Style & Aesthetics: Figma-ready design style, Dribbble and Behance trending, pixel-perfect 12-column grid layout, SF Pro typography, refined micro-interactions, high-end fintech aesthetics, 8k resolution, crisp vector details --ar 16:9 --v 6.0 --style raw',
-  'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80',
+  NULL,
   'Prompt tạo giao diện Web/App SaaS Dashboard phong cách Dark Mode Glassmorphism chuẩn Dribbble & Behance.',
   ARRAY['midjourney', 'ui-ux', 'dashboard', 'figma', 'glassmorphism', 'saas', 'dark-mode'],
   298,

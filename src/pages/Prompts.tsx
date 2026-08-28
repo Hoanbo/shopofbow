@@ -83,6 +83,15 @@ const CATEGORY_STYLES: Record<string, { bg: string; text: string; border: string
   },
 };
 
+export const isValidPromptImageUrl = (url?: string | null): boolean => {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  // Chặn hoàn toàn Unsplash vì thường xuyên lỗi hoặc bị chặn trên production
+  if (trimmed.includes('unsplash.com')) return false;
+  return true;
+};
+
 const FALLBACK_PROMPTS: PromptItem[] = [
   {
     id: 'f1',
@@ -113,7 +122,7 @@ Hãy phân tích, rà soát và refactor đoạn code sau theo quy trình 5 bư�
 \`\`\`
 [DÁN MÃ NGUỒN CỦA BẠN VÀO ĐÂY]
 \`\`\``,
-    image_url: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
+    image_url: null,
     description: 'Mega-Prompt 5 bước biến Claude 3.5 Sonnet / Cursor Pro thành Senior Tech Lead rà soát kiến trúc, bảo mật và refactor code chuẩn enterprise.',
     tags: ['claude', 'coding', 'typescript', 'architecture', 'security', 'refactor', 'unit-test'],
     copy_count: 428,
@@ -148,7 +157,7 @@ Cấu trúc kịch bản phải tuân theo công thức "Hook - Retain - Reward 
 
 5. 🎬 Gợi ý Chi tiết Biên tập (Editor Notes):
 - B-Roll gợi ý, Font chữ phụ đề, Màu chữ nổi bật và Nhạc nền (Trending Sound BGM).`,
-    image_url: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?auto=format&fit=crop&w=800&q=80',
+    image_url: null,
     description: 'Khung kịch bản video ngắn chuẩn tâm lý học hành vi giữ chân người xem và chuyển đổi đơn hàng thần tốc với ChatGPT Plus.',
     tags: ['chatgpt', 'tiktok', 'viral', 'marketing', 'copywriting', 'video-script'],
     copy_count: 612,
@@ -160,7 +169,7 @@ Cấu trúc kịch bản phải tuân theo công thức "Hook - Retain - Reward 
     title: 'Chân Dung Nhiếp Ảnh 8K Siêu Thực Studio Hyper-Realistic',
     category: 'midjourney',
     prompt_content: `cinematic hyper-realistic studio portrait of [CHỦ THỂ: a stylish young Asian entrepreneur], wearing [TRANG PHỤC: modern minimalist black blazer], dramatic [ÁNH SÁNG: golden hour volumetric lighting], professional 85mm f/1.4 lens photography, ultra detailed skin texture, subtle depth of field, sharp focus on eyes, 8k resolution, photorealistic, Hasselblad medium format --ar [TỈ LỆ: 16:9] --v 6.0 --stylize 250 --quality 2`,
-    image_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80',
+    image_url: null,
     description: 'Prompt tạo ảnh chân dung nghệ thuật thương mại sắc nét từng lỗ chân lông chuẩn nhiếp ảnh Hasselblad trên Midjourney v6.',
     tags: ['midjourney', 'portrait', '8k', 'photorealistic', 'lighting', 'photography'],
     copy_count: 539,
@@ -183,7 +192,7 @@ Yêu cầu thêm:
 1. Gợi ý bộ lọc màu (Filter & Color Grading) phù hợp nhất trong thư viện CapCut.
 2. Gợi ý 3 phong cách chuyển cảnh (Transitions) mượt mà nhất.
 3. Gợi ý loại nhạc nền (BGM: Lofi, Phonk, Cinematic, Upbeat) theo từng nhịp điệu phân cảnh.`,
-    image_url: 'https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=800&q=80',
+    image_url: null,
     description: 'Bảng kịch bản phân cảnh từng giây tối ưu cho việc cắt ghép, chèn hiệu ứng và chuyển cảnh mượt mà trên CapCut Pro.',
     tags: ['capcut', 'video', 'editing', 'storyboard', 'timeline', 'animation'],
     copy_count: 310,
@@ -195,7 +204,7 @@ Yêu cầu thêm:
     title: 'Flux.1 — Logo & Mascot Thương Hiệu 3D Đẳng Cấp (Vector Flat Art)',
     category: 'flux',
     prompt_content: `modern minimalist cute 3D mascot logo of [CON VẬT HOẶC BIỂU TƯỢNG: a friendly cybernetic robot cat], vibrant gradient colors [TÔNG MÀU: electric blue and neon violet], soft rounded shapes, high-end tech branding, clean white background, vector asset, isometric 3d render, octane render style, trending on dribbble, smooth textures --ar [TỈ LỆ: 1:1]`,
-    image_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+    image_url: null,
     description: 'Prompt tạo linh vật mascot và logo 3D isometric phong cách Dribbble cho startup công nghệ trên Flux.1 & Leonardo AI.',
     tags: ['flux', 'logo', 'mascot', '3d', 'vector', 'branding'],
     copy_count: 245,
@@ -231,7 +240,7 @@ Slide 5 (Call to Action chốt đơn):
 Gợi ý Font chữ trong Canva:
 - Font Tiêu đề (Heading): Serif/Sans-serif mạnh mẽ.
 - Font Nội dung (Body): Dễ đọc trên điện thoại.`,
-    image_url: 'https://images.unsplash.com/photo-1542744094-3a3172722188?auto=format&fit=crop&w=800&q=80',
+    image_url: null,
     description: 'Bố cục chuẩn 5 slide Carousel quảng cáo tối ưu chuyển đổi CTR cao dễ dàng áp dụng trực tiếp vào Canva Pro.',
     tags: ['canva', 'banner', 'carousel', 'ads', 'design', 'social-media'],
     copy_count: 298,
@@ -608,13 +617,13 @@ export default function Prompts() {
                     <div className="space-y-3">
                       
                       {/* Thumbnail Image or Visual Header */}
-                      {item.image_url && !imgErrors[item.id] ? (
+                      {isValidPromptImageUrl(item.image_url) && !imgErrors[item.id] ? (
                         <div
                           onClick={() => setSelectedPrompt(item)}
                           className="relative h-44 w-full overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 cursor-pointer group/img"
                         >
                           <img
-                            src={item.image_url}
+                            src={item.image_url!}
                             alt={item.title}
                             referrerPolicy="no-referrer"
                             onError={() => setImgErrors((prev) => ({ ...prev, [item.id]: true }))}

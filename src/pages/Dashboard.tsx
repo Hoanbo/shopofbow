@@ -19,6 +19,7 @@ import OrderRenewalModal from '../components/user/OrderRenewalModal';
 import AppLogo from '../components/AppLogo';
 import { formatVND } from '../data/catalog';
 import { useRealtimeEvent } from '../services/realtime';
+import { syncExpiredPendingOrders } from '../utils/orderExpiry';
 
 const BANK_CONFIG = {
   bankId: 'MB', // MB Bank (mã VietQR)
@@ -112,6 +113,13 @@ function OrderCard({
       if (diff <= 0) {
         setTimeLeft('Hết hạn thanh toán');
         setIsExpired(true);
+        // Tự động cập nhật DB để bên Admin và hệ thống nhận diện ngay là đơn đã hủy
+        supabase
+          .from('orders')
+          .update({ status: 'cancelled' })
+          .eq('id', order.id)
+          .eq('status', 'pending_payment')
+          .then();
         return false;
       }
 
@@ -685,7 +693,9 @@ export default function Dashboard() {
       ]);
 
       if (ordersRes.error) throw ordersRes.error;
-      setOrders((ordersRes.data || []) as Order[]);
+      const rawOrders = (ordersRes.data || []) as Order[];
+      const { updatedOrders } = await syncExpiredPendingOrders(rawOrders);
+      setOrders(updatedOrders);
 
       const revSet = new Set<string>((reviewsRes.data || []).map((r: any) => String(r.order_id)));
       setReviewedOrderIds(revSet);
@@ -697,6 +707,26 @@ export default function Dashboard() {
       setLoadingOrders(false);
     }
   }, [session?.user?.id]);
+
+  // Realtime Hub: Cập nhật trạng thái đơn hàng realtime cho user (khi admin hủy/giao hoặc hệ thống auto-cancel)
+  useRealtimeEvent('orders:UPDATE', useCallback((e: any) => {
+    const updated = e.payload;
+    if (!updated || !session?.user?.id) return;
+    if (updated.user_id === session.user.id) {
+      setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
+    }
+  }, [session?.user?.id]));
+
+  useRealtimeEvent('orders:INSERT', useCallback((e: any) => {
+    const newOrder = e.payload;
+    if (!newOrder || !session?.user?.id) return;
+    if (newOrder.user_id === session.user.id) {
+      setOrders((prev) => {
+        if (prev.some((o) => o.id === newOrder.id)) return prev;
+        return [newOrder, ...prev];
+      });
+    }
+  }, [session?.user?.id]));
 
   // Realtime & polling listener for wallet deposit order
   useEffect(() => {

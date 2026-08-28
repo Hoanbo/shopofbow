@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { syncExpiredPendingOrders, getEffectiveOrderStatus } from '../../utils/orderExpiry';
 import { supabase } from '../../lib/supabase';
 import { useRealtimeEvent } from '../../services/realtime';
 
@@ -124,7 +125,13 @@ export default function Dashboard() {
         .select('id, price, status, created_at, expires_at, payment_code, product_name, plan_label, profiles:profiles!orders_user_profile_fk(full_name, email)')
         .order('created_at', { ascending: false }) as any);
 
-      const allOrders: OrderRow[] = ordersData || [];
+      // Tự động đồng bộ các đơn quá 15 phút chưa thanh toán thành cancelled trong DB
+      const { updatedOrders } = await syncExpiredPendingOrders(ordersData || []);
+
+      const allOrders: OrderRow[] = updatedOrders.map((o: any) => ({
+        ...o,
+        status: getEffectiveOrderStatus(o),
+      })) as OrderRow[];
       setRawOrders(allOrders);
       setRecentOrders(allOrders.slice(0, 5));
 

@@ -108,3 +108,13 @@ export function verifyAndConsumeBackupCode(userId: string, inputCode: string): {
   const remaining = codes.filter((c) => !c.used).length;
   return { success: true, remaining };
 }
+
+/** Xóa danh sách mã dự phòng khi tắt 2FA */
+export function clearBackupCodes(userId: string): void {
+  if (!userId) return;
+  try {
+    localStorage.removeItem(`${STORAGE_PREFIX}${userId}`);
+  } catch (err) {
+    console.error('[BackupCodes] Error clearing codes:', err);
+  }
+}

@@ -7,6 +7,7 @@ import { uploadImage } from '../../data/admin';
 import {
   getBackupCodesStats,
   generateNewBackupCodes,
+  clearBackupCodes,
   type BackupCodeItem,
 } from '../../utils/backupCodes';
 import {
@@ -309,12 +310,10 @@ export default function UserSettingsAndSecurityTab() {
   const [mfaFactors, setMfaFactors] = useState<any[]>([]);
   const [loadingMfa, setLoadingMfa] = useState(true);
   const [show2FaModal, setShow2FaModal] = useState(false);
-  const [showDisable2FaModal, setShowDisable2FaModal] = useState(false);
-  const [disabling2Fa, setDisabling2Fa] = useState(false);
 
   // Backup codes security challenge
   const [showBackupPasswordChallenge, setShowBackupPasswordChallenge] = useState(false);
-  const [backupActionType, setBackupActionType] = useState<'view' | 'regenerate'>('view');
+  const [backupActionType, setBackupActionType] = useState<'view' | 'regenerate' | 'disable'>('view');
   const [challengePassword, setChallengePassword] = useState('');
   const [challengeTotpCode, setChallengeTotpCode] = useState('');
   const [googleChallengeMethod, setGoogleChallengeMethod] = useState<'totp' | 'email'>('totp');
@@ -443,26 +442,7 @@ export default function UserSettingsAndSecurityTab() {
   const verifiedFactor = mfaFactors.find((f) => f.status === 'verified');
   const is2FaEnabled = !!verifiedFactor;
 
-  const handleDisable2FA = async () => {
-    if (!verifiedFactor) return;
-    setDisabling2Fa(true);
-    try {
-      const { error } = await supabase.auth.mfa.unenroll({
-        factorId: verifiedFactor.id,
-      });
-      if (error) throw error;
-      toast.success('Đã tắt Xác thực 2 lớp (2FA) thành công!');
-      setShowDisable2FaModal(false);
-      fetchMfaFactors();
-    } catch (err: any) {
-      console.error('Error unenrolling 2FA:', err);
-      toast.error(err.message || 'Không thể tắt 2FA. Vui lòng thử lại.');
-    } finally {
-      setDisabling2Fa(false);
-    }
-  };
-
-  const handleOpenBackupChallenge = (action: 'view' | 'regenerate') => {
+  const handleOpenBackupChallenge = (action: 'view' | 'regenerate' | 'disable') => {
     setBackupActionType(action);
     setChallengePassword('');
     setChallengeTotpCode('');
@@ -518,6 +498,24 @@ export default function UserSettingsAndSecurityTab() {
           type: 'email',
         });
         if (vErr) throw new Error('Mã OTP email không đúng hoặc đã hết hạn.');
+      }
+
+      // XỬ LÝ THEO TỪNG HÀNH ĐỘNG SAU KHI XÁC THỰC THÀNH CÔNG:
+      if (backupActionType === 'disable') {
+        if (verifiedFactor) {
+          const { error: unenrollErr } = await supabase.auth.mfa.unenroll({
+            factorId: verifiedFactor.id,
+          });
+          if (unenrollErr) throw unenrollErr;
+        }
+        clearBackupCodes(session.user.id);
+        await fetchMfaFactors();
+        toast.success('Đã tắt Xác thực 2 lớp (2FA) thành công!');
+        setShowBackupPasswordChallenge(false);
+        setChallengePassword('');
+        setChallengeTotpCode('');
+        setEmailOtpCode('');
+        return;
       }
 
       if (backupActionType === 'regenerate') {
@@ -1016,7 +1014,7 @@ export default function UserSettingsAndSecurityTab() {
 
                   <button
                     type="button"
-                    onClick={() => setShowDisable2FaModal(true)}
+                    onClick={() => handleOpenBackupChallenge('disable')}
                     className="rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50 py-2.5 px-2 text-xs font-bold transition flex items-center justify-center cursor-pointer truncate"
                   >
                     Tắt 2FA
@@ -1426,47 +1424,7 @@ export default function UserSettingsAndSecurityTab() {
       />
 
       {/* ------------------------------------------------------------------ */}
-      {/* MODAL 2: XÁC NHẬN TẮT 2FA */}
-      {/* ------------------------------------------------------------------ */}
-      {showDisable2FaModal && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setShowDisable2FaModal(false)} />
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-2xl space-y-4 animate-fade-up">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
-                Xác nhận tắt 2FA
-              </h3>
-              <button onClick={() => setShowDisable2FaModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <CloseSvg className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Bạn có chắc chắn muốn tắt Xác thực 2 lớp? Tài khoản của bạn sẽ giảm mức độ bảo vệ an toàn.
-            </p>
-            <div className="flex gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowDisable2FaModal(false)}
-                disabled={disabling2Fa}
-                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 transition cursor-pointer"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleDisable2FA}
-                disabled={disabling2Fa}
-                className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-60 cursor-pointer"
-              >
-                {disabling2Fa ? 'Đang tắt...' : 'Xác nhận tắt'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* MODAL 3: XÁC THỰC MẬT KHẨU TRƯỚC KHI XEM / TẠO MÃ DỰ PHÒNG */}
+      {/* MODAL 3: XÁC THỰC BẢO MẬT KHI XEM/TẠO MÃ DỰ PHÒNG HOẶC TẮT 2FA */}
       {/* ------------------------------------------------------------------ */}
       {showBackupPasswordChallenge && (
         <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
@@ -1474,9 +1432,17 @@ export default function UserSettingsAndSecurityTab() {
           <div className="relative w-full max-w-md rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-5 shadow-2xl space-y-4 animate-fade-up">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
-                <KeySvg className="h-5 w-5 text-blue-500" />
+                {backupActionType === 'disable' ? (
+                  <span className="text-base">🛑</span>
+                ) : (
+                  <KeySvg className="h-5 w-5 text-blue-500" />
+                )}
                 <h3 className="text-sm font-bold text-[#0F172A] dark:text-white">
-                  {backupActionType === 'regenerate' ? 'Xác thực để tạo 10 mã mới' : 'Xác thực danh tính bảo mật'}
+                  {backupActionType === 'disable'
+                    ? 'Xác thực để tắt 2FA'
+                    : backupActionType === 'regenerate'
+                    ? 'Xác thực để tạo 10 mã mới'
+                    : 'Xác thực danh tính bảo mật'}
                 </h3>
               </div>
               <button onClick={() => setShowBackupPasswordChallenge(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
@@ -1485,7 +1451,11 @@ export default function UserSettingsAndSecurityTab() {
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              {backupActionType === 'regenerate'
+              {backupActionType === 'disable'
+                ? hasCustomPassword
+                  ? 'Vui lòng nhập mật khẩu tài khoản để xác nhận tắt Xác thực 2 lớp (2FA).'
+                  : 'Vui lòng xác thực bằng Google Authenticator hoặc mã OTP gửi về Email để tắt 2FA.'
+                : backupActionType === 'regenerate'
                 ? hasCustomPassword
                   ? 'Vui lòng nhập mật khẩu tài khoản để xác nhận tạo 10 mã dự phòng mới. Các mã cũ sẽ bị vô hiệu hóa.'
                   : 'Vui lòng xác thực danh tính để tạo lại 10 mã dự phòng mới.'
@@ -1624,9 +1594,21 @@ export default function UserSettingsAndSecurityTab() {
                 <button
                   type="submit"
                   disabled={verifyingChallengePw}
-                  className="flex-1 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-60 cursor-pointer"
+                  className={`flex-1 rounded-xl py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-60 cursor-pointer ${
+                    backupActionType === 'disable'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-[#2563EB] hover:bg-[#1D4ED8]'
+                  }`}
                 >
-                  {verifyingChallengePw ? 'Đang kiểm tra...' : backupActionType === 'regenerate' ? 'Tạo 10 mã mới' : 'Xác thực & Mở khóa'}
+                  {verifyingChallengePw
+                    ? backupActionType === 'disable'
+                      ? 'Đang tắt 2FA...'
+                      : 'Đang kiểm tra...'
+                    : backupActionType === 'disable'
+                    ? '🛑 Xác nhận & Tắt 2FA'
+                    : backupActionType === 'regenerate'
+                    ? 'Tạo 10 mã mới'
+                    : 'Xác thực & Mở khóa'}
                 </button>
               </div>
             </form>

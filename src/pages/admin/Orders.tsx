@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { Pagination } from '../../components/admin/Pagination';
 import { useRealtimeEvent } from '../../services/realtime';
+import { syncExpiredPendingOrders, getEffectiveOrderStatus } from '../../utils/orderExpiry';
 
 type Order = {
   id: string;
@@ -556,7 +557,10 @@ export default function AdminOrders() {
 
       if (ordersError) throw ordersError;
 
-      const userIds = Array.from(new Set((ordersData || []).map((o: any) => o.user_id).filter(Boolean)));
+      // Đồng bộ các đơn pending_payment đã quá 15 phút thành cancelled trong DB
+      const { updatedOrders } = await syncExpiredPendingOrders(ordersData || []);
+
+      const userIds = Array.from(new Set(updatedOrders.map((o: any) => o.user_id).filter(Boolean)));
       const profilesMap = new Map<string, { email: string; full_name: string }>();
 
       if (userIds.length > 0) {
@@ -572,8 +576,9 @@ export default function AdminOrders() {
         }
       }
 
-      const mergedOrders = (ordersData || []).map((o: any) => ({
+      const mergedOrders = updatedOrders.map((o: any) => ({
         ...o,
+        status: getEffectiveOrderStatus(o),
         profiles: profilesMap.get(o.user_id),
       }));
 
@@ -794,15 +799,16 @@ export default function AdminOrders() {
   };
 
   const filteredOrders = orders.filter((o) => {
+    const effStatus = getEffectiveOrderStatus(o);
     const matchStatus =
       filterStatus === 'all' ||
       (filterStatus === 'expiring_soon'
         ? isExpiringSoonOrder(o)
         : (
-          o.status === filterStatus ||
-          (filterStatus === 'pending_delivery' && o.status === 'paid') ||
-          (filterStatus === 'pending_payment' && o.status === 'pending') ||
-          (filterStatus === 'processing' && o.status === 'delivering')
+          effStatus === filterStatus ||
+          (filterStatus === 'pending_delivery' && effStatus === 'paid') ||
+          (filterStatus === 'pending_payment' && effStatus === 'pending') ||
+          (filterStatus === 'processing' && effStatus === 'delivering')
         ));
     const q = searchQuery.toLowerCase().trim();
     const matchSearch =
@@ -873,13 +879,13 @@ export default function AdminOrders() {
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin scrollbar-thumb-blue-400/40 dark:scrollbar-thumb-blue-500/40 scrollbar-track-slate-100 dark:scrollbar-track-slate-800/60 sm:scrollbar-none">
           {[
             { key: 'all', label: 'Tất cả', count: orders.length },
-            { key: 'pending_payment', label: 'Chờ thanh toán', count: orders.filter((o) => o.status === 'pending_payment' || o.status === 'pending').length },
-            { key: 'pending_delivery', label: 'Chờ bàn giao', count: orders.filter((o) => o.status === 'pending_delivery' || o.status === 'paid').length },
-            { key: 'processing', label: 'Đang xử lý', count: orders.filter((o) => o.status === 'processing' || o.status === 'delivering').length },
-            { key: 'completed', label: 'Đã xong', count: orders.filter((o) => o.status === 'completed').length },
+            { key: 'pending_payment', label: 'Chờ thanh toán', count: orders.filter((o) => getEffectiveOrderStatus(o) === 'pending_payment' || getEffectiveOrderStatus(o) === 'pending').length },
+            { key: 'pending_delivery', label: 'Chờ bàn giao', count: orders.filter((o) => getEffectiveOrderStatus(o) === 'pending_delivery' || getEffectiveOrderStatus(o) === 'paid').length },
+            { key: 'processing', label: 'Đang xử lý', count: orders.filter((o) => getEffectiveOrderStatus(o) === 'processing' || getEffectiveOrderStatus(o) === 'delivering').length },
+            { key: 'completed', label: 'Đã xong', count: orders.filter((o) => getEffectiveOrderStatus(o) === 'completed').length },
             { key: 'expiring_soon', label: 'Sắp hết hạn', count: orders.filter(isExpiringSoonOrder).length },
-            { key: 'cancelled', label: 'Đã hủy', count: orders.filter((o) => o.status === 'cancelled').length },
-            { key: 'refunded', label: 'Hoàn tiền', count: orders.filter((o) => o.status === 'refunded').length }
+            { key: 'cancelled', label: 'Đã hủy', count: orders.filter((o) => getEffectiveOrderStatus(o) === 'cancelled').length },
+            { key: 'refunded', label: 'Hoàn tiền', count: orders.filter((o) => getEffectiveOrderStatus(o) === 'refunded').length }
           ].map((st) => {
             const isActive = filterStatus === st.key;
             return (
