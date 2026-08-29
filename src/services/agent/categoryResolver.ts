@@ -1,17 +1,7 @@
 import { supabase } from '../../lib/supabase';
+import type { CategoryInfo, CategoryResolution } from './types';
 
-export interface CategoryInfo {
-  id: string;
-  name: string;
-  slug: string;
-  icon?: string | null;
-  sortOrder?: number;
-}
-
-export interface CategoryResolution {
-  matched: boolean;
-  category?: CategoryInfo;
-}
+export type { CategoryInfo, CategoryResolution };
 
 // Bộ Alias chuẩn hóa cho các danh mục canonical từ database
 const CATEGORY_ALIASES: Record<string, string[]> = {

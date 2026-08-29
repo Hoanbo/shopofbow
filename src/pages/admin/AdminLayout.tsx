@@ -59,6 +59,12 @@ const AffiliateIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const ChartIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  </svg>
+);
+
 interface NavItem {
   to: string;
   label: string;
@@ -97,6 +103,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/admin/users', label: 'Người dùng & CTV', Icon: UserIcon },
       { to: '/admin/activity', label: 'Nhật ký hoạt động', Icon: AuditIcon },
+      { to: '/admin/agent-analytics', label: 'BOW Analytics', Icon: ChartIcon },
       { to: '/admin/faqs', label: 'FAQ chung', Icon: FaqIcon },
       { to: '/admin/settings', label: 'Cài đặt hệ thống', Icon: SettingsIcon },
     ],

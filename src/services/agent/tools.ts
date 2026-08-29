@@ -1,40 +1,15 @@
 import { supabase } from '../../lib/supabase';
-import type { AgentContext } from './permissions';
+import type { AgentContext, ProductItemResult, PlanItemResult } from './types';
 import { checkToolPermission } from './permissions';
+
+export type { ProductItemResult, PlanItemResult };
+export type ProductPlanResult = PlanItemResult;
 
 export interface ToolExecutionResult<T = any> {
   success: boolean;
   toolName: string;
   data?: T;
   message?: string;
-}
-
-export interface ProductPlanResult {
-  id: string;
-  name: string;
-  duration: string;
-  price: number;
-  originalPrice?: number | null;
-  isHighlight: boolean;
-  shortDescription?: string | null;
-}
-
-export interface ProductItemResult {
-  id: string;
-  name: string;
-  slug: string;
-  type: 'ai-tool' | 'premium-app' | 'product';
-  categoryId?: string | null;
-  categoryName?: string | null;
-  badge?: string | null;
-  tagline?: string | null;
-  description?: string | null;
-  logoUrl?: string | null;
-  startingPrice: number;
-  plans: ProductPlanResult[];
-  features?: string[];
-  warranty: string;
-  searchAliases?: string[];
 }
 
 /**

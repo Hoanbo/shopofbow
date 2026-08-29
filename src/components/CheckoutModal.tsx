@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { CloseIcon } from './icons';
+import { agentAnalytics } from '../services/agent/monitoring/agentAnalytics';
+import { getSessionContext } from '../services/agent/sessionContext';
 import type { CatalogItem } from '../data/types';
 import {
   validateCouponCode,
@@ -72,6 +74,40 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
   const discountAmount = couponDiscountAmount;
   const finalPrice = Math.max(0, rawTotalPrice - discountAmount);
 
+  // ----------------------------------------
+  // TRACKING CHECKOUT SUCCESS
+  // ----------------------------------------
+  const hasTrackedSuccess = useRef(false);
+  useEffect(() => {
+    if (step === 'success' && !hasTrackedSuccess.current && session) {
+      const currentSession = getSessionContext();
+      agentAnalytics.track({
+        eventType: 'CHECKOUT_SUCCESS',
+        productId: item.id,
+        planId: plan.id,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session.user.id,
+        metadata: { paymentMethod: method, amount: finalPrice }
+      });
+      hasTrackedSuccess.current = true;
+    }
+  }, [step, item.id, plan.id, session, method, finalPrice]);
+
+  const handleClose = () => {
+    if (step !== 'success' && session) {
+      const currentSession = getSessionContext();
+      agentAnalytics.track({
+        eventType: 'CHECKOUT_CANCELLED',
+        productId: item.id,
+        planId: plan.id,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session.user.id,
+      });
+    }
+    hasTrackedSuccess.current = false;
+    onClose();
+  };
+
   // Generate unique payment code & reset on open
   useEffect(() => {
     if (isOpen) {
@@ -98,6 +134,32 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
 
       // Default payment method based on wallet balance
       setMethod(balance >= plan.price ? 'wallet' : 'vietqr');
+
+      // Tự động áp dụng mã giảm giá từ phiên Agent (nếu có)
+      const storedCoupon = sessionStorage.getItem('bow_applied_coupon');
+      if (storedCoupon) {
+        sessionStorage.removeItem('bow_applied_coupon');
+        setCouponInput(storedCoupon);
+        if (session?.user?.id) {
+          setCouponLoading(true);
+          validateCouponCode(storedCoupon, rawTotalPrice, session.user.id, item.id)
+            .then((res) => {
+              if (res.valid) {
+                setAppliedCoupon(res);
+                setCouponError(null);
+              } else {
+                setAppliedCoupon(null);
+                setCouponError(res.message);
+              }
+            })
+            .catch((err: any) => {
+              setCouponError(err?.message || 'Không thể áp dụng mã giảm giá.');
+            })
+            .finally(() => {
+              setCouponLoading(false);
+            });
+        }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -357,14 +419,14 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-2.5 sm:p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-xs transition-opacity" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-xs transition-opacity" onClick={handleClose} />
 
       {/* Modal Container */}
       <div className="relative w-full max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain transform rounded-[22px] sm:rounded-[26px] border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#151f36] p-4 sm:p-5 shadow-2xl transition-all animate-fade-up text-slate-900 dark:text-white scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
         {/* Close Button */}
         {step !== 'success' && (
           <button
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="Đóng"
             className="absolute right-3.5 top-3.5 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-slate-100 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-800/90 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-white transition cursor-pointer"
           >
@@ -716,7 +778,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="mt-1 w-full rounded-xl bg-[#2563EB] py-2.5 text-xs font-black text-white hover:bg-[#1D4ED8] transition cursor-pointer"
             >
               Đóng và tiếp tục mua sắm

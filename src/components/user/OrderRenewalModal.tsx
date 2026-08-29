@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../Toast';
 import { CloseIcon } from '../icons';
+import { validateCouponCode, type CouponValidationResult } from '../../data/coupons';
 
 interface OrderRenewalModalProps {
   order: {
@@ -31,11 +32,42 @@ export default function OrderRenewalModal({
   const [submitting, setSubmitting] = useState(false);
   const [newPaymentCode] = useState(() => `BOW${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`);
 
-  // 10% loyalty discount for continuous renewals
-  const discountRate = 0.10;
+  // Coupon states
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponValidationResult | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+
   const originalPrice = Number(order.price || 0);
-  const renewalDiscount = Math.round(originalPrice * discountRate);
+  const renewalDiscount = appliedCoupon?.discount_amount ?? 0;
   const finalPrice = Math.max(0, originalPrice - renewalDiscount);
+
+  const handleApplyCoupon = async () => {
+    const codeToUse = couponInput.trim();
+    if (!codeToUse) return;
+    
+    setCouponLoading(true);
+    setCouponError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Vui lòng đăng nhập để dùng mã giảm giá.");
+
+      const res = await validateCouponCode(codeToUse, originalPrice, user.id);
+      if (res.valid) {
+        setAppliedCoupon(res);
+        setCouponError(null);
+        toast.success(`Áp dụng mã ${res.code} thành công!`);
+      } else {
+        setAppliedCoupon(null);
+        setCouponError(res.message);
+      }
+    } catch (err: any) {
+      setAppliedCoupon(null);
+      setCouponError(err.message || 'Lỗi kiểm tra mã giảm giá');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
 
   // Policy description
   const policy = order.renewal_policy || 'new_account';
@@ -71,6 +103,37 @@ export default function OrderRenewalModal({
     fetchBalance();
   }, []);
 
+  // Tự động áp dụng mã giảm giá từ phiên Agent (nếu có)
+  useEffect(() => {
+    const storedCoupon = sessionStorage.getItem('bow_applied_coupon');
+    if (storedCoupon) {
+      sessionStorage.removeItem('bow_applied_coupon');
+      setCouponInput(storedCoupon);
+      
+      const validateFromSession = async () => {
+        setCouponLoading(true);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const res = await validateCouponCode(storedCoupon, originalPrice, user.id);
+            if (res.valid) {
+              setAppliedCoupon(res);
+              setCouponError(null);
+            } else {
+              setCouponError(res.message);
+            }
+          }
+        } catch (err: any) {
+          setCouponError(err.message || 'Lỗi kiểm tra mã giảm giá.');
+        } finally {
+          setCouponLoading(false);
+        }
+      };
+      validateFromSession();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleWalletRenewal = async () => {
     if (userBalance < finalPrice) {
       toast.error('Số dư ví không đủ. Vui lòng chọn Quét mã QR Ngân hàng hoặc nạp thêm ví.');
@@ -103,13 +166,13 @@ export default function OrderRenewalModal({
           price: finalPrice,
           original_price: originalPrice,
           discount_amount: renewalDiscount,
-          coupon_code: 'LOYALTY10',
+          coupon_code: appliedCoupon ? appliedCoupon.code : null,
           payment_code: newPaymentCode,
           status: initialStatus,
           renewal_policy: policy,
           target_account: order.target_account || null,
           renewed_from_order_id: order.id,
-          notes: `Gia hạn ưu đãi -10% từ đơn #${order.payment_code}`,
+          notes: `Gia hạn từ đơn #${order.payment_code}`,
         } as any)
         .select()
         .single() as any);
@@ -218,27 +281,66 @@ export default function OrderRenewalModal({
                 <h4 className="text-base font-black text-slate-900 dark:text-white">{order.product_name}</h4>
                 <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-0.5 block">Gói: {order.plan_label}</span>
               </div>
-              <span className="inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 text-[10px] font-black text-[#2563EB] dark:text-[#35A8FF] border border-blue-200/50">
-                Ưu đãi -10%
-              </span>
             </div>
 
             <div className="border-t border-slate-200/60 dark:border-slate-700/60 pt-2.5 space-y-1.5 text-xs">
-              <div className="flex justify-between text-slate-400 font-semibold">
-                <span>Giá gói gốc:</span>
-                <span className="line-through">{originalPrice.toLocaleString('vi-VN')}đ</span>
-              </div>
-              <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
-                <span>Tri ân khách hàng thân thiết (-10%):</span>
-                <span>-{renewalDiscount.toLocaleString('vi-VN')}đ</span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-slate-200/40 dark:border-slate-700/40 items-baseline">
+              <div className="flex justify-between pt-1 items-baseline">
                 <span className="text-slate-400 font-semibold">Tổng thanh toán gia hạn:</span>
                 <span className="text-lg font-black text-[#2563EB] dark:text-[#35A8FF]">
                   {finalPrice.toLocaleString('vi-VN')}đ
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Coupon Input */}
+          <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-[#18243E] p-4 space-y-3">
+            <label className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+              Mã giảm giá
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Nhập mã giảm giá..."
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                className="w-full flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 px-3.5 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] uppercase font-bold placeholder:font-normal placeholder:normal-case"
+                disabled={couponLoading || !!appliedCoupon}
+              />
+              {!appliedCoupon ? (
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading || !couponInput.trim()}
+                  className="rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 px-4 py-2.5 text-xs font-bold text-white transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0 cursor-pointer"
+                >
+                  {couponLoading ? 'Đang kiểm tra...' : 'Áp dụng'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAppliedCoupon(null);
+                    setCouponInput('');
+                  }}
+                  className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/50 px-4 py-2.5 text-xs font-bold text-red-600 dark:text-red-400 transition shrink-0 cursor-pointer"
+                >
+                  Gỡ bỏ
+                </button>
+              )}
+            </div>
+            
+            {couponError && (
+              <p className="text-[11px] font-medium text-red-500 flex items-center gap-1">
+                <span>⚠️</span> {couponError}
+              </p>
+            )}
+            
+            {appliedCoupon && (
+              <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <span>✓</span> Đã giảm {(appliedCoupon.discount_amount || 0).toLocaleString('vi-VN')}đ
+              </p>
+            )}
           </div>
 
           {/* Policy Banner */}

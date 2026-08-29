@@ -1,23 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { processAgentMessage, type AgentMessage } from '../../services/agent/agentEngine';
-import type { AgentContext } from '../../services/agent/permissions';
+import { processAgentMessage, type AgentMessage, type AgentAction } from '../../services/agent/agentEngine';
+import type { AgentContext } from '../../services/agent/types';
+import { clearSessionContext, getSessionContext } from '../../services/agent/sessionContext';
+import { agentAnalytics } from '../../services/agent/monitoring/agentAnalytics';
+import { useToast } from '../Toast';
 
 interface BowAgentChatModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenCheckoutDirect?: (productSlug: string, planId?: string) => void;
 }
 
 export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModalProps) {
   const { session, profile, balance, isAdmin, isCtv } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [messages, setMessages] = useState<AgentMessage[]>([
     {
       id: 'welcome_msg',
       sender: 'agent',
-      content: `👋 Xin chào! Mình là ✨ **BOW Agent** — Trợ lý thông minh của **Shop of BOW**.\n\nMình có thể giúp bạn tìm sản phẩm, xem bảng giá, kiểm tra đơn hàng hoặc nhận mã giảm giá 24/7. Bạn đang cần mình hỗ trợ điều gì? 🚀`,
+      content: `👋 Xin chào! Mình là ✨ **BOW Agent** — Trợ lý thông minh của **Shop of BOW**.\n\nMình có thể giúp bạn tìm sản phẩm, xem bảng giá, mua tài khoản 1-Click, kiểm tra đơn hàng hoặc hỗ trợ bảo hành 24/7. Bạn đang cần mình hỗ trợ điều gì? 🚀`,
       timestamp: new Date().toISOString(),
       suggestions: ['🛍️ Xem danh mục', '🔎 Tìm sản phẩm', '📦 Kiểm tra đơn hàng', '🎟️ Mã giảm giá'],
     },
@@ -25,6 +30,7 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
 
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [executingActionId, setExecutingActionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -42,27 +48,44 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Theo dõi Session Started (chỉ gửi 1 lần mỗi khi mở)
+  const hasTrackedSessionStart = useRef(false);
+
   useEffect(() => {
     if (isOpen) {
+      if (!hasTrackedSessionStart.current) {
+        const currentSession = getSessionContext();
+        agentAnalytics.track({
+          eventType: 'SESSION_STARTED',
+          sessionId: currentSession.updatedAt.toString(),
+          userId: session?.user?.id,
+        });
+        hasTrackedSessionStart.current = true;
+      }
+
       setTimeout(() => {
         inputRef.current?.focus();
         scrollToBottom();
       }, 100);
+    } else {
+      hasTrackedSessionStart.current = false;
     }
   }, [isOpen, messages]);
 
   const handleResetChat = () => {
+    clearSessionContext();
     setMessages([
       {
         id: 'welcome_msg_' + Date.now(),
         sender: 'agent',
-        content: `👋 Xin chào! Mình là ✨ **BOW Agent** — Trợ lý thông minh của **Shop of BOW**.\n\nMình có thể giúp bạn tìm sản phẩm, xem bảng giá, kiểm tra đơn hàng hoặc nhận mã giảm giá 24/7. Bạn đang cần mình hỗ trợ điều gì? 🚀`,
+        content: `👋 Xin chào! Mình là ✨ **BOW Agent** — Trợ lý thông minh của **Shop of BOW**.\n\nMình có thể giúp bạn tìm sản phẩm, xem bảng giá, mua tài khoản 1-Click, kiểm tra đơn hàng hoặc hỗ trợ bảo hành 24/7. Bạn đang cần mình hỗ trợ điều gì? 🚀`,
         timestamp: new Date().toISOString(),
         suggestions: ['🛍️ Xem danh mục', '🔎 Tìm sản phẩm', '📦 Kiểm tra đơn hàng', '🎟️ Mã giảm giá'],
       },
     ]);
     setInputValue('');
     setIsTyping(false);
+    setExecutingActionId(null);
     setTimeout(() => {
       inputRef.current?.focus();
     }, 50);
@@ -86,9 +109,9 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
     setIsTyping(true);
 
     try {
-      // Giả lập độ trễ suy nghĩ nhẹ (300-500ms) để tự nhiên
-      await new Promise((r) => setTimeout(r, 350));
-      
+      // Giả lập độ trễ suy nghĩ nhẹ (250-350ms)
+      await new Promise((r) => setTimeout(r, 300));
+
       // Timeout Guard 8s chống treo vô hạn
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('TIMEOUT')), 8000)
@@ -99,6 +122,33 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
         timeoutPromise,
       ]);
 
+      // Track ACTION_SHOWN
+      const currentSession = getSessionContext();
+      if (agentReply.action) {
+        agentAnalytics.track({
+          eventType: 'ACTION_SHOWN',
+          actionId: agentReply.action.id,
+          actionType: agentReply.action.type,
+          productId: agentReply.action.payload.productId,
+          planId: agentReply.action.payload.planId,
+          sessionId: currentSession.updatedAt.toString(),
+          userId: session?.user?.id,
+        });
+      }
+      if (agentReply.actions) {
+        agentReply.actions.forEach(act => {
+          agentAnalytics.track({
+            eventType: 'ACTION_SHOWN',
+            actionId: act.id,
+            actionType: act.type,
+            productId: act.payload.productId,
+            planId: act.payload.planId,
+            sessionId: currentSession.updatedAt.toString(),
+            userId: session?.user?.id,
+          });
+        });
+      }
+
       setMessages((prev) => [...prev, agentReply]);
     } catch (err: any) {
       console.error('[BOW Agent Chat Error]:', err);
@@ -107,9 +157,9 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
         {
           id: 'err_' + Date.now(),
           sender: 'agent',
-          content: '⚠️ **Hiện mình chưa thể lấy dữ liệu lúc này.**\n\nBạn vui lòng thử lại sau ít phút hoặc nhắn tin trực tiếp [Zalo Hỗ Trợ](https://zalo.me/0966821315) để được hỗ trợ tức thì nhé! 🙏',
+          content: '⚠️ **Hiện mình chưa thể lấy dữ liệu lúc này.**\n\nBạn vui lòng thử lại sau ít phút hoặc nhắn tin trực tiếp [Zalo Hỗ Trực](https://zalo.me/0966821315) để được hỗ trợ tức thì nhé! 🙏',
           timestamp: new Date().toISOString(),
-          suggestions: ['🛍️ Tất cả sản phẩm', 'Gặp hỗ trợ viên'],
+          suggestions: ['🛍️ Xem danh mục', 'Gặp hỗ trợ viên'],
         },
       ]);
     } finally {
@@ -124,11 +174,159 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
     }
   };
 
+  // Điều phối và thực thi Action Card (Anti Double-Click)
+  const handleActionDispatch = (action: AgentAction) => {
+    if (executingActionId === action.id) return;
+    
+    const currentSession = getSessionContext();
+
+    // Kiểm tra TTL
+    if (action.expiresAt && Date.now() > action.expiresAt) {
+      agentAnalytics.track({
+        eventType: 'ACTION_EXPIRED',
+        actionId: action.id,
+        actionType: action.type,
+        productId: action.payload.productId,
+        planId: action.payload.planId,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session?.user?.id,
+      });
+      toast.error('Thao tác này đã hết hạn. Vui lòng thử lại.');
+      return;
+    }
+
+    agentAnalytics.track({
+      eventType: 'ACTION_CLICKED',
+      actionId: action.id,
+      actionType: action.type,
+      productId: action.payload.productId,
+      planId: action.payload.planId,
+      sessionId: currentSession.updatedAt.toString(),
+      userId: session?.user?.id,
+    });
+
+    // Workflow Tracking
+    if (action.type === 'NAVIGATE_CHECKOUT') {
+      agentAnalytics.track({
+        eventType: 'CHECKOUT_OPENED',
+        actionId: action.id,
+        actionType: action.type,
+        productId: action.payload.productId,
+        planId: action.payload.planId,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session?.user?.id,
+      });
+    } else if (action.type === 'NAVIGATE_RENEWAL') {
+      agentAnalytics.track({
+        eventType: 'RENEWAL_OPENED',
+        actionId: action.id,
+        actionType: action.type,
+        productId: action.payload.productId,
+        planId: action.payload.planId,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session?.user?.id,
+      });
+    } else if (action.type === 'NAVIGATE_ORDER_DETAIL') {
+      agentAnalytics.track({
+        eventType: 'ORDER_VIEWED',
+        actionId: action.id,
+        actionType: action.type,
+        productId: action.payload.productId,
+        planId: action.payload.planId,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session?.user?.id,
+      });
+    } else if (action.type === 'NAVIGATE_SUPPORT') {
+      agentAnalytics.track({
+        eventType: 'WARRANTY_OPENED',
+        actionId: action.id,
+        actionType: action.type,
+        productId: action.payload.productId,
+        planId: action.payload.planId,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session?.user?.id,
+      });
+    } else if (action.type === 'OPEN_DEPOSIT') {
+      agentAnalytics.track({
+        eventType: 'DEPOSIT_OPENED',
+        actionId: action.id,
+        actionType: action.type,
+        productId: action.payload.productId,
+        planId: action.payload.planId,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session?.user?.id,
+      });
+    } else if (action.type === 'APPLY_COUPON') {
+      agentAnalytics.track({
+        eventType: 'COUPON_APPLIED',
+        actionId: action.id,
+        actionType: action.type,
+        productId: action.payload.productId,
+        planId: action.payload.planId,
+        sessionId: currentSession.updatedAt.toString(),
+        userId: session?.user?.id,
+      });
+    }
+
+    setExecutingActionId(action.id);
+
+    try {
+      switch (action.type) {
+        case 'NAVIGATE_CHECKOUT': {
+          onClose();
+          const targetSlug = action.payload.productSlug || action.payload.productId;
+          const planQuery = action.payload.planId ? `?plan=${action.payload.planId}` : '';
+          navigate(`/products/${targetSlug}${planQuery}`);
+          toast.success(`Đang mở trang đặt mua ${action.payload.productName || 'sản phẩm'}...`);
+          break;
+        }
+
+        case 'NAVIGATE_ORDER_DETAIL': {
+          onClose();
+          navigate(`/dashboard?tab=orders&order_id=${action.payload.orderId}`);
+          break;
+        }
+
+        case 'NAVIGATE_RENEWAL': {
+          onClose();
+          navigate(`/dashboard?tab=orders&order_id=${action.payload.orderId}&action=renew`);
+          break;
+        }
+
+        case 'NAVIGATE_SUPPORT': {
+          onClose();
+          const orderParam = action.payload.orderId ? `&orderId=${action.payload.orderId}` : '';
+          navigate(`/dashboard?tab=tickets&newTicket=1${orderParam}`);
+          break;
+        }
+
+        case 'APPLY_COUPON': {
+          if (action.payload.couponCode) {
+            sessionStorage.setItem('bow_applied_coupon', action.payload.couponCode);
+            toast.success(`Đã lưu mã giảm giá ${action.payload.couponCode}! Mã sẽ tự động áp dụng khi thanh toán.`);
+          }
+          break;
+        }
+
+        case 'OPEN_DEPOSIT': {
+          onClose();
+          const amt = action.payload.amount || 50000;
+          navigate(`/dashboard?tab=wallet&depositAmount=${amt}`);
+          break;
+        }
+
+        default:
+          console.warn('[ActionDispatcher] Unhandled action type:', action.type);
+      }
+    } finally {
+      setTimeout(() => setExecutingActionId(null), 1000);
+    }
+  };
+
   // Render text có hỗ trợ markdown đơn giản và link nội bộ
   const renderMessageContent = (content: string) => {
     const lines = content.split('\n');
     return lines.map((line, idx) => {
-      // Parse markdown bold **text**
       const parts = line.split(/(\*\*.*?\*\*|`.*?`|\[.*?\]\(.*?\))/g);
       return (
         <p key={idx} className={`${line === '' ? 'h-2' : ''} leading-relaxed break-words`}>
@@ -160,17 +358,118 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
                       navigate(href);
                     }
                   }}
-                  className="font-bold text-[#2563EB] dark:text-[#38BDF8] underline decoration-blue-400 hover:text-blue-700 transition"
+                  className="font-bold text-[#2563EB] dark:text-[#38BDF8] hover:underline underline-offset-2 transition inline-flex items-center gap-0.5"
                 >
                   {label}
                 </a>
               );
             }
-            return part;
+            return <React.Fragment key={pIdx}>{part}</React.Fragment>;
           })}
         </p>
       );
     });
+  };
+
+  // Render Thẻ Hành Động Tương Tác (Action Card UI V2)
+  const renderActionCard = (action: AgentAction) => {
+    const isBusy = executingActionId === action.id;
+    const isExpired = action.expiresAt ? Date.now() > action.expiresAt : false;
+
+    if (action.type === 'NAVIGATE_CHECKOUT') {
+      return (
+        <div className={`mt-3 rounded-2xl border ${isExpired ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 grayscale opacity-75' : 'border-blue-100 dark:border-blue-900/60 bg-gradient-to-br from-blue-50/90 to-indigo-50/50 dark:from-[#162544] dark:to-[#121B30]'} p-3.5 shadow-sm space-y-2.5 animate-fade-up`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className={`flex h-7 w-7 items-center justify-center rounded-xl ${isExpired ? 'bg-slate-400' : 'bg-[#2563EB]'} text-white text-xs shadow-xs`}>
+                🎬
+              </span>
+              <div>
+                <h4 className="text-xs font-black text-[#0F172A] dark:text-white leading-tight">
+                  {action.payload.productName || 'Gói bản quyền'}
+                </h4>
+                <p className="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
+                  {action.payload.planLabel || 'Bản quyền chính hãng'}
+                </p>
+              </div>
+            </div>
+            {action.payload.displayPrice ? (
+              <span className={`font-mono text-xs font-black ${isExpired ? 'text-slate-400' : 'text-[#2563EB] dark:text-[#38BDF8]'}`}>
+                {action.payload.displayPrice.toLocaleString('vi-VN')}đ
+              </span>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleActionDispatch(action)}
+              disabled={isBusy || isExpired}
+              className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-black text-white shadow-md transition cursor-pointer disabled:opacity-50 ${isExpired ? 'bg-slate-400 shadow-none' : 'bg-gradient-to-r from-[#00A3FF] to-[#2563EB] shadow-blue-500/25 hover:from-[#008AE0] hover:to-[#1D4ED8] hover:scale-[1.01] active:scale-[0.98]'}`}
+            >
+              <span>{isExpired ? '⚠️' : (action.icon || '💳')}</span>
+              <span>{isExpired ? 'Đã hết hạn' : (isBusy ? 'Đang mở thanh toán...' : action.label)}</span>
+            </button>
+            
+            {isExpired && (
+              <button
+                type="button"
+                onClick={() => handleSend(action.payload.productName || 'Mua gói này')}
+                className="shrink-0 flex h-[38px] px-3 items-center justify-center rounded-xl bg-blue-100 hover:bg-blue-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-blue-600 dark:text-blue-400 font-bold transition cursor-pointer"
+                title="Tải lại lựa chọn"
+              >
+                🔄
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (action.type === 'NAVIGATE_RENEWAL' || action.type === 'NAVIGATE_SUPPORT') {
+      return (
+        <div className="mt-3 rounded-2xl border border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/70 to-orange-50/30 dark:from-[#24211A] dark:to-[#1A1815] p-3.5 shadow-sm space-y-2.5 animate-fade-up">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-500 text-white text-xs shadow-xs">
+              {action.icon || '🔄'}
+            </span>
+            <div>
+              <h4 className="text-xs font-black text-[#0F172A] dark:text-white leading-tight">
+                {action.payload.productName || 'Đơn hàng'}
+              </h4>
+              <p className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400">
+                Mã: {action.payload.paymentCode || 'N/A'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => handleActionDispatch(action)}
+            disabled={isBusy}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 py-2.5 px-3 text-xs font-black text-white shadow-md shadow-orange-500/20 hover:scale-[1.01] active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
+          >
+            <span>{action.icon || '🔄'}</span>
+            <span>{isBusy ? 'Đang mở...' : action.label}</span>
+          </button>
+        </div>
+      );
+    }
+
+    // Default Action Button Card
+    return (
+      <div className="mt-2.5">
+        <button
+          type="button"
+          onClick={() => handleActionDispatch(action)}
+          disabled={isBusy}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-2 px-3.5 text-xs font-bold text-white shadow-sm hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
+        >
+          <span>{action.icon || '✨'}</span>
+          <span>{isBusy ? 'Đang xử lý...' : action.label}</span>
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -200,8 +499,8 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
                 <h3 className="text-sm font-extrabold text-[#0F172A] dark:text-white truncate">
                   BOW Agent
                 </h3>
-                <span className="shrink-0 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 px-1.5 py-0.5 text-[9px] font-black text-[#2563EB] dark:text-[#38BDF8]">
-                  V1 AI
+                <span className="shrink-0 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 px-1.5 py-0.5 text-[9px] font-black text-white shadow-xs">
+                  V2 Guided
                 </span>
               </div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
@@ -240,13 +539,27 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
               className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'} max-w-full`}
             >
               <div
-                className={`max-w-[90%] sm:max-w-[82%] rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-xs break-words [overflow-wrap:anywhere] ${
+                className={`max-w-[92%] sm:max-w-[85%] rounded-2xl px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-xs break-words [overflow-wrap:anywhere] ${
                   msg.sender === 'user'
                     ? 'bg-gradient-to-r from-[#00A3FF] to-[#2563EB] text-white rounded-br-xs'
                     : 'bg-slate-50 dark:bg-[#18243E] text-slate-700 dark:text-slate-200 border border-slate-100 dark:border-slate-800/80 rounded-bl-xs'
                 }`}
               >
                 {renderMessageContent(msg.content)}
+
+                {/* Render Action Card đơn nếu có */}
+                {msg.action && renderActionCard(msg.action)}
+
+                {/* Render Nhiều Action Card (Plan Selection) nếu có */}
+                {msg.actions && msg.actions.length > 0 && (
+                  <div className="mt-3 flex flex-col gap-2.5">
+                    {msg.actions.map(act => (
+                      <div key={act.id}>
+                        {renderActionCard(act)}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Suggestions Chips */}
@@ -293,7 +606,7 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Hỏi giá gói, kiểm tra đơn hàng, bảo hành..."
+              placeholder="Hỏi giá gói, mua tài khoản, gia hạn, bảo hành..."
               className="flex-1 min-w-0 bg-transparent text-xs text-[#0F172A] dark:text-white placeholder:text-slate-400 focus:outline-none py-1.5"
             />
             <button
@@ -312,8 +625,8 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
             </button>
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium px-1 mt-2">
-            <span>✨ Powered by BOW Agent Engine</span>
-            <span>Chế độ an toàn 100%</span>
+            <span>✨ Powered by BOW Agent V2 Engine</span>
+            <span>Chế độ tương tác 100% an toàn</span>
           </div>
         </div>
       </div>

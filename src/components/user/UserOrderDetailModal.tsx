@@ -553,7 +553,6 @@ export default function UserOrderDetailModal({
                     className="rounded-xl bg-gradient-to-r from-[#19A7FF] to-[#2563EB] hover:from-[#19A7FF] hover:to-[#1D4ED8] text-white px-3.5 py-1.5 text-xs font-black transition shadow-xs cursor-pointer shrink-0 flex items-center gap-1.5 animate-pulse ml-auto"
                   >
                     <span>🔄 Gia hạn / Mua tiếp</span>
-                    <span className="text-[10px] bg-white/20 px-1 py-0.2 rounded-md font-bold">-10%</span>
                   </button>
                 )}
               </div>

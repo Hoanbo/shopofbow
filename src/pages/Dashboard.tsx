@@ -483,7 +483,6 @@ function OrderCard({
                 className="rounded-xl bg-gradient-to-r from-[#19A7FF] to-[#2563EB] hover:from-[#19A7FF] hover:to-[#1D4ED8] text-white px-3.5 py-1.5 text-xs font-black transition shadow-xs cursor-pointer shrink-0 flex items-center justify-center gap-1.5 animate-pulse"
               >
                 <span>🔄 Gia hạn ngay</span>
-                <span className="text-[10px] bg-white/20 px-1 py-0.2 rounded-md font-bold">-10%</span>
               </button>
             )}
           </div>
@@ -653,6 +652,7 @@ export default function Dashboard() {
 
   // Order Detail Modal State
   const [selectedDetailOrder, setSelectedDetailOrder] = useState<Order | null>(null);
+  const [selectedRenewalOrder, setSelectedRenewalOrder] = useState<Order | null>(null);
   const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
 
   const handleReviewSuccess = useCallback((orderId: string) => {
@@ -825,17 +825,30 @@ export default function Dashboard() {
     }
   }, [session?.user?.id, refreshBalance]));
 
-  // Deep linking: Tự động mở Order Detail Modal nếu có ?order_id=xxx trong URL
+  // Deep linking: Tự động mở Order Detail Modal hoặc Order Renewal Modal
   const targetOrderId = searchParams.get('order_id');
+  const targetAction = searchParams.get('action');
   useEffect(() => {
     if (!targetOrderId || !session?.user?.id) return;
+
+    const processDeepLinkOrder = (orderData: Order) => {
+      if (targetAction === 'renew') {
+        if (orderData.status !== 'cancelled' && orderData.status !== 'refunded') {
+          setSelectedRenewalOrder(orderData);
+        } else {
+          toast.error('⚠️ Đơn hàng này không thể gia hạn.');
+        }
+      } else {
+        setSelectedDetailOrder(orderData);
+      }
+    };
 
     // Tìm trong danh sách orders đã nạp
     const match = orders.find(
       (o) => o.id === targetOrderId || o.payment_code === targetOrderId,
     );
     if (match) {
-      setSelectedDetailOrder(match);
+      processDeepLinkOrder(match);
       return;
     }
 
@@ -850,7 +863,7 @@ export default function Dashboard() {
           .maybeSingle() as any);
 
         if (!error && data) {
-          setSelectedDetailOrder(data as Order);
+          processDeepLinkOrder(data as Order);
         } else if (error || !data) {
           toast.error('⚠️ Đơn hàng không tồn tại hoặc bạn không có quyền xem.');
         }
@@ -860,8 +873,55 @@ export default function Dashboard() {
     };
 
     fetchTargetOrder();
-  }, [targetOrderId, orders, session?.user?.id, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetOrderId, targetAction, session?.user?.id, toast]);
 
+  // Deep linking: Mở form tạo Ticket hỗ trợ bảo hành
+  const newTicketFlag = searchParams.get('newTicket');
+  const supportOrderId = searchParams.get('orderId');
+
+  useEffect(() => {
+    if (newTicketFlag === '1' && supportOrderId && session?.user?.id) {
+      const validateAndOpenSupport = async () => {
+        try {
+          const { data, error } = await (supabase
+            .from('orders')
+            .select('id')
+            .eq('id', supportOrderId)
+            .eq('user_id', session.user.id)
+            .maybeSingle() as any);
+
+          if (!error && data) {
+            setSupportOrderIdForModal(data.id);
+            setShowSupportModalFromOrder(true);
+          } else {
+            toast.error('⚠️ Đơn hàng không hợp lệ hoặc bạn không có quyền thao tác.');
+          }
+        } catch (err) {
+          console.error('Error validating order for support:', err);
+        } finally {
+          // Clean URL params to prevent duplicate triggers on refresh
+          const next = new URLSearchParams(searchParams);
+          next.delete('newTicket');
+          next.delete('orderId');
+          setSearchParams(next, { replace: true });
+        }
+      };
+      
+      validateAndOpenSupport();
+    }
+  }, [newTicketFlag, supportOrderId, session?.user?.id, searchParams, setSearchParams, toast]);
+
+  // Deep linking: Lấy số tiền nạp từ URL (nếu có)
+  const depositAmountFlag = searchParams.get('depositAmount');
+  useEffect(() => {
+    if (depositAmountFlag) {
+      const parsed = parseInt(depositAmountFlag, 10);
+      if (!isNaN(parsed) && isFinite(parsed) && parsed > 0 && parsed <= 1000000000) {
+        setDepositAmount(parsed);
+      }
+    }
+  }, [depositAmountFlag]);
 
   if (!session) return null;
 
@@ -1562,6 +1622,7 @@ export default function Dashboard() {
           if (searchParams.has('order_id')) {
             const next = new URLSearchParams(searchParams);
             next.delete('order_id');
+            next.delete('action');
             setSearchParams(next, { replace: true });
           }
         }}
@@ -1570,6 +1631,32 @@ export default function Dashboard() {
           setShowSupportModalFromOrder(true);
         }}
       />
+
+      {/* Global Order Renewal Modal from Deep Link */}
+      {selectedRenewalOrder && (
+        <OrderRenewalModal
+          order={selectedRenewalOrder}
+          onClose={() => {
+            setSelectedRenewalOrder(null);
+            if (searchParams.has('order_id')) {
+              const next = new URLSearchParams(searchParams);
+              next.delete('order_id');
+              next.delete('action');
+              setSearchParams(next, { replace: true });
+            }
+          }}
+          onRenewalSuccess={() => {
+            setSelectedRenewalOrder(null);
+            if (searchParams.has('order_id')) {
+              const next = new URLSearchParams(searchParams);
+              next.delete('order_id');
+              next.delete('action');
+              setSearchParams(next, { replace: true });
+            }
+            fetchOrders();
+          }}
+        />
+      )}
     </div>
   );
 }

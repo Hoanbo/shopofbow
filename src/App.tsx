@@ -48,6 +48,7 @@ const AdminReviews = lazy(() => import('./pages/admin/Reviews'));
 const AdminCoupons = lazy(() => import('./pages/admin/Coupons'));
 const AdminPrompts = lazy(() => import('./pages/admin/AdminPrompts'));
 const AdminAffiliates = lazy(() => import('./pages/admin/Affiliates'));
+const AgentAnalytics = lazy(() => import('./pages/admin/AgentAnalytics'));
 
 const adminSpinner = (
   <div className="grid min-h-dvh place-items-center bg-sky-soft">
@@ -86,6 +87,7 @@ const router = createBrowserRouter([
           { path: 'audit-logs', element: lazyAdmin(<AdminAuditLogs />) },
           { path: 'audit', element: lazyAdmin(<AdminAuditLogs />) },
           { path: 'activity', element: lazyAdmin(<AdminAuditLogs />) },
+          { path: 'agent-analytics', element: lazyAdmin(<AgentAnalytics />) },
           { path: 'analytics', element: lazyAdmin(<Dashboard />) },
           { path: 'wallet', element: lazyAdmin(<AdminUsers />) },
           { path: 'users', element: lazyAdmin(<AdminUsers />) },

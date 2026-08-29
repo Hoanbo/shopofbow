@@ -1,13 +1,8 @@
-export type UserRole = 'guest' | 'user' | 'ctv' | 'admin';
+// src/services/agent/permissions.ts — Bảng phân quyền gọi Tool của BOW Agent
+import type { AgentContext, AgentRole } from './types';
 
-export interface AgentContext {
-  userId?: string | null;
-  email?: string | null;
-  fullName?: string | null;
-  role: UserRole;
-  balance?: number;
-  isAuthenticated: boolean;
-}
+export type { AgentContext, AgentRole };
+export type UserRole = AgentRole;
 
 export type AgentToolName =
   | 'searchProducts'

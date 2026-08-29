@@ -1,52 +1,65 @@
-# 🛡️ BOW Agent V1 Specification & Safety Boundary
+# ✨ BOW AGENT V2 — GUIDED ACTIONS & INTERACTIVE WORKFLOWS
 
-Tài liệu xác định phạm vi và ranh giới an toàn của **✨ BOW Agent V1 (Frozen Spec)**.
-
----
-
-## 1. MỤC TIÊU V1 (SCOPE)
-Cung cấp trợ lý thông minh hỗ trợ khách hàng và khách vãng lai tra cứu thông tin 24/7 với hiệu suất cao, 100% dữ liệu thực từ Database Supabase.
-
-### ✅ 8 Read-only Tools được phép hoạt động:
-1. `searchProducts`: Tra cứu toàn bộ kho sản phẩm, phân nhóm AI Tools & Premium Apps, bảng giá, thời hạn, tính năng và bảo hành.
-2. `getMyOrders`: Tra cứu lịch sử 6 đơn hàng gần nhất của chính user (yêu cầu xác thực).
-3. `getMyWalletBalance`: Tra cứu số dư ví tài khoản của chính user (yêu cầu xác thực).
-4. `getActiveCoupons`: Tra cứu các mã giảm giá đang kích hoạt còn hạn.
-5. `checkWarrantyPolicy`: Tra cứu chính sách bảo hành 1 đổi 1 và quy trình hỗ trợ.
-6. `searchPromptsLibrary`: Tra cứu thư viện Prompt AI theo từ khóa và danh mục.
-7. `getFaqsAndGuides`: Tra cứu câu hỏi thường gặp và hướng dẫn sử dụng.
-8. `getSupportChannels`: Tra cứu Hotline, link Zalo Admin và fanpage Facebook.
+Phiên bản: **V2 (Guided Actions)**  
+Kiến trúc: **5 Tầng Tách Bạch + Session Context Memory + Action Validation**
 
 ---
 
-## 2. RANH GIỚI AN TOÀN TUYỆT ĐỐI CỦA V1 (SAFETY BOUNDARIES)
+## 🎯 1. ĐỊNH VỊ V2 VÀ NGUYÊN TẮC CỐT LÕI (CORE PRINCIPLES)
 
-* ❌ **Read-only 100%**: Tuyệt đối không thực hiện bất kỳ hành động ghi (*write/mutate*) hay thay đổi trạng thái Database.
-* ❌ **No Autonomous Payment / Checkout**: Agent không tự động trừ tiền ví hay tạo đơn thanh toán tự động. Mọi giao dịch phải do người dùng tự thao tác tại UI Checkout.
-* ❌ **No Refund Execution**: Agent không tự động hoàn tiền (*refund*).
-* ❌ **No Account Modification**: Agent không thể đổi mật khẩu, email, số điện thoại hay cấu hình 2FA của user.
-* ❌ **No Destructive Action**: Không có quyền xóa dữ liệu, hủy đơn hàng hay thao tác quản trị.
-* ❌ **No Multi-step Autonomous Loop**: Không tự ý suy luận vòng lặp phức tạp ngoài tầm kiểm soát.
+✨ **BOW AGENT V2 LÀ:**
+- **Database-driven:** Dữ liệu hoàn toàn lấy từ Database, không tự bịa thông tin.
+- **Rule-based:** Xử lý ý định (Intent) qua tập luật cứng, đảm bảo độ ổn định 100%.
+- **Context-aware:** Lưu giữ bối cảnh đa lượt (Multi-turn Context) ngắn hạn.
+- **Action-oriented:** Hỗ trợ điều hướng và mở luồng bằng Action Card.
+
+🚫 **BOW AGENT V2 KHÔNG PHẢI LÀ:**
+- **No LLM / Không AI bên thứ 3:** Không dùng OpenAI/Gemini để sinh ngôn ngữ tự nhiên.
+- **Không autonomous (Không tự trị):** Mọi hành động đều phải do người dùng tự click xác nhận.
+- **Không tự thanh toán:** Không tự ý trừ tiền tài khoản của khách.
+- **Không tự refund:** Không tự ý hoàn tiền.
+- **Không tự cấp tài khoản:** Không bypass luồng giao hàng bảo mật.
+- **Không tự cộng wallet:** Chỉ mở popup hướng dẫn nạp, không thao tác Database trực tiếp.
+
+* **V1**: Hiểu + Tra cứu dữ liệu thực tế từ Database (Read-only).
+* **V2**: Hiểu + Tra cứu + **Đề xuất Hành động (Action Card UI)** + **Người dùng xác nhận** + **Mở đúng Workflow của Website**.
 
 ---
 
-## 3. CÁC TÍNH NĂNG ĐƯỢC GIỮ LẠI CHO V2 / V3 (OUT OF SCOPE FOR V1)
-* ⏳ **V2 — Guided Actions**: Tạo ticket hỗ trợ tự động có confirm, mở modal mua nhanh, apply coupon tự động theo intent.
-* ⏳ **V3 — Advanced AI Agent**: So sánh sản phẩm đa chiều, RAG Vector Database, semantic embeddings, phân tích thói quen mua sắm.
+## 🏛️ 2. CẤU TRÚC KIẾN TRÚC MÃ NGUỒN
 
----
-
-## 4. ARCHITECTURE PIPELINE
 ```
-USER QUERY / QUICK CHIP
-        ↓
-QUERY PREPROCESSOR & PARAMETER EXTRACTION
-        ↓
-DYNAMIC PRODUCT RESOLVER (Scoring & Ambiguity)
-        ↓
-DATABASE SUPABASE (Source of Truth)
-        ↓
-TOOL EXECUTION (Read-only + Permission Guard)
-        ↓
-STRUCTURED MARKDOWN RESPONSE
+src/services/agent/
+├── types.ts                  # Trung tâm toàn bộ Type Definitions (Intent, Action, Context...)
+├── sessionContext.ts        # Quản lý bộ nhớ ngữ cảnh phiên hội thoại (TTL 45 phút)
+├── intentResolver.ts        # Phân loại 10 Intent V2 có hiểu ngữ cảnh đa lượt
+├── productResolver.ts       # Dynamic Product Resolver (Chấm điểm & Alias)
+├── categoryResolver.ts      # Dynamic Category Resolver (Canonical ID/Slug)
+├── actionPlanner.ts         # Bộ lập kế hoạch đề xuất hành động
+├── actionValidator.ts       # Kiểm tra quyền sở hữu & tính toàn vẹn của Action
+├── permissionGuard.ts       # Phân quyền Guest / Logged-in User
+├── tools.ts                 # Tool Execution Layer
+├── responseFormatter.ts     # Trình định dạng tin nhắn & Action Cards
+├── agentEngine.ts           # Bộ điều phối chính (Orchestrator V2)
+└── README.md                # Tài liệu kỹ thuật
 ```
+
+---
+
+## 🧩 3. GIAO THỨC HÀNH ĐỘNG (ACTION PROTOCOL)
+
+| Action Type | Ý nghĩa nghiệp vụ | Giao diện kích hoạt |
+|---|---|---|
+| `NAVIGATE_CHECKOUT` | Mở trang / modal thanh toán mua nhanh | Mở `CheckoutModal` với đúng `productId` & `planId` |
+| `NAVIGATE_ORDER_DETAIL` | Mở chi tiết đơn hàng đã mua | Mở `UserOrderDetailModal` |
+| `NAVIGATE_RENEWAL` | Mở popup gia hạn đơn cũ kèm ưu đãi -10% | Mở `OrderRenewalModal` |
+| `NAVIGATE_SUPPORT` | Mở form báo lỗi / yêu cầu bảo hành | Mở `CreateTicketModal` |
+| `APPLY_COUPON` | Lưu mã giảm giá vào session thanh toán | Lưu vào `sessionStorage` tự động điền khi mua |
+| `OPEN_DEPOSIT` | Mở giao diện nạp tiền vào ví | Mở modal VietQR nạp tiền tự động SePay |
+
+---
+
+## 🛡️ 4. NGUYÊN TẮC AN TOÀN VÀ BẢO TOÀN GIÁ (PRICE INTEGRITY)
+1. **Giá hiển thị (Display-only)**: `displayPrice` trong payload chỉ để hiển thị trên UI. Luồng thanh toán của website luôn fetch lại giá gốc từ Database theo `planId` tại thời điểm tạo đơn.
+2. **Quyền sở hữu (Ownership Protection)**: Khách vãng lai hoặc User A không thể mở đơn hay tạo ticket cho đơn hàng của User B.
+3. **Chống Click Đúp (Anti Double-Click)**: Mỗi Action sinh ra kèm một `actionId` ngẫu nhiên và trạng thái khóa nút bấm trong lúc đang mở giao diện.

@@ -458,7 +458,6 @@ export default function UserOverviewTab({
                         className="rounded-full bg-gradient-to-r from-[#19A7FF] to-[#2563EB] hover:from-[#19A7FF] hover:to-[#1D4ED8] text-white px-3.5 py-1.5 text-xs font-black transition shadow-xs flex items-center gap-1.5 animate-pulse"
                       >
                         <span>🔄 Gia hạn</span>
-                        <span className="text-[9px] bg-white/20 px-1 py-0.2 rounded font-bold">-10%</span>
                       </button>
                     )}
 

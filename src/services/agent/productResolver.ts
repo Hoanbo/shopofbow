@@ -12,6 +12,9 @@ export interface ProductResolutionResult {
     durationFilter?: string;
     isCheapestQuery?: boolean;
     isBestSellerQuery?: boolean;
+    isMostExpensiveQuery?: boolean;
+    isOtherPlanQuery?: boolean;
+    isBuyNowQuery?: boolean;
     categoryFilter?: string;
   };
 }
@@ -37,24 +40,29 @@ function extractQueryParameters(rawText: string) {
   const lower = rawText.toLowerCase();
   let durationFilter: string | undefined = undefined;
 
-  if (lower.includes('1 tuần') || lower.includes('7 ngày') || lower.includes('tuần')) {
-    durationFilter = '1 tuần';
-  } else if (lower.includes('1 tháng') || lower.includes('tháng') || lower.includes('30 ngày')) {
-    durationFilter = '1 tháng';
-  } else if (lower.includes('3 tháng')) {
-    durationFilter = '3 tháng';
+  if (lower.includes('1 năm') || lower.includes('12 tháng') || lower.includes('năm')) {
+    durationFilter = '1 năm';
   } else if (lower.includes('6 tháng') || lower.includes('nửa năm')) {
     durationFilter = '6 tháng';
-  } else if (lower.includes('1 năm') || lower.includes('12 tháng') || lower.includes('năm')) {
-    durationFilter = '1 năm';
+  } else if (lower.includes('3 tháng')) {
+    durationFilter = '3 tháng';
+  } else if (lower.includes('1 tháng') || lower.includes('30 ngày')) {
+    durationFilter = '1 tháng';
+  } else if (lower.includes('1 tuần') || lower.includes('7 ngày') || lower.includes('tuần')) {
+    durationFilter = '1 tuần';
   } else if (lower.includes('vĩnh viễn') || lower.includes('lifetime')) {
     durationFilter = 'vĩnh viễn';
+  } else if (lower.includes('tháng')) {
+    durationFilter = '1 tháng';
   }
 
-  const isCheapestQuery = lower.includes('rẻ nhất') || lower.includes('giá thấp nhất') || lower.includes('tiết kiệm');
+  const isCheapestQuery = lower.includes('rẻ nhất') || lower.includes('giá thấp nhất') || lower.includes('tiết kiệm') || lower.includes('cheapest');
+  const isMostExpensiveQuery = lower.includes('đắt nhất') || lower.includes('giá cao nhất') || lower.includes('cao nhất') || lower.includes('most expensive');
   const isBestSellerQuery = lower.includes('bán chạy') || lower.includes('nhiều người mua') || lower.includes('phổ biến');
+  const isOtherPlanQuery = lower.includes('gói khác') || lower.includes('lựa chọn khác') || lower.includes('tùy chọn khác') || lower.includes('option khác') || lower.includes('có gói nào khác') || lower.includes('còn gói nào khác');
+  const isBuyNowQuery = lower.includes('mua luôn') || lower.includes('chốt') || lower.includes('lấy gói này') || lower.includes('thanh toán') || lower.includes('mua đi') || lower.includes('lấy luôn');
 
-  return { durationFilter, isCheapestQuery, isBestSellerQuery };
+  return { durationFilter, isCheapestQuery, isBestSellerQuery, isMostExpensiveQuery, isOtherPlanQuery, isBuyNowQuery };
 }
 
 /**

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import type { CatalogItem } from '../data/types';
 import { fetchBySlug, fetchByCategory, fetchAllProducts, fetchFaqs, isValidUuid } from '../data/api';
 import { formatVND } from '../data/catalog';
@@ -42,6 +42,7 @@ export default function Detail({ category, base, crumb }: Props) {
   const { session, isCtv, profile } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
+  const [searchParams] = useSearchParams();
   const [copiedRef, setCopiedRef] = useState(false);
   const toast = useToast();
 
@@ -99,6 +100,22 @@ export default function Detail({ category, base, crumb }: Props) {
   const [showCheckout, setShowCheckout] = useState(false);
   // Thông tin đơn hàng sau khi thanh toán ví thành công
   const [walletOrder, setWalletOrder] = useState<{ code: string; amount: number; qty: number } | null>(null);
+
+  const processedPlanId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!currentItem) return;
+    
+    const planId = searchParams.get('plan');
+    if (planId && planId !== processedPlanId.current) {
+      const foundIndex = currentItem.plans.findIndex((p: any) => p.id === planId);
+      if (foundIndex !== -1) {
+        setPlan(foundIndex);
+        setShowCheckout(true);
+      }
+      processedPlanId.current = planId;
+    }
+  }, [currentItem, searchParams]);
 
   useSeo({
     title: currentItem?.name,
