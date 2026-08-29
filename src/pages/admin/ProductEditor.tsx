@@ -50,6 +50,7 @@ const emptyForm = {
   is_active: true,
   is_featured: false,
   sort_order: 0,
+  search_aliases: '',
 };
 
 const slugify = (s: string) =>
@@ -124,6 +125,7 @@ export default function ProductEditor() {
           is_active: p.is_active,
           is_featured: p.is_featured,
           sort_order: p.sort_order,
+          search_aliases: Array.isArray((p as any).search_aliases) ? (p as any).search_aliases.join(', ') : '',
         });
         return loadSubs(p.id);
       })
@@ -160,6 +162,12 @@ export default function ProductEditor() {
     is_active: form.is_active,
     is_featured: form.is_featured,
     sort_order: Number(form.sort_order) || 0,
+    search_aliases: form.search_aliases
+      ? form.search_aliases
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean)
+      : [],
   });
 
   const onSave = async () => {
@@ -356,6 +364,15 @@ export default function ProductEditor() {
                 rows={5}
                 value={form.description}
                 onChange={(e) => set('description', e.target.value)}
+              />
+            </div>
+            <div className="mt-4 border-t border-slate-100 dark:border-slate-800/80 pt-4">
+              <Field
+                label="🔍 Từ khóa tìm kiếm cho BOW Agent (Bí danh / Aliases)"
+                value={form.search_aliases}
+                onChange={(e) => set('search_aliases', e.target.value)}
+                placeholder="vd: chatgpt, gpt, gpt4, openai, sonnet (ngăn cách bằng dấu phẩy)"
+                hint="Giúp trợ lý ảo AI BOW Agent tự động tìm thấy sản phẩm này khi khách gõ tên viết tắt hoặc từ khóa liên quan."
               />
             </div>
           </AdminCard>

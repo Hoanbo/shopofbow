@@ -55,6 +55,7 @@ export interface Database {
           affiliate_reward?: number;
           affiliate_discount?: number;
           price_ctv?: number | null;
+          search_aliases?: string[] | null;
           created_at: string;
           updated_at: string;
         };

@@ -3,7 +3,7 @@ import { Outlet, ScrollRestoration, Navigate } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import MobileNav from './MobileNav';
-import { ContactFab } from './ContactButtons';
+import BowAgentWidget from './agent/BowAgentWidget';
 import { captureReferralFromUrl } from '../utils/affiliate';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,7 +26,7 @@ export default function Layout() {
       </main>
       <Footer />
       <MobileNav />
-      <ContactFab />
+      <BowAgentWidget />
       <ScrollRestoration />
     </div>
   );
