@@ -593,7 +593,7 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
                   BOW Agent
                 </h3>
                 <span className="shrink-0 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 px-1.5 py-0.5 text-[9px] font-black text-white shadow-xs">
-                  V2 Guided
+                  V3.3
                 </span>
               </div>
               <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
@@ -720,7 +720,7 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
             </button>
           </div>
           <div className="flex justify-between items-center text-[10px] text-slate-400 font-medium px-1 mt-2">
-            <span>✨ Powered by BOW Agent V2 Engine</span>
+            <span>✨ Powered by BOW Agent V3.3</span>
             <span>Chế độ tương tác 100% an toàn</span>
           </div>
         </div>

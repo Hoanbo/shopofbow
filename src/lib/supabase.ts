@@ -11,16 +11,16 @@ const anonKey =
   '';
 
 if (!url || !anonKey) {
-  // Fail loud in dev; helps catch missing .env.local before queries run.
-  console.error(
-    '[BOW] Missing Supabase env vars. Copy .env.example to .env.local and fill in ' +
-      'VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.',
+  // Fail fast instead of contacting a fake endpoint when local/test env is missing.
+  throw new Error(
+    '[BOW] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. ' +
+      'Configure the environment before starting the application.',
   );
 }
 
 export const supabase = createClient<Database>(
-  url || 'https://mock.supabase.co',
-  anonKey || 'mock-anon-key',
+  url,
+  anonKey,
   {
     auth: {
       persistSession: true,

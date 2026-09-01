@@ -24,7 +24,7 @@ echo ============================================================
 echo.
 
 :: Nhap API key cua khach
-set "APIKEY=sk-JCd8FiKolPKiwyv1HLf0RrSV2R7cRxx2b"
+set "APIKEY="
 set /p "APIKEY=Nhap API Key cua ban (sk-...): "
 
 if "%APIKEY%"=="" (

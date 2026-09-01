@@ -701,6 +701,20 @@ export async function processAgentMessageV2(
         planToBuy = matchPlanByDuration(activePlans, requestedDuration, userText);
       }
 
+      // An explicit duration is authoritative: never silently downgrade to another plan.
+      if (requestedDuration && !planToBuy) {
+        rememberProductContext(productToBuy, undefined);
+        return {
+          id,
+          sender: 'agent',
+          content: `⚠️ **Gói ${requestedDuration} của ${productToBuy.name} hiện chưa có sẵn.**\n\nCác gói đang có:\n${activePlans.map((p) => `• **${p.name}** (${p.duration}) — **${p.price.toLocaleString('vi-VN')}đ**`).join('\n')}`,
+          timestamp,
+          data: { type: 'product', product: productToBuy },
+          actions: planMultipleCheckoutActions(productToBuy, activePlans, context),
+          suggestions: ['Xem các gói khác', 'Gặp hỗ trợ viên'],
+        };
+      }
+
       if (!planToBuy && resolution.extractedParams.isCheapestQuery && activePlans.length > 0) {
         planToBuy = [...activePlans].sort((a, b) => a.price - b.price)[0];
       }

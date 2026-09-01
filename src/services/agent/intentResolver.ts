@@ -44,10 +44,12 @@ export function extractDuration(text: string): string | undefined {
   // 3 tháng / 1 quý / 90 ngày
   if (/\b(3\s*thang|3thang|3\s*t|1\s*quy|90\s*ngay)\b/.test(norm)) return '3 tháng';
 
-  // 1 tháng / 30 ngày
-  if (/\b(1\s*thang|1thang|1\s*t|30\s*ngay|thang)\b/.test(norm)) return '1 tháng';
+  // 1 month / 30 days
+  if (/\b(1\s*thang|1thang|1\s*t|30\s*ngay)\b/.test(norm)) return '1 tháng';
 
-  // 1 tuần / 7 ngày
+  // Any explicit numeric month remains explicit; never default it to 1 month.
+  const numericMonth = norm.match(/\b(\d+)\s*thang\b/);
+  if (numericMonth) return `${numericMonth[1]} thang`;
   if (/\b(1\s*tuan|1tuan|7\s*ngay|tuan)\b/.test(norm)) return '1 tuần';
 
   // 3 năm
@@ -70,24 +72,41 @@ export function matchPlanByDuration(
   const duration = extractDuration(durationOrText) || extractDuration(fullQuery || '') || durationOrText;
   if (!duration) return undefined;
 
-  const normDuration = normalizeText(duration);
+  const requestedMonths = durationToMonths(duration);
+  if (requestedMonths !== undefined) {
+    return plans.find((plan) => durationToMonths(`${plan.name} ${plan.duration || ''}`) === requestedMonths);
+  }
 
-  const equivalents: Record<string, string[]> = {
-    '6 thang': ['6 thang', '180 ngay', 'nua nam'],
-    '1 nam': ['1 nam', '12 thang', '365 ngay', 'ca nam'],
-    '3 thang': ['3 thang', '90 ngay', '1 quy'],
-    '1 thang': ['1 thang', '30 ngay'],
-    '1 tuan': ['1 tuan', '7 ngay'],
-    '3 nam': ['3 nam'],
+  const normalized = normalizeText(duration);
+  const equivalentTerms: Record<string, string[]> = {
     'vinh vien': ['vinh vien', 'tron doi', 'lifetime'],
+    '100m token': ['100m token', '100 trieu token'],
+    '50m token': ['50m token', '50 trieu token'],
+    '10m token': ['10m token', '10 trieu token'],
   };
-
-  const terms = equivalents[normDuration] || [normDuration];
-
+  const terms = equivalentTerms[normalized] || [normalized];
   return plans.find((plan) => {
     const planText = normalizeText(`${plan.name} ${plan.duration || ''}`);
     return terms.some((term) => planText.includes(term));
   });
+}
+
+/** Convert user and authoritative plan labels to one comparable month value. */
+export function durationToMonths(value: string): number | undefined {
+  const normalized = normalizeText(value);
+  const monthMatch = normalized.match(/\b(\d+)\s*thang\b/);
+  if (monthMatch) return Number(monthMatch[1]);
+  const yearMatch = normalized.match(/\b(\d+)\s*nam\b/);
+  if (yearMatch) return Number(yearMatch[1]) * 12;
+  const dayMatch = normalized.match(/\b(\d+)\s*ngay\b/);
+  if (dayMatch) {
+    const days = Number(dayMatch[1]);
+    if (days % 30 === 0) return days / 30;
+  }
+  if (/\bnua\s*nam\b/.test(normalized)) return 6;
+  if (/\bca\s*nam\b/.test(normalized)) return 12;
+  if (/\b1\s*quy\b/.test(normalized)) return 3;
+  return undefined;
 }
 
 
