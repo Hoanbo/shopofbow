@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { processAgentMessage, type AgentMessage, type AgentAction } from '../../services/agent/agentEngine';
+import { processAgentMessage, processAgentMessageV2, type AgentMessage, type AgentAction } from '../../services/agent/agentEngine';
 import type { AgentContext } from '../../services/agent/types';
 import { clearSessionContext, getSessionContext } from '../../services/agent/sessionContext';
 import { agentAnalytics } from '../../services/agent/monitoring/agentAnalytics';
 import { useToast } from '../Toast';
+import CheckoutModal from '../CheckoutModal';
+import { AgentDepositModal } from './AgentDepositModal';
+import { AgentWarrantyModal } from './AgentWarrantyModal';
+import { fetchBySlug } from '../../data/api';
+import type { CatalogItem, PlanTier } from '../../data/types';
+import { supabase } from '../../lib/supabase';
 
 interface BowAgentChatModalProps {
   isOpen: boolean;
@@ -24,13 +30,20 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
       sender: 'agent',
       content: `👋 Xin chào! Mình là ✨ **BOW Agent** — Trợ lý thông minh của **Shop of BOW**.\n\nMình có thể giúp bạn tìm sản phẩm, xem bảng giá, mua tài khoản 1-Click, kiểm tra đơn hàng hoặc hỗ trợ bảo hành 24/7. Bạn đang cần mình hỗ trợ điều gì? 🚀`,
       timestamp: new Date().toISOString(),
-      suggestions: ['🛍️ Xem danh mục', '🔎 Tìm sản phẩm', '📦 Kiểm tra đơn hàng', '🎟️ Mã giảm giá'],
+      suggestions: ['🛍️ Xem danh mục', '🔍 Tìm sản phẩm', '📦 Kiểm tra đơn hàng', '🎟️ Mã giảm giá'],
     },
   ]);
 
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [executingActionId, setExecutingActionId] = useState<string | null>(null);
+  const [directCheckout, setDirectCheckout] = useState<{
+    item: CatalogItem;
+    plan: { id?: string; label: string; duration: string; price: number };
+  } | null>(null);
+  const [directDepositAmount, setDirectDepositAmount] = useState<number | null>(null);
+  const [warrantyModalData, setWarrantyModalData] = useState<{ order: any; issue?: string } | null>(null);
+  const [walletSuccessOrder, setWalletSuccessOrder] = useState<{ code: string; amount: number; qty: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -112,15 +125,20 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
       // Giả lập độ trễ suy nghĩ nhẹ (250-350ms)
       await new Promise((r) => setTimeout(r, 300));
 
-      // Timeout Guard 8s chống treo vô hạn
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('TIMEOUT')), 8000)
-      );
+      let agentReply: AgentMessage;
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('TIMEOUT')), 9000)
+        );
 
-      const agentReply = await Promise.race([
-        processAgentMessage(text, context),
-        timeoutPromise,
-      ]);
+        agentReply = await Promise.race([
+          processAgentMessage(text, context),
+          timeoutPromise,
+        ]);
+      } catch (primaryErr) {
+        console.warn('[BOW Agent Chat] Primary engine delayed or failed, activating instant deterministic V2 fallback:', primaryErr);
+        agentReply = await processAgentMessageV2(text, context);
+      }
 
       // Track ACTION_SHOWN
       const currentSession = getSessionContext();
@@ -175,7 +193,7 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
   };
 
   // Điều phối và thực thi Action Card (Anti Double-Click)
-  const handleActionDispatch = (action: AgentAction) => {
+  const handleActionDispatch = async (action: AgentAction) => {
     if (executingActionId === action.id) return;
     
     const currentSession = getSessionContext();
@@ -273,11 +291,59 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
     try {
       switch (action.type) {
         case 'NAVIGATE_CHECKOUT': {
-          onClose();
           const targetSlug = action.payload.productSlug || action.payload.productId;
-          const planQuery = action.payload.planId ? `?plan=${action.payload.planId}` : '';
-          navigate(`/products/${targetSlug}${planQuery}`);
-          toast.success(`Đang mở trang đặt mua ${action.payload.productName || 'sản phẩm'}...`);
+          if (!targetSlug) {
+            toast.error('Không tìm thấy thông tin sản phẩm.');
+            break;
+          }
+
+          try {
+            let item = await fetchBySlug(targetSlug);
+            if (!item && action.payload.productId) {
+              const { data: pData } = await supabase
+                .from('products')
+                .select('slug')
+                .eq('id', action.payload.productId)
+                .maybeSingle();
+              if (pData?.slug) {
+                item = await fetchBySlug(pData.slug);
+              }
+            }
+
+            if (!item) {
+              toast.error('Sản phẩm hiện không khả dụng.');
+              break;
+            }
+
+            let matchedPlan: PlanTier | undefined = undefined;
+            if (action.payload.planId) {
+              matchedPlan = item.plans.find((p) => p.id === action.payload.planId);
+            }
+            if (!matchedPlan && action.payload.planLabel) {
+              matchedPlan = item.plans.find((p) => p.label.toLowerCase() === action.payload.planLabel!.toLowerCase());
+            }
+            if (!matchedPlan) {
+              matchedPlan = item.plans[0];
+            }
+
+            if (!matchedPlan) {
+              toast.error('Gói cước không khả dụng.');
+              break;
+            }
+
+            setDirectCheckout({
+              item,
+              plan: {
+                id: matchedPlan.id,
+                label: matchedPlan.label,
+                duration: matchedPlan.duration,
+                price: matchedPlan.price,
+              },
+            });
+          } catch (err) {
+            console.error('[Agent Direct Checkout Error]:', err);
+            toast.error('Không thể mở giao diện thanh toán lúc này.');
+          }
           break;
         }
 
@@ -294,9 +360,20 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
         }
 
         case 'NAVIGATE_SUPPORT': {
+          setWarrantyModalData({
+            order: {
+              id: action.payload.orderId,
+              paymentCode: action.payload.paymentCode,
+              productName: action.payload.productName,
+            },
+            issue: action.payload.issueDescription,
+          });
+          break;
+        }
+
+        case 'NAVIGATE_TICKET_DETAIL': {
           onClose();
-          const orderParam = action.payload.orderId ? `&orderId=${action.payload.orderId}` : '';
-          navigate(`/dashboard?tab=tickets&newTicket=1${orderParam}`);
+          navigate(`/dashboard?tab=tickets&ticket_id=${action.payload.ticketId}`);
           break;
         }
 
@@ -309,9 +386,8 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
         }
 
         case 'OPEN_DEPOSIT': {
-          onClose();
           const amt = action.payload.amount || 50000;
-          navigate(`/dashboard?tab=wallet&depositAmount=${amt}`);
+          setDirectDepositAmount(amt);
           break;
         }
 
@@ -377,24 +453,27 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
     const isExpired = action.expiresAt ? Date.now() > action.expiresAt : false;
 
     if (action.type === 'NAVIGATE_CHECKOUT') {
+      const planTitle = action.payload.planLabel || 'Gói bản quyền';
       return (
-        <div className={`mt-3 rounded-2xl border ${isExpired ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 grayscale opacity-75' : 'border-blue-100 dark:border-blue-900/60 bg-gradient-to-br from-blue-50/90 to-indigo-50/50 dark:from-[#162544] dark:to-[#121B30]'} p-3.5 shadow-sm space-y-2.5 animate-fade-up`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className={`flex h-7 w-7 items-center justify-center rounded-xl ${isExpired ? 'bg-slate-400' : 'bg-[#2563EB]'} text-white text-xs shadow-xs`}>
-                🎬
+        <div className={`mt-2 rounded-2xl border ${isExpired ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 grayscale opacity-75' : 'border-blue-100 dark:border-blue-900/60 bg-gradient-to-br from-blue-50/90 to-indigo-50/50 dark:from-[#162544] dark:to-[#121B30]'} p-3 shadow-xs space-y-2 animate-fade-up`}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${isExpired ? 'bg-slate-400' : 'bg-[#2563EB]'} text-white text-[11px] font-bold shadow-xs`}>
+                ⚡
               </span>
-              <div>
-                <h4 className="text-xs font-black text-[#0F172A] dark:text-white leading-tight">
-                  {action.payload.productName || 'Gói bản quyền'}
+              <div className="min-w-0">
+                <h4 className="text-xs font-bold text-[#0F172A] dark:text-white truncate">
+                  {planTitle}
                 </h4>
-                <p className="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
-                  {action.payload.planLabel || 'Bản quyền chính hãng'}
-                </p>
+                {action.payload.productName && action.payload.productName !== planTitle && (
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                    {action.payload.productName}
+                  </p>
+                )}
               </div>
             </div>
             {action.payload.displayPrice ? (
-              <span className={`font-mono text-xs font-black ${isExpired ? 'text-slate-400' : 'text-[#2563EB] dark:text-[#38BDF8]'}`}>
+              <span className={`font-mono text-xs font-extrabold shrink-0 ${isExpired ? 'text-slate-400' : 'text-[#2563EB] dark:text-[#38BDF8]'}`}>
                 {action.payload.displayPrice.toLocaleString('vi-VN')}đ
               </span>
             ) : null}
@@ -405,17 +484,17 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
               type="button"
               onClick={() => handleActionDispatch(action)}
               disabled={isBusy || isExpired}
-              className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5 px-3 text-xs font-black text-white shadow-md transition cursor-pointer disabled:opacity-50 ${isExpired ? 'bg-slate-400 shadow-none' : 'bg-gradient-to-r from-[#00A3FF] to-[#2563EB] shadow-blue-500/25 hover:from-[#008AE0] hover:to-[#1D4ED8] hover:scale-[1.01] active:scale-[0.98]'}`}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 px-3 text-xs font-bold text-white shadow-xs transition cursor-pointer disabled:opacity-50 ${isExpired ? 'bg-slate-400 shadow-none' : 'bg-gradient-to-r from-[#00A3FF] to-[#2563EB] hover:from-[#008AE0] hover:to-[#1D4ED8] active:scale-[0.98]'}`}
             >
               <span>{isExpired ? '⚠️' : (action.icon || '💳')}</span>
-              <span>{isExpired ? 'Đã hết hạn' : (isBusy ? 'Đang mở thanh toán...' : action.label)}</span>
+              <span>{isExpired ? 'Đã hết hạn' : (isBusy ? 'Đang xử lý...' : action.label.replace(/^[\p{Emoji}\s]+/u, ''))}</span>
             </button>
             
             {isExpired && (
               <button
                 type="button"
                 onClick={() => handleSend(action.payload.productName || 'Mua gói này')}
-                className="shrink-0 flex h-[38px] px-3 items-center justify-center rounded-xl bg-blue-100 hover:bg-blue-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-blue-600 dark:text-blue-400 font-bold transition cursor-pointer"
+                className="shrink-0 flex h-[34px] px-2.5 items-center justify-center rounded-xl bg-blue-100 hover:bg-blue-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-blue-600 dark:text-blue-400 font-bold transition cursor-pointer"
                 title="Tải lại lựa chọn"
               >
                 🔄
@@ -426,12 +505,20 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
       );
     }
 
+    // Sanitize label to strip any leading emoji, ensuring icon is rendered strictly ONCE (component responsibility)
+    const cleanActionLabel = (action.label || '').replace(/^[\p{Emoji}\u200d\uFE0F\s]+/u, '').trim() || action.label;
+
     if (action.type === 'NAVIGATE_RENEWAL' || action.type === 'NAVIGATE_SUPPORT') {
+      const isSupport = action.type === 'NAVIGATE_SUPPORT';
+      // Icon cho Header Badge đại diện cho đơn hàng (📦).
+      // Icon trong nút bấm đại diện cho hành động (action.icon, vd: 🎫 Gửi yêu cầu bảo hành).
+      const badgeIcon = '📦';
+
       return (
         <div className="mt-3 rounded-2xl border border-amber-100 dark:border-amber-900/50 bg-gradient-to-br from-amber-50/70 to-orange-50/30 dark:from-[#24211A] dark:to-[#1A1815] p-3.5 shadow-sm space-y-2.5 animate-fade-up">
           <div className="flex items-center gap-2">
             <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-500 text-white text-xs shadow-xs">
-              {action.icon || '🔄'}
+              {badgeIcon}
             </span>
             <div>
               <h4 className="text-xs font-black text-[#0F172A] dark:text-white leading-tight">
@@ -449,8 +536,8 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
             disabled={isBusy}
             className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 py-2.5 px-3 text-xs font-black text-white shadow-md shadow-orange-500/20 hover:scale-[1.01] active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
           >
-            <span>{action.icon || '🔄'}</span>
-            <span>{isBusy ? 'Đang mở...' : action.label}</span>
+            <span>{action.icon || (isSupport ? '🎫' : '🔄')}</span>
+            <span>{isBusy ? 'Đang mở...' : cleanActionLabel}</span>
           </button>
         </div>
       );
@@ -466,7 +553,7 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
           className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#00A3FF] to-[#2563EB] py-2 px-3.5 text-xs font-bold text-white shadow-sm hover:scale-[1.02] active:scale-[0.98] transition cursor-pointer disabled:opacity-50"
         >
           <span>{action.icon || '✨'}</span>
-          <span>{isBusy ? 'Đang xử lý...' : action.label}</span>
+          <span>{isBusy ? 'Đang xử lý...' : cleanActionLabel}</span>
         </button>
       </div>
     );
@@ -550,14 +637,16 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
                 {/* Render Action Card đơn nếu có */}
                 {msg.action && renderActionCard(msg.action)}
 
-                {/* Render Nhiều Action Card (Plan Selection) nếu có */}
+                {/* Render Nhiều Action Card (Plan Selection) nếu có - loại trừ action đơn đã render */}
                 {msg.actions && msg.actions.length > 0 && (
                   <div className="mt-3 flex flex-col gap-2.5">
-                    {msg.actions.map(act => (
-                      <div key={act.id}>
-                        {renderActionCard(act)}
-                      </div>
-                    ))}
+                    {msg.actions
+                      .filter(act => !msg.action || (act.id ? act.id !== msg.action.id : act.type !== msg.action.type))
+                      .map(act => (
+                        <div key={act.id || act.type}>
+                          {renderActionCard(act)}
+                        </div>
+                      ))}
                   </div>
                 )}
               </div>
@@ -571,7 +660,7 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
                       onClick={() => handleSend(sug)}
                       className="rounded-full bg-blue-50/80 hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-blue-100 dark:border-slate-700 px-2.5 py-1 text-[11px] font-semibold text-[#2563EB] dark:text-[#38BDF8] transition cursor-pointer hover:scale-102 max-w-full truncate"
                     >
-                      💡 {sug}
+                      {sug}
                     </button>
                   ))}
                 </div>
@@ -630,6 +719,82 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
           </div>
         </div>
       </div>
+
+      {/* Direct Checkout Modal over Agent */}
+      {directCheckout && (
+        <CheckoutModal
+          isOpen={true}
+          onClose={() => setDirectCheckout(null)}
+          item={directCheckout.item}
+          plan={directCheckout.plan}
+          onWalletSuccess={(order) => {
+            setDirectCheckout(null);
+            setWalletSuccessOrder(order);
+          }}
+        />
+      )}
+
+      {/* Direct Deposit Modal over Agent */}
+      {directDepositAmount !== null && (
+        <AgentDepositModal
+          isOpen={true}
+          initialAmount={directDepositAmount}
+          onClose={() => setDirectDepositAmount(null)}
+          onSuccess={() => {
+            // refresh balance handled in modal
+          }}
+        />
+      )}
+
+      {/* Direct Warranty Modal over Agent (V3.3 Phase 4.3) */}
+      {warrantyModalData !== null && (
+        <AgentWarrantyModal
+          isOpen={true}
+          order={warrantyModalData.order}
+          initialIssue={warrantyModalData.issue}
+          onClose={() => setWarrantyModalData(null)}
+          onTicketCreated={(_ticketId, ticketNum) => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: 'sys_ticket_' + Date.now(),
+                sender: 'agent',
+                content: `✅ **Đã gửi yêu cầu bảo hành (\`${ticketNum}\`) thành công!**\n\nKỹ thuật viên đã nhận thông báo và sẽ phản hồi trong ít phút. Bạn có thể theo dõi tiến độ trong mục Ticket.`,
+                timestamp: new Date().toISOString(),
+                suggestions: ['💬 Xem trao đổi Ticket', '📦 Xem tất cả đơn', '🛍️ Xem danh mục'],
+              },
+            ]);
+          }}
+        />
+      )}
+
+      {/* Direct Wallet Success Modal over Agent */}
+      {walletSuccessOrder && (
+        <div className="fixed inset-0 z-[100002] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity" onClick={() => setWalletSuccessOrder(null)} />
+          <div className="relative w-full max-w-sm transform rounded-[26px] border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#18243E] p-6 text-center shadow-2xl transition-all animate-fade-up text-slate-900 dark:text-white">
+            <div className="space-y-4 py-2">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50 text-2xl font-bold">
+                ✓
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-[#0F172A] dark:text-white">Đặt hàng thành công!</h3>
+                <p className="text-xs font-semibold text-slate-400 mt-1">Mã đơn hàng: {walletSuccessOrder.code}</p>
+                <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-300 leading-relaxed">
+                  Đơn hàng đã được chuyển sang trạng thái <strong>Chờ bàn giao</strong>. Admin sẽ thiết lập tài khoản và gửi thông tin qua email/mục đơn hàng trong 5 - 15 phút.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWalletSuccessOrder(null)}
+                className="w-full rounded-full bg-[#0F172A] dark:bg-blue-600 py-2.5 text-xs font-bold text-white hover:bg-black dark:hover:bg-blue-700 transition cursor-pointer"
+              >
+                Đóng và tiếp tục
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

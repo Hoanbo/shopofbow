@@ -127,11 +127,7 @@ export function RealtimeProvider({ children }: Props) {
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
         (p) => emit('profiles:UPDATE', { eventType: 'UPDATE', payload: p.new, old: p.old ?? {} }),
       )
-      .subscribe((status) => {
-        if (import.meta.env.DEV) {
-          console.log(`[RealtimeHub] user-hub-${userId}: ${status}`);
-        }
-      });
+      .subscribe();
 
     channelNames.current.push(userHubName);
 
@@ -189,11 +185,7 @@ export function RealtimeProvider({ children }: Props) {
           { event: 'INSERT', schema: 'public', table: 'order_expiry_notifications' },
           (p) => emit('order_expiry_notifications:INSERT', { eventType: 'INSERT', payload: p.new }),
         )
-        .subscribe((status) => {
-          if (import.meta.env.DEV) {
-            console.log(`[RealtimeHub] admin-hub-global: ${status}`);
-          }
-        });
+        .subscribe();
 
       channelNames.current.push(adminHubName);
 

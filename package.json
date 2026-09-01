@@ -10,6 +10,7 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.110.8",
     "@types/nodemailer": "^8.0.1",
     "nodemailer": "^9.0.4",

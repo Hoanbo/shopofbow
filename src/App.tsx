@@ -49,6 +49,7 @@ const AdminCoupons = lazy(() => import('./pages/admin/Coupons'));
 const AdminPrompts = lazy(() => import('./pages/admin/AdminPrompts'));
 const AdminAffiliates = lazy(() => import('./pages/admin/Affiliates'));
 const AgentAnalytics = lazy(() => import('./pages/admin/AgentAnalytics'));
+const KnowledgeHub = lazy(() => import('./pages/admin/KnowledgeHub'));
 
 const adminSpinner = (
   <div className="grid min-h-dvh place-items-center bg-sky-soft">
@@ -79,6 +80,7 @@ const router = createBrowserRouter([
           { path: 'reviews', element: lazyAdmin(<AdminReviews />) },
           { path: 'categories', element: lazyAdmin(<AdminCategories />) },
           { path: 'faqs', element: lazyAdmin(<AdminFaqs />) },
+          { path: 'knowledge-hub', element: lazyAdmin(<KnowledgeHub />) },
           { path: 'contact', element: <Navigate to="/admin/tickets" replace /> },
           { path: 'orders', element: lazyAdmin(<AdminOrders />) },
           { path: 'coupons', element: lazyAdmin(<AdminCoupons />) },

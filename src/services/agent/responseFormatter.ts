@@ -5,56 +5,36 @@ import type { ProductItemResult, CategoryInfo } from './types';
  */
 export function formatSingleProductResponse(
   product: ProductItemResult,
-  durationFilter?: string,
-  isCheapest?: boolean
+  selectedPlan?: any
 ): string {
   const badgeText = product.badge ? ` \`[${product.badge}]\`` : '';
-  let msg = `🛍️ **Thông tin gói ${product.name}${badgeText} tại Shop of BOW:**\n\n`;
+  let msg = `🛍️ **${product.name}**${badgeText}\n\n`;
 
   if (product.tagline) {
-    msg += `*${product.tagline}*\n\n`;
+    msg += `${product.tagline}\n\n`;
+  } else if (product.description) {
+    const cleanDesc = product.description.replace(/\n+/g, ' ').slice(0, 140);
+    msg += `${cleanDesc}...\n\n`;
   }
 
-  // Nếu người dùng hỏi thời hạn cụ thể (VD: "gói 1 tháng")
-  if (durationFilter && product.plans.length > 0) {
-    const matchedPlan = product.plans.find(
-      (pl) => pl.duration.toLowerCase().includes(durationFilter.toLowerCase()) || pl.name.toLowerCase().includes(durationFilter.toLowerCase())
-    );
-
-    if (matchedPlan) {
-      const originalText = matchedPlan.originalPrice && matchedPlan.originalPrice > matchedPlan.price
-        ? ` (Giá gốc: ~${matchedPlan.originalPrice.toLocaleString('vi-VN')}đ~)`
-        : '';
-      msg += `🎯 **Gói ${matchedPlan.name} (${matchedPlan.duration}):** **${matchedPlan.price.toLocaleString('vi-VN')}đ**${originalText}\n\n`;
-    }
-  }
-
-  // Nếu người dùng hỏi gói rẻ nhất
-  if (isCheapest && product.plans.length > 0) {
-    const cheapestPlan = [...product.plans].sort((a, b) => a.price - b.price)[0];
-    msg += `💡 **Gói tiết kiệm nhất:** **${cheapestPlan.name} (${cheapestPlan.duration})** chỉ từ **${cheapestPlan.price.toLocaleString('vi-VN')}đ**\n\n`;
-  }
-
-  // Hiển thị đầy đủ các gói
-  if (product.plans && product.plans.length > 0) {
-    msg += `📋 **Bảng giá tất cả các gói:**\n`;
-    product.plans.forEach((pl) => {
-      const highlightTag = pl.isHighlight ? ' ⭐ *Bán chạy nhất*' : '';
-      const originalText = pl.originalPrice && pl.originalPrice > pl.price ? ` ~${pl.originalPrice.toLocaleString('vi-VN')}đ~` : '';
-      const durationText = pl.duration ? ` (${pl.duration})` : '';
-      msg += `  • **${pl.name}**${durationText}: **${pl.price.toLocaleString('vi-VN')}đ**${originalText}${highlightTag}\n`;
+  if (selectedPlan) {
+    const originalText = selectedPlan.originalPrice && selectedPlan.originalPrice > selectedPlan.price
+      ? ` (Giá gốc: ~${selectedPlan.originalPrice.toLocaleString('vi-VN')}đ~)`
+      : '';
+    msg += `Bạn đang chọn: **${selectedPlan.name}** (${selectedPlan.duration}) — **${selectedPlan.price.toLocaleString('vi-VN')}đ**${originalText}\n\n`;
+    msg += `Bấm nút **"Mua ngay"** bên dưới để mở giao diện thanh toán:`;
+  } else if (product.plans && product.plans.length > 0) {
+    msg += `📋 **Các gói cước hiện có:**\n`;
+    product.plans.forEach((p) => {
+      const orig = p.originalPrice && p.originalPrice > p.price ? ` ~(Gốc: ${p.originalPrice.toLocaleString('vi-VN')}đ)~` : '';
+      msg += `• **${p.name || p.duration}** (${p.duration}) — **${p.price.toLocaleString('vi-VN')}đ**${orig}\n`;
     });
-    msg += `\n`;
+    msg += `\nChọn một trong các thẻ bên dưới để mua ngay nhé! 👇`;
   } else {
-    const priceStr = product.startingPrice > 0 ? `${product.startingPrice.toLocaleString('vi-VN')}đ` : 'Liên hệ';
-    msg += `💰 Giá chỉ từ: **${priceStr}**\n\n`;
+    const priceStr = product.startingPrice > 0 ? `từ **${product.startingPrice.toLocaleString('vi-VN')}đ**` : 'Liên hệ';
+    msg += `Giá: ${priceStr}\n`;
   }
 
-  if (product.features && product.features.length > 0) {
-    msg += `✨ **Tính năng nổi bật:** ${product.features.slice(0, 4).join(' • ')}\n\n`;
-  }
-
-  msg += `🛡️ **Chính sách:** ${product.warranty || 'Bảo hành 1 đổi 1 trọn thời gian sử dụng'}\n`;
   return msg;
 }
 
@@ -76,27 +56,42 @@ export function formatCatalogOverviewResponse(
     }
   });
 
-  let msg = `🏪 **Shop of BOW**\n\n`;
-  msg += `Hiện tại shop đang cung cấp **${products.length} sản phẩm** phân bổ trong **${categories.length} danh mục**:\n\n`;
+  let msg = `🛍️ **Shop of BOW hiện đang có ${products.length} sản phẩm bản quyền:**\n\n`;
 
-  const suggestions: string[] = [];
-
-  categories.forEach((cat) => {
-    const count = catCountMap.get(cat.id) || 0;
-    const icon = cat.slug === 'ai-tools' ? '🤖' : cat.slug === 'premium-apps' ? '🎨' : '⭐';
-    msg += `${icon} **${cat.name}** · ${count} sản phẩm\n`;
-    suggestions.push(`${icon} ${cat.name}`);
-  });
-
-  if (unassignedCount > 0) {
-    msg += `📁 **Sản phẩm khác** · ${unassignedCount} sản phẩm\n`;
+  // 1. Phân loại theo danh mục
+  if (categories.length > 0) {
+    msg += `📂 **Danh mục sản phẩm:**\n`;
+    categories.forEach((cat) => {
+      const count = catCountMap.get(cat.id) || 0;
+      const icon = cat.slug === 'ai-tools' ? '🤖' : cat.slug === 'premium-apps' ? '🎨' : '⭐';
+      msg += `• ${icon} **${cat.name}** (${count} sản phẩm)\n`;
+    });
+    msg += `\n`;
   }
 
-  msg += `\nBạn muốn xem danh mục nào? Hãy chọn danh mục bên dưới nhé! ✨`;
+  // 2. Danh sách sản phẩm tiêu biểu từ Database
+  const displayProducts = products.filter((p) => p.startingPrice > 0).slice(0, 8);
+  if (displayProducts.length > 0) {
+    msg += `✨ **Một số sản phẩm tiêu biểu:**\n`;
+    displayProducts.forEach((p) => {
+      msg += `• **${p.name}** — từ ${p.startingPrice.toLocaleString('vi-VN')}đ\n`;
+    });
+  }
+
+  if (products.length > displayProducts.length) {
+    msg += `\n*...cùng nhiều gói tài khoản bản quyền khác.*\n`;
+  }
+
+  msg += `\nBạn muốn xem chi tiết sản phẩm nào hoặc chọn danh mục bên dưới nhé! 👇`;
+
+  const suggestions = categories.map((c) => c.name).slice(0, 3);
+  if (!suggestions.includes('🎟️ Mã giảm giá')) {
+    suggestions.push('🎟️ Mã giảm giá');
+  }
 
   return {
     content: msg,
-    suggestions: suggestions.slice(0, 4),
+    suggestions,
   };
 }
 
@@ -111,23 +106,27 @@ export function formatCategoryDetailResponse(
   const remainingCount = products.length - topProducts.length;
   const icon = category.slug === 'ai-tools' ? '🤖' : category.slug === 'premium-apps' ? '🎨' : '⭐';
 
-  let msg = `${icon} **${category.name}**\n\n`;
-  msg += `**${products.length} sản phẩm** trong danh mục:\n\n`;
+  const categoryDisplayName =
+    category.slug === 'products' || category.name === 'Featured Products'
+      ? 'Sản phẩm Nổi bật & Bán chạy nhất'
+      : category.name;
+
+  let msg = `${icon} **${categoryDisplayName}**\n\n`;
+  msg += `Danh sách **${products.length} sản phẩm** nổi bật trong nhóm này:\n\n`;
 
   topProducts.forEach((p) => {
     const priceStr = p.startingPrice > 0 ? `từ **${p.startingPrice.toLocaleString('vi-VN')}đ**` : 'Liên hệ';
     msg += `• **${p.name}** — ${priceStr}\n`;
-    msg += `  👉 [Xem gói ${p.name}](/products/${p.slug || p.id})\n`;
   });
 
   if (remainingCount > 0) {
-    msg += `\n👉 [Xem tất cả ${products.length} sản phẩm trên website](/products?category=${category.slug})\n`;
+    msg += `\n[Xem tất cả ${products.length} sản phẩm trên website](/products?category=${category.slug})\n`;
   }
 
-  msg += `\n💡 *Gõ tên sản phẩm để xem bảng giá chi tiết từng gói nhé!*`;
+  msg += `\n*Gõ tên sản phẩm để xem bảng giá chi tiết từng gói nhé!*`;
 
   const suggestions = topProducts.slice(0, 3).map((p) => p.name);
-  suggestions.push('🛍️ ← Danh mục');
+  suggestions.push('Xem danh mục');
 
   return { content: msg, suggestions };
 }
@@ -154,11 +153,19 @@ export function formatCompactOrdersResponse(
     filtered = filtered.filter((o) => o.status === 'pending_payment');
     title = '⏳ **Đơn hàng đang chờ thanh toán:**';
   } else {
-    const productKeywords = ['capcut', 'canva', 'chatgpt', 'netflix', 'youtube', 'spotify', 'figma', 'claude', 'gemini', 'autodesk', 'adobe'];
-    const matchedKw = productKeywords.find((kw) => lower.includes(kw));
-    if (matchedKw) {
-      filtered = filtered.filter((o) => (o.product_name || '').toLowerCase().includes(matchedKw));
-      title = `📦 **Đơn hàng ${matchedKw.toUpperCase()} gần đây:**`;
+    // Dynamic matching dựa trên tên sản phẩm thực tế trong các đơn hàng
+    const matchingOrder = rawOrders.find((o) => {
+      const prodName = (o.product_name || '').toLowerCase();
+      if (!prodName) return false;
+      if (lower.includes(prodName)) return true;
+      const tokens = prodName.split(/\s+/).filter((t: string) => t.length > 2);
+      return tokens.some((t: string) => lower.includes(t));
+    });
+
+    if (matchingOrder) {
+      const targetName = matchingOrder.product_name;
+      filtered = filtered.filter((o) => (o.product_name || '').toLowerCase().includes(targetName.toLowerCase()));
+      title = `📦 **Đơn hàng ${targetName} gần đây:**`;
     }
   }
 

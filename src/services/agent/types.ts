@@ -12,23 +12,30 @@ export interface AgentContext {
 }
 
 export type AgentIntent =
-  | 'CATALOG'             // Xem tổng quan danh mục sản phẩm
-  | 'VIEW_CATEGORY'       // Xem chi tiết một danh mục cụ thể
-  | 'PRODUCT_SEARCH'      // Tìm kiếm, hỏi giá hoặc chi tiết sản phẩm
-  | 'BUY'                 // Ý định mua hàng cụ thể (VD: "Mua CapCut 1 tháng", "Lấy gói này")
-  | 'ORDER_QUERY'         // Tra cứu lịch sử đơn hàng
-  | 'RENEW'               // Gia hạn đơn hàng cũ
-  | 'WARRANTY'            // Yêu cầu hỗ trợ lỗi / bảo hành
-  | 'COUPON'              // Tra cứu / áp dụng mã giảm giá
-  | 'WALLET'              // Tra cứu số dư / nạp tiền vào ví
-  | 'FAQ'                 // Câu hỏi thường gặp / hướng dẫn sử dụng
-  | 'GENERAL';            // Chào hỏi, liên hệ hỗ trợ viên
+  | 'GREETING'            // Chào hỏi tự nhiên (VD: "chào bạn", "hello", "xin chào")
+  | 'SMALL_TALK'           // Hội thoại ngắn, cảm ơn, tạm biệt, xác nhận (VD: "cảm ơn", "ok", "tạm biệt")
+  | 'CAPABILITY_DISCOVERY' // Khám phá năng lực của Agent (VD: "bạn có thể giúp gì?", "hôm nay có gì hay?")
+  | 'CLARIFICATION'        // Yêu cầu làm rõ thông tin thiếu (VD: "mua gói 6 tháng" chưa rõ sản phẩm)
+  | 'CATALOG'              // Xem tổng quan danh mục sản phẩm
+  | 'VIEW_CATEGORY'        // Xem chi tiết một danh mục cụ thể
+  | 'PRODUCT_SEARCH'       // Tìm kiếm, hỏi giá hoặc chi tiết sản phẩm
+  | 'BUY'                  // Ý định mua hàng cụ thể (VD: "Mua CapCut 1 tháng", "Lấy gói này")
+  | 'EXPIRING_SOON'        // Tra cứu sản phẩm/gói của user sắp hết hạn
+  | 'ORDER_QUERY'          // Tra cứu lịch sử đơn hàng
+  | 'RENEW'                // Gia hạn đơn hàng cũ
+  | 'WARRANTY'             // Yêu cầu hỗ trợ lỗi / bảo hành
+  | 'TICKET'               // Tra cứu hoặc tạo ticket hỗ trợ
+  | 'COUPON'               // Tra cứu / áp dụng mã giảm giá
+  | 'WALLET'               // Tra cứu số dư / nạp tiền vào ví
+  | 'FAQ'                  // Câu hỏi thường gặp / hướng dẫn sử dụng
+  | 'GENERAL';             // Liên hệ hỗ trợ viên, admin
 
 export type AgentActionType =
   | 'NAVIGATE_CHECKOUT'       // Mở CheckoutModal với đúng productId & planId
   | 'NAVIGATE_ORDER_DETAIL'   // Mở UserOrderDetailModal đúng orderId của user
-  | 'NAVIGATE_RENEWAL'        // Mở popup gia hạn đơn cũ kèm ưu đãi -10%
+  | 'NAVIGATE_RENEWAL'        // Mở popup xác nhận gia hạn đơn hàng cũ
   | 'NAVIGATE_SUPPORT'        // Mở CreateTicketModal với tiêu đề lỗi & orderId điền sẵn
+  | 'NAVIGATE_TICKET_DETAIL'  // Mở UserTicketChatModal xem trao đổi ticket
   | 'APPLY_COUPON'            // Kích hoạt couponCode vào Session Context của Checkout
   | 'OPEN_DEPOSIT';           // Mở popup VietQR nạp tiền vào ví
 
@@ -42,6 +49,9 @@ export interface AgentActionPayload {
   orderId?: string;
   paymentCode?: string;
   couponCode?: string;
+  ticketId?: string;
+  ticketTitle?: string;
+  supportTitle?: string;
   amount?: number;
   issueDescription?: string;
 }
@@ -98,12 +108,29 @@ export interface ProductItemResult {
   searchAliases?: string[];
 }
 
+export interface DeferredContext {
+  intent: AgentIntent;
+  productName?: string;
+  duration?: string;
+  rawQuery?: string;
+}
+
+export interface MultiIntentResult {
+  primaryIntent: AgentIntent;
+  secondaryIntents: AgentIntent[];
+  deferredContext?: DeferredContext;
+}
+
 export interface SessionContext {
   lastMentionedProduct?: ProductItemResult;
   lastMentionedPlan?: PlanItemResult;
+  productSlug?: string;
+  planContext?: PlanItemResult | null;
+  lastRecommendedCandidates?: ProductItemResult[]; // V3.2: Nhóm sản phẩm vừa được đề xuất đa lựa chọn
   lastMentionedOrder?: any;
   lastMentionedCategory?: CategoryInfo;
   lastActiveAction?: AgentAction;
+  deferredContext?: DeferredContext;
   updatedAt: number;
 }
 
@@ -117,3 +144,4 @@ export interface AgentMessage {
   action?: AgentAction; // Action Card đi kèm tin nhắn bot
   actions?: AgentAction[]; // Hỗ trợ nhiều thẻ Hành Động
 }
+

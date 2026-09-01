@@ -14,9 +14,11 @@ const CATEGORY_ALIASES: Record<string, string[]> = {
     'tri tue nhan tao',
     'nhóm ai',
     'nhom ai',
+    'danh mục ai',
+    'danh muc ai',
+    'sản phẩm ai',
+    'san pham ai',
     'ai',
-    'chatgpt',
-    'claude',
   ],
   'premium-apps': [
     'premium apps',
@@ -41,7 +43,29 @@ const CATEGORY_ALIASES: Record<string, string[]> = {
     'noi bat',
     'bán chạy',
     'ban chay',
+    'bán chạy nhất',
+    'ban chay nhat',
+    'sản phẩm bán chạy',
+    'san pham ban chay',
+    'sản phẩm bán chạy nhất',
+    'san pham ban chay nhat',
+    'bán chạy nhất thì sao',
+    'ban chay nhat thi sao',
+    'sản phẩm bán chạy nhất thì sao',
+    'san pham ban chay nhat thi sao',
+    'sản phẩm hot',
+    'san pham hot',
+    'sản phẩm đang hot',
+    'san pham dang hot',
+    'sản phảm đang hot',
+    'san pham hot nhat',
+    'sản phẩm hot nhất',
     'hot',
+    'top sản phẩm',
+    'top san pham',
+    'top bán chạy',
+    'top ban chay',
+    'top hot',
   ],
 };
 
@@ -127,12 +151,22 @@ export async function resolveCategoryQuery(rawQuery: string): Promise<CategoryRe
     }
   }
 
-  // 3. Match khi câu hỏi chứa từ khóa danh mục đặc thù (VD: "xem nhóm AI", "danh mục premium apps")
+  // 3. Match khi câu hỏi chứa từ khóa danh mục rõ ràng (VD: "xem nhóm AI", "danh mục AI", "danh mục premium apps")
+  const categoryIntentKeywords = /\b(danh muc|nhom|cac|tat ca|toan bo|list|xem|kho)\b/i;
+  const isExplicitCategoryBrowsing = categoryIntentKeywords.test(normalized);
+
   for (const cat of categories) {
     const aliases = CATEGORY_ALIASES[cat.slug] || [];
     for (const alias of aliases) {
       const aliasNorm = normalizeText(alias);
-      // Chỉ match nếu alias đủ dài (>= 3 ký tự) và xuất hiện nguyên từ
+      // Bỏ qua các từ đơn quá phổ biến như 'app', 'apps' trong substring match trừ khi có từ khóa duyệt danh mục rõ ràng
+      if (['app', 'apps', 'ung dung', 'san pham'].includes(aliasNorm)) {
+        if (isExplicitCategoryBrowsing && (normalized === `cac ${aliasNorm}` || normalized === `danh muc ${aliasNorm}` || normalized === `danh sach ${aliasNorm}`)) {
+          return { matched: true, category: cat };
+        }
+        continue;
+      }
+
       if (aliasNorm.length >= 3) {
         const regex = new RegExp(`\\b${aliasNorm}\\b`, 'i');
         if (regex.test(normalized)) {

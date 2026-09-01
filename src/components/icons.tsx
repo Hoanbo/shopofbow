@@ -137,3 +137,125 @@ export const MailIcon = (p: P) => (
     <path strokeLinecap="round" strokeLinejoin="round" d="m3 7 9 6 9-6" />
   </svg>
 );
+
+// ── Analytics & Admin icons (appended for BOW Analytics suite) ──────────────
+
+export const BarChartIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M3 3v18h18" />
+    <rect x="7" y="10" width="3" height="8" rx="1" />
+    <rect x="13" y="6" width="3" height="12" rx="1" />
+  </svg>
+);
+
+export const TrendingUpIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m3 17 6-6 4 4 8-8" />
+    <path d="M14 7h7v7" />
+  </svg>
+);
+
+export const GlobeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M2 12h20M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9M12 3c2.5 3 4 5.5 4 9s-1.5 6-4 9" />
+  </svg>
+);
+
+export const ZapIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+  </svg>
+);
+
+export const ActivityIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+  </svg>
+);
+
+export const RefreshIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </svg>
+);
+
+export const ShoppingCartIcon = (p: P) => (
+  <svg {...base(p)}>
+    <circle cx="9" cy="21" r="1" fill="currentColor" stroke="none" />
+    <circle cx="20" cy="21" r="1" fill="currentColor" stroke="none" />
+    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+  </svg>
+);
+
+export const MessageSquareIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+
+export const AlertTriangleIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m10.29 3.86-8.47 14.67A1 1 0 0 0 2.69 20h17.62a1 1 0 0 0 .87-1.47L12.71 3.86a1 1 0 0 0-1.74 0z" />
+    <path d="M12 9v4M12 17h.01" strokeWidth="2.5" strokeLinecap="round" />
+  </svg>
+);
+
+export const TimelineIcon = (p: P) => (
+  <svg {...base(p)}>
+    <line x1="3" y1="6" x2="21" y2="6" />
+    <circle cx="8" cy="6" r="2" fill="currentColor" stroke="none" />
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <circle cx="15" cy="12" r="2" fill="currentColor" stroke="none" />
+    <line x1="3" y1="18" x2="21" y2="18" />
+    <circle cx="10" cy="18" r="2" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+export const LightBulbIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M9 21h6M12 3a6 6 0 0 1 6 6c0 2.2-1.2 4.1-3 5.2V17a1 1 0 0 1-1 1H10a1 1 0 0 1-1-1v-2.8C7.2 13.1 6 11.2 6 9a6 6 0 0 1 6-6z" />
+  </svg>
+);
+
+export const ShieldCheckIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3Z" />
+    <path d="m9 12 2 2 4-4" />
+  </svg>
+);
+
+export const CheckCircleIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+    <path d="m9 11 3 3L22 4" />
+  </svg>
+);
+
+export const ChevronDownIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
+export const BookOpenIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+  </svg>
+);
+
+export const EyeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+export const MergeIcon = (p: P) => (
+  <svg {...base(p)}>
+    <path d="M8 7H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3" />
+    <path d="M12 14V4M8 8l4-4 4 4" />
+  </svg>
+);

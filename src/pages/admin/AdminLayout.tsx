@@ -104,6 +104,7 @@ const navGroups: NavGroup[] = [
       { to: '/admin/users', label: 'Người dùng & CTV', Icon: UserIcon },
       { to: '/admin/activity', label: 'Nhật ký hoạt động', Icon: AuditIcon },
       { to: '/admin/agent-analytics', label: 'BOW Analytics', Icon: ChartIcon },
+      { to: '/admin/knowledge-hub', label: 'Knowledge Hub', Icon: SparkIcon },
       { to: '/admin/faqs', label: 'FAQ chung', Icon: FaqIcon },
       { to: '/admin/settings', label: 'Cài đặt hệ thống', Icon: SettingsIcon },
     ],

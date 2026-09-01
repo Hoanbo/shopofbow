@@ -22,13 +22,17 @@ export function validateAndFinalizeAction(
       action.type === 'NAVIGATE_SUPPORT') &&
     !context.isAuthenticated
   ) {
-    console.warn('[ActionValidator] Bị từ chối: Yêu cầu đăng nhập để thao tác đơn hàng');
+    if (import.meta.env?.DEV) {
+      console.warn('[ActionValidator] Bị từ chối: Yêu cầu đăng nhập để thao tác đơn hàng');
+    }
     return null;
   }
 
   // 2. Kiểm tra Checkout Action: Bắt buộc phải có productId
   if (action.type === 'NAVIGATE_CHECKOUT' && !action.payload.productId && !action.payload.productSlug) {
-    console.warn('[ActionValidator] Bị từ chối: Thiếu productId trong NAVIGATE_CHECKOUT');
+    if (import.meta.env?.DEV) {
+      console.warn('[ActionValidator] Bị từ chối: Thiếu productId trong NAVIGATE_CHECKOUT');
+    }
     return null;
   }
 

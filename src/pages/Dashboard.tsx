@@ -20,12 +20,7 @@ import AppLogo from '../components/AppLogo';
 import { formatVND } from '../data/catalog';
 import { useRealtimeEvent } from '../services/realtime';
 import { syncExpiredPendingOrders } from '../utils/orderExpiry';
-
-const BANK_CONFIG = {
-  bankId: 'MB', // MB Bank (mã VietQR)
-  accountNo: '0966821315',
-  accountName: 'NGUYEN VAN HOAN',
-};
+import { BANK_CONFIG, getPaymentQrUrl } from '../config/sepay';
 
 type Order = {
   id: string;
@@ -1324,7 +1319,7 @@ export default function Dashboard() {
                     <div className="border-t border-slate-100 pt-5 mt-5 flex flex-col md:flex-row gap-6 items-center">
                       <div className="w-full max-w-[180px] shrink-0 border border-slate-100 rounded-2xl bg-slate-50 p-2 shadow-xs">
                         <img
-                          src={`https://img.vietqr.io/image/${BANK_CONFIG.bankId}-${BANK_CONFIG.accountNo}-compact2.jpg?amount=${depositAmount}&addInfo=${depositCode}&accountName=${encodeURIComponent(BANK_CONFIG.accountName)}`}
+                          src={getPaymentQrUrl(depositAmount, depositCode)}
                           alt="VietQR Deposit"
                           className="h-full w-full object-contain rounded-xl"
                         />
@@ -1346,7 +1341,7 @@ export default function Dashboard() {
                             <span>Nhập chính xác Nội dung chuyển khoản để hệ thống đối soát và cộng tiền ví tự động trong 30 giây!</span>
                           </div>
                         )}
-                        <p><strong>Ngân hàng:</strong> MB Bank</p>
+                        <p><strong>Ngân hàng:</strong> {BANK_CONFIG.bankName}</p>
                         <p><strong>Số tài khoản:</strong> {BANK_CONFIG.accountNo}</p>
                         <p><strong>Chủ tài khoản:</strong> {BANK_CONFIG.accountName}</p>
                         <p><strong>Số tiền nạp:</strong> <span className="font-extrabold text-blue-600">{depositAmount.toLocaleString('vi-VN')}đ</span></p>
@@ -1563,7 +1558,7 @@ export default function Dashboard() {
             {/* QR VietQR */}
             <div className="mx-auto flex max-w-[190px] flex-col items-center rounded-2xl border border-slate-100 bg-slate-50 p-2 shadow-xs">
               <img
-                src={`https://img.vietqr.io/image/${BANK_CONFIG.bankId}-${BANK_CONFIG.accountNo}-compact2.jpg?amount=${selectedPayOrder.price}&addInfo=${selectedPayOrder.payment_code}&accountName=${encodeURIComponent(BANK_CONFIG.accountName)}`}
+                src={getPaymentQrUrl(selectedPayOrder.price, selectedPayOrder.payment_code)}
                 alt="VietQR RePay"
                 className="h-full w-full object-contain rounded-xl"
               />

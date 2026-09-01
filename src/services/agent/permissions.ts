@@ -7,6 +7,7 @@ export type UserRole = AgentRole;
 export type AgentToolName =
   | 'searchProducts'
   | 'getMyOrders'
+  | 'getMyTickets'
   | 'checkWarrantyPolicy'
   | 'searchPromptsLibrary'
   | 'getActiveCoupons'
@@ -20,6 +21,7 @@ export type AgentToolName =
 const TOOL_PERMISSIONS: Record<AgentToolName, { requiresAuth: boolean; description: string }> = {
   searchProducts: { requiresAuth: false, description: 'Tra cứu danh mục sản phẩm và bảng giá' },
   getMyOrders: { requiresAuth: true, description: 'Tra cứu lịch sử đơn hàng của chính bạn' },
+  getMyTickets: { requiresAuth: true, description: 'Tra cứu danh sách phiếu hỗ trợ của bạn' },
   checkWarrantyPolicy: { requiresAuth: false, description: 'Tra cứu chính sách bảo hành' },
   searchPromptsLibrary: { requiresAuth: false, description: 'Tìm kiếm prompt trong thư viện Prompt AI' },
   getActiveCoupons: { requiresAuth: false, description: 'Lấy danh sách mã giảm giá đang kích hoạt' },

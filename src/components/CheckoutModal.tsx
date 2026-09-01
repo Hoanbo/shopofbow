@@ -32,11 +32,7 @@ interface Props {
   onWalletSuccess: (order: { code: string; amount: number; qty: number }) => void;
 }
 
-const BANK_CONFIG = {
-  bankId: 'MB', // MB Bank (mã VietQR)
-  accountNo: '0966821315',
-  accountName: 'NGUYEN VAN HOAN',
-};
+import { BANK_CONFIG, getPaymentQrUrl } from '../config/sepay';
 
 export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuccess }: Props) {
   const { session, balance, refreshBalance, isCtv } = useAuth();
@@ -406,7 +402,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
   };
 
   // Generate VietQR URL with final discounted price
-  const vietQrUrl = `https://img.vietqr.io/image/${BANK_CONFIG.bankId}-${BANK_CONFIG.accountNo}-compact2.jpg?amount=${finalPrice}&addInfo=${paymentCode}&accountName=${encodeURIComponent(BANK_CONFIG.accountName)}`;
+  const vietQrUrl = getPaymentQrUrl(finalPrice, paymentCode);
 
   // Find if a coupon is available to suggest (prefer first_order_only if user is eligible, or any active coupon)
   const suggestedCouponToDisplay = suggestedCoupons.find(c => {
@@ -417,7 +413,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
   const showCouponSuggestion = Boolean(suggestedCouponToDisplay && !appliedCoupon);
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center p-2.5 sm:p-4">
+    <div className="fixed inset-0 z-[100001] flex items-center justify-center p-2.5 sm:p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-xs transition-opacity" onClick={handleClose} />
 
@@ -727,7 +723,7 @@ export default function CheckoutModal({ isOpen, onClose, item, plan, onWalletSuc
             <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 p-3 text-left text-xs space-y-1.5 text-[#0F172A] dark:text-white">
               <div className="flex justify-between font-medium text-[11px]">
                 <span className="text-slate-500 dark:text-slate-400">Ngân hàng:</span>
-                <span className="font-bold">MB Bank (Quân Đội)</span>
+                <span className="font-bold">{BANK_CONFIG.bankName}</span>
               </div>
               <div className="flex justify-between font-medium text-[11px]">
                 <span className="text-slate-500 dark:text-slate-400">Số tài khoản:</span>

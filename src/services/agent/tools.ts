@@ -2,6 +2,8 @@ import { supabase } from '../../lib/supabase';
 import type { AgentContext, ProductItemResult, PlanItemResult } from './types';
 import { checkToolPermission } from './permissions';
 
+const isDev = Boolean(typeof import.meta !== 'undefined' && import.meta.env?.DEV);
+
 export type { ProductItemResult, PlanItemResult };
 export type ProductPlanResult = PlanItemResult;
 
@@ -15,7 +17,7 @@ export interface ToolExecutionResult<T = any> {
 /**
  * 1. Tool tra cứu danh mục & giá sản phẩm thực tế từ database
  */
-export async function searchProducts(params: { keyword?: string; type?: string; categoryId?: string; productId?: string }): Promise<ToolExecutionResult<ProductItemResult[]>> {
+export async function searchProducts(params: { keyword?: string; type?: string; categoryId?: string; productId?: string; limit?: number }): Promise<ToolExecutionResult<ProductItemResult[]>> {
   try {
     let query = supabase
       .from('products')
@@ -45,9 +47,11 @@ export async function searchProducts(params: { keyword?: string; type?: string; 
       query = query.or(`name.ilike.%${kw}%,slug.ilike.%${kw}%,short_description.ilike.%${kw}%`);
     }
 
-    const { data, error } = await query.limit(50);
+    const { data, error } = await query.limit(params.limit || 50);
     if (error) {
-      console.error('[BOW Agent Tool Error] searchProducts:', error);
+      if (isDev) {
+        console.error('[BOW Agent Tool Error] searchProducts:', error);
+      }
       throw error;
     }
 
@@ -115,7 +119,7 @@ export async function getMyOrders(
   try {
     let query = supabase
       .from('orders')
-      .select('id, product_name, plan_label, price, payment_code, status, created_at, notes, account_details')
+      .select('id, product_name, plan_label, price, payment_code, status, created_at, expires_at, notes, account_details')
       .eq('user_id', context.userId!)
       .order('created_at', { ascending: false })
       .limit(params.limit || 12);
@@ -132,7 +136,9 @@ export async function getMyOrders(
 
     const { data, error } = await query;
     if (error) {
-      console.error('[BOW Agent Tool Error] getMyOrders:', error);
+      if (isDev) {
+        console.error('[BOW Agent Tool Error] getMyOrders:', error);
+      }
       throw error;
     }
 
@@ -186,7 +192,9 @@ export async function searchPromptsLibrary(params: { query?: string; category?: 
 
     const { data, error } = await query;
     if (error) {
-      console.error('[BOW Agent Tool Error] searchPromptsLibrary:', error);
+      if (isDev) {
+        console.error('[BOW Agent Tool Error] searchPromptsLibrary:', error);
+      }
       throw error;
     }
 
@@ -212,7 +220,9 @@ export async function getActiveCoupons(): Promise<ToolExecutionResult<any[]>> {
       .limit(6);
 
     if (error) {
-      console.error('[BOW Agent Tool Error] getActiveCoupons:', error);
+      if (isDev) {
+        console.error('[BOW Agent Tool Error] getActiveCoupons:', error);
+      }
       throw error;
     }
 
@@ -249,7 +259,9 @@ export async function getMyWalletBalance(context: AgentContext): Promise<ToolExe
       .single();
 
     if (error) {
-      console.error('[BOW Agent Tool Error] getMyWalletBalance:', error);
+      if (isDev) {
+        console.error('[BOW Agent Tool Error] getMyWalletBalance:', error);
+      }
       throw error;
     }
 
@@ -279,7 +291,9 @@ export async function getFaqsAndGuides(params: { query?: string }): Promise<Tool
 
     const { data, error } = await query;
     if (error) {
-      console.error('[BOW Agent Tool Error] getFaqsAndGuides:', error);
+      if (isDev) {
+        console.error('[BOW Agent Tool Error] getFaqsAndGuides:', error);
+      }
       throw error;
     }
 
@@ -331,5 +345,47 @@ export async function getSupportChannels(): Promise<ToolExecutionResult<any>> {
         hours: 'Hỗ trợ 24/7 (Phản hồi nhanh nhất: 8h00 - 23h30 hàng ngày)',
       },
     };
+  }
+}
+
+/**
+ * 9. Tool tra cứu Phiếu hỗ trợ (Ticket) của khách hàng
+ */
+export async function getMyTickets(
+  params: { status?: string; limit?: number },
+  context: AgentContext
+): Promise<ToolExecutionResult<any[]>> {
+  const perm = checkToolPermission('getMyTickets', context);
+  if (!perm.allowed) {
+    return { success: false, toolName: 'getMyTickets', message: perm.reason };
+  }
+
+  try {
+    let query = (supabase as any)
+      .from('support_tickets')
+      .select('id, ticket_number, subject, status, priority, created_at, updated_at, order_id, orders:orders(product_name, plan_label, payment_code)')
+      .eq('user_id', context.userId!)
+      .order('updated_at', { ascending: false })
+      .limit(params.limit || 6);
+
+    if (params.status && params.status !== 'all') {
+      query = query.eq('status', params.status);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      if (isDev) {
+        console.error('[BOW Agent Tool Error] getMyTickets:', error);
+      }
+      throw error;
+    }
+
+    return {
+      success: true,
+      toolName: 'getMyTickets',
+      data: data || [],
+    };
+  } catch (err: any) {
+    return { success: false, toolName: 'getMyTickets', message: err.message || 'Lỗi tra cứu ticket hỗ trợ.' };
   }
 }

@@ -1,8 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const url =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+  (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) ||
+  '';
+const anonKey =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) ||
+  (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) ||
+  '';
 
 if (!url || !anonKey) {
   // Fail loud in dev; helps catch missing .env.local before queries run.
@@ -12,12 +18,16 @@ if (!url || !anonKey) {
   );
 }
 
-export const supabase = createClient<Database>(url ?? '', anonKey ?? '', {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+export const supabase = createClient<Database>(
+  url || 'https://mock.supabase.co',
+  anonKey || 'mock-anon-key',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }
+);
 
 export const isSupabaseConfigured = Boolean(url && anonKey);

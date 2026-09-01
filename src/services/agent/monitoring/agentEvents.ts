@@ -6,13 +6,16 @@ export async function insertAnalyticsEvent(event: AgentAnalyticsEvent) {
   try {
     const sanitizedMetadata = sanitizeMetadata(event.metadata);
     
+    const isValidUuid = (id?: string | null) =>
+      typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
     const payload = {
       event_type: event.eventType,
-      user_id: event.userId || null,
+      user_id: isValidUuid(event.userId) ? event.userId : null,
       session_id: event.sessionId || null,
       intent: event.intent || null,
-      product_id: event.productId || null,
-      plan_id: event.planId || null,
+      product_id: isValidUuid(event.productId) ? event.productId : null,
+      plan_id: isValidUuid(event.planId) ? event.planId : null,
       action_id: event.actionId || null,
       action_type: event.actionType || null,
       reason: event.reason || null,

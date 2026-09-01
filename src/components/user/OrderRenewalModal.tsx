@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useToast } from '../Toast';
 import { CloseIcon } from '../icons';
 import { validateCouponCode, type CouponValidationResult } from '../../data/coupons';
+import { BANK_CONFIG, getPaymentQrUrl } from '../../config/sepay';
 
 interface OrderRenewalModalProps {
   order: {
@@ -243,7 +244,7 @@ export default function OrderRenewalModal({
   };
 
   // Dynamic VietQR string
-  const qrUrl = `https://qr.sepay.vn/img?acc=102874136746&bank=VietinBank&amount=${finalPrice}&des=${newPaymentCode}`;
+  const qrUrl = getPaymentQrUrl(finalPrice, newPaymentCode);
 
   return createPortal(
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 overscroll-contain overflow-y-auto">
@@ -399,7 +400,7 @@ export default function OrderRenewalModal({
                 </div>
                 <div className="mt-2">
                   <span className="text-xs font-bold text-slate-900 dark:text-white block">Quét mã QR Ngân hàng</span>
-                  <span className="text-[10px] text-slate-400 font-semibold block mt-0.5">VietinBank / SePay</span>
+                  <span className="text-[10px] text-slate-400 font-semibold block mt-0.5">{BANK_CONFIG.bankName} / SePay</span>
                 </div>
               </button>
             </div>
