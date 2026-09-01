@@ -117,7 +117,7 @@ After validation, only the three Step 9.4 files were staged and reviewed. The in
 chore(agent): pin @bow/agent to v3.3.0 release candidate 25918fc
 ```
 
-The commit and normal push were performed only for `shopofbow/main`. No `bow-agent` commit, amend, tag, force-push, npm publication, GitHub release, or production deployment was performed.
+The commit and normal push were performed only for `shopofbow/main`. The release commit is `2694b39bd916d89b22cd027fe729d673daf3f975`, and remote verification returned the same `origin/main` HEAD. No `bow-agent` commit, amend, tag, force-push, npm publication, GitHub release, or production deployment was performed.
 
 ## Production Release Boundary
 
@@ -251,10 +251,10 @@ ROLLBACK ENGINE:
 INTACT
 
 SHOPofBOW COMMIT:
-TO BE CREATED AFTER FINAL STAGED REVIEW
+2694b39bd916d89b22cd027fe729d673daf3f975
 
 PUSH:
-PENDING FINAL COMMIT
+PASS
 
 PRODUCTION DEPLOYMENT:
 NOT PERFORMED
