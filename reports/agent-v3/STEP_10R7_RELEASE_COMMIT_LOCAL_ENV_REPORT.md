@@ -5,7 +5,7 @@
 **Report ID:** `BOW-P72-STEP10R7-RELEASE-LOCAL-ENV-20260902`  
 **Host:** `C:\BOW\shopofbow`  
 **Production:** `https://shopofbow.vercel.app`  
-**Status:** **IN PROGRESS — validation complete; commit/push pending staged review**
+**Status:** **PASS — release commit created and pushed; production deployment deferred**
 
 ## Executive Summary
 
@@ -92,13 +92,13 @@ No `.env`, secret-bearing environment file, `public/_redirects`, database, migra
 
 ## Commit and push boundary
 
-This report is written before staging. The explicit file list must be staged and reviewed with `git diff --cached --name-only` and `git diff --cached --stat`. A single normal commit is authorized only if the staged list exactly matches the six files above and contains no secret value. The intended message is:
+The explicit file list was staged and reviewed with `git diff --cached --name-only` and `git diff --cached --stat`. The staged list exactly matched the six files above, contained no secret value, and excluded all unrelated changes. The release commit was:
 
 ```text
 fix(agent-v3): publish verified supabase and agent remediation
 ```
 
-After commit, push only `main` to `origin/main` and verify the two refs match. No manual Vercel deployment is performed in Step 10R.7.
+New Shop SHA: `19e0b96204b552700b7ae3b74e48482f6453330a`. A normal push of only `main` to `origin/main` succeeded; final HEAD and `origin/main` both equal that SHA. No manual Vercel deployment was performed in Step 10R.7.
 
 ## Production status
 
@@ -149,10 +149,10 @@ RELEASE FILES:
 EXPLICIT SIX-FILE LIST — STAGED REVIEW REQUIRED
 
 COMMIT:
-PENDING
+PASS — 19e0b96204b552700b7ae3b74e48482f6453330a
 
 PUSH:
-PENDING
+PASS — HEAD = origin/main
 
 PRODUCTION:
 STALE / UNVERIFIED — DEPLOYMENT DEFERRED
@@ -170,7 +170,7 @@ BOW-ROBOT CHANGES:
 0
 
 FINAL CERTIFICATION:
-PENDING STAGED DIFF, COMMIT, AND PUSH VERIFICATION
+PASS — RELEASE COMMIT PUSHED; PRODUCTION DEPLOYMENT DEFERRED
 
 ============================================================
 ```
