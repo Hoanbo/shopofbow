@@ -1,7 +1,7 @@
 // src/services/agent/knowledge/knowledgeIntelligenceService.ts
 // BOW AGENT V3.3 — PHASE 6.7 KNOWLEDGE INTELLIGENCE & CONTINUOUS IMPROVEMENT
 
-import { supabase } from '../../../lib/supabase';
+import { getActiveShopAdapter } from '../adapters/shopAdapter';
 import { normalizeText } from '../intentResolver';
 import { calculateQuestionSimilarity } from './knowledgeReviewService';
 import { getNegativePolicies } from './negativePolicyService';
@@ -816,18 +816,14 @@ export async function getIntelligenceDashboardSummary(
 
   try {
     // 1. Fetch FAQs
-    const { data: faqsData } = await (supabase as any).from('faqs').select('id, question, answer, sort_order');
+    const faqsData = await getActiveShopAdapter().knowledge.getFaqs({ activeOnly: false });
     const faqs = (faqsData || []) as Array<{ id: string; question: string; answer?: string; sort_order?: number }>;
 
     // 2. Fetch Negative Policies
     const policies = await getNegativePolicies();
 
     // 3. Fetch Analytics Events (up to 1,000 recent events)
-    const { data: eventsData } = await (supabase as any)
-      .from('agent_analytics_events')
-      .select('event_type, user_id, session_id, intent, metadata, created_at')
-      .order('created_at', { ascending: false })
-      .limit(1000);
+    const eventsData = await getActiveShopAdapter().storage!.getAgentEvents(undefined, 1000);
     const events = eventsData || [];
 
     // 4. Calculate Conflicts

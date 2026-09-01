@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { processAgentMessage, processAgentMessageV2, type AgentMessage, type AgentAction } from '../../services/agent/agentEngine';
+// [Phase 7.1 Step 7] Engine runtime migrated to AgentHostBridge → @bow/agent (standalone)
+// Local agentEngine is now ROLLBACK-ONLY. Do not re-add direct engine imports here.
+import { executeAgentMessage } from '../../services/agent/agentHostBridge';
+import type { AgentMessage, AgentAction } from '@bow/agent';
 import type { AgentContext } from '../../services/agent/types';
 import { clearSessionContext, getSessionContext } from '../../services/agent/sessionContext';
 import { agentAnalytics } from '../../services/agent/monitoring/agentAnalytics';
@@ -127,17 +130,20 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
 
       let agentReply: AgentMessage;
       try {
+        // [Phase 7.1 Step 7] Production path: standalone @bow/agent via AgentHostBridge
+        // Bridge internally: standalone first, local fallback on failure.
         const timeoutPromise = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('TIMEOUT')), 9000)
         );
 
         agentReply = await Promise.race([
-          processAgentMessage(text, context),
+          executeAgentMessage(text, context, { mode: 'standalone' }),
           timeoutPromise,
         ]);
       } catch (primaryErr) {
-        console.warn('[BOW Agent Chat] Primary engine delayed or failed, activating instant deterministic V2 fallback:', primaryErr);
-        agentReply = await processAgentMessageV2(text, context);
+        console.warn('[BOW Agent Chat] Primary engine delayed or failed, activating local rollback engine:', primaryErr);
+        // [Phase 7.1 Step 7] Explicit rollback path: local agent core via bridge
+        agentReply = await executeAgentMessage(text, context, { mode: 'local' });
       }
 
       // Track ACTION_SHOWN

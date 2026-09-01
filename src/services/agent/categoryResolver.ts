@@ -1,4 +1,5 @@
-import { supabase } from '../../lib/supabase';
+import type { CatalogProvider } from './contracts/catalogProvider';
+import { getActiveShopAdapter } from './adapters/shopAdapter';
 import type { CategoryInfo, CategoryResolution } from './types';
 
 export type { CategoryInfo, CategoryResolution };
@@ -76,28 +77,18 @@ const CACHE_TTL_MS = 60 * 1000; // 1 phút cache
 /**
  * Lấy danh sách danh mục từ Database
  */
-export async function getAllCategories(): Promise<CategoryInfo[]> {
+export async function getAllCategories(
+  catalogProvider?: CatalogProvider
+): Promise<CategoryInfo[]> {
   const now = Date.now();
-  if (cachedCategories && now - lastFetchTime < CACHE_TTL_MS) {
+  if (!catalogProvider && cachedCategories && now - lastFetchTime < CACHE_TTL_MS) {
     return cachedCategories;
   }
 
   try {
-    const { data, error } = await supabase
-      .from('categories')
-      .select('id, name, slug, icon, sort_order')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
-
-    if (error) throw error;
-
-    cachedCategories = (data || []).map((c: any) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      icon: c.icon,
-      sortOrder: c.sort_order,
-    }));
+    const provider = catalogProvider || getActiveShopAdapter().catalog;
+    const categories = await provider.getCategories();
+    cachedCategories = categories;
     lastFetchTime = now;
     return cachedCategories;
   } catch (err) {

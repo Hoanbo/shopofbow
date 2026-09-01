@@ -9,7 +9,7 @@
 //   - Zero DB Migrations: Reads from existing events & faqs tables.
 //   - High Performance: In-memory cached with deterministic mathematical scoring.
 
-import { supabase } from '../../../lib/supabase';
+import { getActiveShopAdapter } from '../adapters/shopAdapter';
 import type {
   FaqDriftDetail,
   NegativePolicyDriftDetail,
@@ -387,7 +387,7 @@ export async function detectKnowledgeDrift(
     // 1. Fetch FAQs
     let faqs = providedFaqs;
     if (!faqs) {
-      const { data: dbFaqs } = await (supabase as any).from('faqs').select('id, question, answer, created_at');
+      const dbFaqs = await getActiveShopAdapter().knowledge.getFaqs({ activeOnly: false });
       faqs = dbFaqs || [];
     }
 
@@ -400,11 +400,7 @@ export async function detectKnowledgeDrift(
     // 3. Fetch Events
     let events = providedEvents;
     if (!events) {
-      const { data: dbEvents } = await (supabase as any)
-        .from('agent_analytics_events')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
+      const dbEvents = await getActiveShopAdapter().storage!.getAgentEvents(undefined, 200);
       events = dbEvents || [];
     }
 

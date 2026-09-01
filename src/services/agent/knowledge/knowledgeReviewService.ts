@@ -1,7 +1,7 @@
 // src/services/agent/knowledge/knowledgeReviewService.ts
 // BOW Agent V3.3 Phase 6.2 — Knowledge Operations, Priority Scoring & FAQ Quality Control
 
-import { supabase } from '../../../lib/supabase';
+import { getActiveShopAdapter } from '../adapters/shopAdapter';
 import { normalizeText } from '../intentResolver';
 import { sanitizeQueryText } from '../monitoring/demandAggregator';
 import {
@@ -151,9 +151,8 @@ export async function findSimilarFaqs(
   try {
     let faqs = providedFaqs;
     if (!faqs) {
-      const { data, error } = await supabase.from('faqs').select('id, question, answer, sort_order');
-      if (error) throw error;
-      faqs = (data as any) || [];
+      const dbFaqs = await getActiveShopAdapter().knowledge.getFaqs({ activeOnly: true });
+      faqs = (dbFaqs as any) || [];
     }
 
     const matches: SimilarFaqMatch[] = [];
@@ -186,23 +185,17 @@ export async function getKnowledgeGaps(filters?: {
   sortBy?: 'frequency' | 'priority' | 'newest' | 'oldest' | 'updated';
 }): Promise<ReviewableKnowledgeGap[]> {
   try {
-    const { data: rawEvents, error } = await (supabase as any)
-      .from('agent_analytics_events')
-      .select('*')
-      .in('event_type', [
+    const rawEvents = await getActiveShopAdapter().storage!.getAgentEvents(
+      undefined,
+      1000,
+      [
         'KNOWLEDGE_GAP_DETECTED',
         'KNOWLEDGE_GAP_REVIEWED',
         'KNOWLEDGE_GAP_REJECTED',
         'KNOWLEDGE_GAP_MERGED',
         'KNOWLEDGE_GAP_APPROVED',
-      ])
-      .order('created_at', { ascending: false })
-      .limit(1000);
-
-    if (error) {
-      console.warn('[KnowledgeReview] Failed to fetch events from DB:', error.message);
-      return [];
-    }
+      ]
+    );
 
     const events = rawEvents || [];
 
@@ -344,7 +337,7 @@ export async function markKnowledgeGapReviewing(
   if (!adminUserId) throw new Error('UNAUTHORIZED: Admin user ID required');
 
   try {
-    const { error } = await (supabase as any).from('agent_analytics_events').insert([
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!([
       {
         event_type: 'KNOWLEDGE_GAP_REVIEWED',
         user_id: adminUserId,
@@ -357,7 +350,7 @@ export async function markKnowledgeGapReviewing(
       },
     ]);
 
-    return !error;
+    return true;
   } catch (err) {
     console.error('[KnowledgeReview] Exception in markKnowledgeGapReviewing:', err);
     return false;
@@ -375,7 +368,7 @@ export async function rejectKnowledgeGap(
   if (!adminUserId) throw new Error('UNAUTHORIZED: Admin user ID required');
 
   try {
-    const { error } = await (supabase as any).from('agent_analytics_events').insert([
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!([
       {
         event_type: 'KNOWLEDGE_GAP_REJECTED',
         user_id: adminUserId,
@@ -390,7 +383,7 @@ export async function rejectKnowledgeGap(
       },
     ]);
 
-    return !error;
+    return true;
   } catch (err) {
     console.error('[KnowledgeReview] Exception in rejectKnowledgeGap:', err);
     return false;
@@ -425,8 +418,7 @@ export async function smartMergeKnowledgeGaps(
       },
     }));
 
-    const { error } = await (supabase as any).from('agent_analytics_events').insert(rows);
-    if (error) throw error;
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!(rows);
 
     return {
       success: true,
@@ -567,13 +559,7 @@ export async function approveKnowledgeGap(
   }
 
   try {
-    const { data: existingFaqs, error: fetchErr } = await supabase
-      .from('faqs')
-      .select('id, question, sort_order');
-
-    if (fetchErr) {
-      throw fetchErr;
-    }
+    const existingFaqs = await getActiveShopAdapter().knowledge.getFaqs({ activeOnly: false });
 
     const normTarget = normalizeText(cleanQuestion);
     const duplicate = (existingFaqs || []).find((f) => normalizeText(f.question) === normTarget);
@@ -589,26 +575,16 @@ export async function approveKnowledgeGap(
 
     const nextSortOrder = (existingFaqs?.length || 0) + 1;
 
-    const { data: insertedFaq, error: insertErr } = await (supabase as any)
-      .from('faqs')
-      .insert([
-        {
-          product_id: null,
-          question: cleanQuestion,
-          answer: cleanAnswer,
-          sort_order: nextSortOrder,
-        },
-      ])
-      .select('id')
-      .single();
-
-    if (insertErr) {
-      throw insertErr;
-    }
+    const insertedFaq = await getActiveShopAdapter().storage!.insertFaq!({
+      product_id: null,
+      question: cleanQuestion,
+      answer: cleanAnswer,
+      sort_order: nextSortOrder,
+    });
 
     const createdFaqId = insertedFaq?.id;
 
-    await (supabase as any).from('agent_analytics_events').insert([
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!([
       {
         event_type: 'KNOWLEDGE_GAP_APPROVED',
         user_id: adminUserId,
@@ -659,23 +635,17 @@ export async function calculateFaqQualityAndStaleMetrics(
   try {
     let faqs = providedFaqs;
     if (!faqs) {
-      const { data, error } = await supabase.from('faqs').select('*');
-      if (error) throw error;
-      faqs = (data as any) || [];
+      const dbFaqs = await getActiveShopAdapter().knowledge.getFaqs({ activeOnly: false });
+      faqs = (dbFaqs as any) || [];
     }
 
     let events = providedEvents;
     if (!events) {
-      const { data, error } = await (supabase as any)
-        .from('agent_analytics_events')
-        .select('*')
-        .in('event_type', ['FAQ_USED', 'KNOWLEDGE_GAP_DETECTED'])
-        .limit(1000);
-      if (!error && data) {
-        events = data;
-      } else {
-        events = [];
-      }
+      events = await getActiveShopAdapter().storage!.getAgentEvents(
+        undefined,
+        1000,
+        ['FAQ_USED', 'KNOWLEDGE_GAP_DETECTED']
+      );
     }
 
     const gaps = providedGaps || [];
@@ -801,30 +771,24 @@ export async function editFaqWithVersionHistory(
 
   try {
     // 1. Lấy dữ liệu FAQ trước khi sửa
-    const { data: beforeFaq, error: fetchErr } = await supabase
-      .from('faqs')
-      .select('*')
-      .eq('id', faqId)
-      .single();
+    const allFaqs = await getActiveShopAdapter().knowledge.getFaqs({ activeOnly: false });
+    const beforeFaq = (allFaqs || []).find((f) => f.id === faqId);
 
-    if (fetchErr || !beforeFaq) {
+    if (!beforeFaq) {
       return { success: false, error: 'Không tìm thấy FAQ cần sửa' };
     }
 
     // 2. Cập nhật vào public.faqs
-    const { error: updateErr } = await (supabase as any)
-      .from('faqs')
-      .update({
-        question: sanitizeQueryText(patch.question).trim(),
-        answer: patch.answer.trim(),
-        sort_order: patch.sort_order ?? beforeFaq.sort_order,
-      })
-      .eq('id', faqId);
+    const updateOk = await getActiveShopAdapter().storage!.updateFaq!(faqId, {
+      question: sanitizeQueryText(patch.question).trim(),
+      answer: patch.answer.trim(),
+      sort_order: patch.sort_order ?? (beforeFaq as any).sort_order,
+    });
 
-    if (updateErr) throw updateErr;
+    if (!updateOk) throw new Error('Cập nhật FAQ thất bại');
 
     // 3. Ghi vết lịch sử vào agent_analytics_events
-    await (supabase as any).from('agent_analytics_events').insert([
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!([
       {
         event_type: 'FAQ_EDITED',
         user_id: adminUserId,
@@ -863,14 +827,11 @@ export async function editFaqWithVersionHistory(
  */
 export async function getFaqEditHistory(faqId?: string): Promise<FaqEditHistoryItem[]> {
   try {
-    let q = (supabase as any)
-      .from('agent_analytics_events')
-      .select('*')
-      .eq('event_type', 'FAQ_EDITED')
-      .order('created_at', { ascending: false });
-
-    const { data, error } = await q;
-    if (error) throw error;
+    const data = await getActiveShopAdapter().storage!.getAgentEvents(
+      undefined,
+      1000,
+      ['FAQ_EDITED']
+    );
 
     const items: FaqEditHistoryItem[] = (data || []).map((ev: any) => ({
       id: ev.id,

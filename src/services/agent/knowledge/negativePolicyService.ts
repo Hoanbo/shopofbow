@@ -1,7 +1,7 @@
 // src/services/agent/knowledge/negativePolicyService.ts
 // BOW Agent V3.3 Phase 6.6 — Reject & Remember Decision + Negative Policy Resolver + Loop Prevention
 
-import { supabase } from '../../../lib/supabase';
+import { getActiveShopAdapter } from '../adapters/shopAdapter';
 import { normalizeText } from '../intentResolver';
 import { sanitizeQueryText } from '../monitoring/demandAggregator';
 import { calculateQuestionSimilarity } from './knowledgeReviewService';
@@ -39,19 +39,17 @@ export async function getNegativePolicies(filters?: {
       return cachedPolicies;
     }
 
-    const { data: events, error } = await (supabase as any)
-      .from('agent_analytics_events')
-      .select('*')
-      .in('event_type', [
+    const events = await getActiveShopAdapter().storage!.getAgentEvents(
+      undefined,
+      1000,
+      [
         'NEGATIVE_POLICY_CREATED',
         'NEGATIVE_POLICY_UPDATED',
         'NEGATIVE_POLICY_ACTIVATED',
         'NEGATIVE_POLICY_DEACTIVATED',
         'NEGATIVE_POLICY_MATCHED',
-      ])
-      .order('created_at', { ascending: true });
-
-    if (error) throw error;
+      ]
+    );
 
     const policiesMap = new Map<string, NegativePolicy>();
     const usageMap = new Map<string, { count: number; lastUsed: string | null }>();
@@ -203,7 +201,7 @@ export async function rejectAndRememberDecision(params: {
     };
 
     // 3. Ghi audit event
-    await (supabase as any).from('agent_analytics_events').insert([
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!([
       {
         event_type: 'NEGATIVE_POLICY_CREATED',
         user_id: params.adminUserId,
@@ -342,7 +340,7 @@ export async function updateNegativePolicy(
       scopeValue: patch.scopeValue ? sanitizeQueryText(patch.scopeValue).toLowerCase().trim() : existing.scopeValue,
     };
 
-    await (supabase as any).from('agent_analytics_events').insert([
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!([
       {
         event_type: 'NEGATIVE_POLICY_UPDATED',
         user_id: adminUserId,
@@ -370,7 +368,7 @@ export async function updateNegativePolicy(
 export async function activateNegativePolicy(policyId: string, adminUserId: string): Promise<boolean> {
   if (!adminUserId) throw new Error('UNAUTHORIZED: Admin user ID required');
   try {
-    await (supabase as any).from('agent_analytics_events').insert([
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!([
       {
         event_type: 'NEGATIVE_POLICY_ACTIVATED',
         user_id: adminUserId,
@@ -391,7 +389,7 @@ export async function activateNegativePolicy(policyId: string, adminUserId: stri
 export async function deactivateNegativePolicy(policyId: string, adminUserId: string): Promise<boolean> {
   if (!adminUserId) throw new Error('UNAUTHORIZED: Admin user ID required');
   try {
-    await (supabase as any).from('agent_analytics_events').insert([
+    await getActiveShopAdapter().storage!.insertAnalyticsEvents!([
       {
         event_type: 'NEGATIVE_POLICY_DEACTIVATED',
         user_id: adminUserId,
@@ -416,8 +414,8 @@ export async function detectPolicyConflict(
   try {
     let faqs = providedFaqs;
     if (!faqs) {
-      const { data } = await supabase.from('faqs').select('question');
-      faqs = data || [];
+      const allFaqs = await getActiveShopAdapter().knowledge.getFaqs({ activeOnly: true });
+      faqs = allFaqs || [];
     }
 
     const normQ = normalizeText(questionOrScope);

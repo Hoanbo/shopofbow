@@ -1,32 +1,46 @@
-import { supabase } from '../../../lib/supabase';
+// src/services/agent/monitoring/agentEvents.ts
+// Decoupled Analytics Event Ingestion via StorageAdapter / AnalyticsProvider
+
 import type { AgentAnalyticsEvent } from './analyticsTypes';
-import { sanitizeMetadata } from './analyticsSanitizer';
+import type { AnalyticsProvider } from '../contracts/analyticsProvider';
+import { getActiveShopAdapter } from '../adapters/shopAdapter';
 
-export async function insertAnalyticsEvent(event: AgentAnalyticsEvent) {
+export async function insertAnalyticsEvent(
+  event: AgentAnalyticsEvent,
+  analyticsProvider?: AnalyticsProvider
+) {
   try {
-    const sanitizedMetadata = sanitizeMetadata(event.metadata);
-    
-    const isValidUuid = (id?: string | null) =>
-      typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-    const payload = {
-      event_type: event.eventType,
-      user_id: isValidUuid(event.userId) ? event.userId : null,
-      session_id: event.sessionId || null,
-      intent: event.intent || null,
-      product_id: isValidUuid(event.productId) ? event.productId : null,
-      plan_id: isValidUuid(event.planId) ? event.planId : null,
-      action_id: event.actionId || null,
-      action_type: event.actionType || null,
-      reason: event.reason || null,
-      metadata: sanitizedMetadata || {},
-    };
-
-    const { error } = await (supabase as any).from('agent_analytics_events').insert([payload]);
-    
-    if (error) {
-      console.warn('[Monitoring] Failed to insert analytics event:', error.message);
+    if (analyticsProvider) {
+      await analyticsProvider.recordEvent({
+        sessionId: event.sessionId || 'session-unknown',
+        eventType: event.eventType,
+        userId: event.userId || undefined,
+        intent: (event.intent as any) || undefined,
+        reason: event.reason || undefined,
+        metadata: {
+          ...(event.metadata || {}),
+          productId: event.productId,
+          planId: event.planId,
+          actionId: event.actionId,
+          actionType: event.actionType,
+        },
+      });
+      return;
     }
+
+    const adapter = getActiveShopAdapter();
+    await adapter.storage?.recordAgentEvent({
+      sessionId: event.sessionId || 'session-unknown',
+      eventType: event.eventType,
+      userId: event.userId || undefined,
+      intent: (event.intent as any) || undefined,
+      reason: event.reason || undefined,
+      metadata: event.metadata,
+      actionId: event.actionId,
+      actionType: event.actionType,
+      productId: event.productId,
+      planId: event.planId,
+    } as any);
   } catch (err) {
     console.warn('[Monitoring] Exception during analytics insert:', err);
   }

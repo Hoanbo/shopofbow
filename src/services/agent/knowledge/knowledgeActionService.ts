@@ -25,7 +25,7 @@ import type {
   AdminRecommendation,
   RecommendationPriority,
 } from '../monitoring/analyticsTypes';
-import { supabase } from '../../../lib/supabase';
+import { getActiveShopAdapter } from '../adapters/shopAdapter';
 import { clearKnowledgeIntelligenceCache } from './knowledgeIntelligenceService';
 import { clearNegativePolicyCache } from './negativePolicyService';
 
@@ -888,10 +888,10 @@ export async function getActionCenter(
   }
 
   try {
-    const { data: eventsData } = await (supabase as any)
-      .from('agent_analytics_events')
-      .select('event_type, user_id, metadata, created_at')
-      .in('event_type', [
+    const eventsData = await getActiveShopAdapter().storage!.getAgentEvents(
+      undefined,
+      2000,
+      [
         'KNOWLEDGE_ACTION_CREATED',
         'KNOWLEDGE_ACTION_ACKNOWLEDGED',
         'KNOWLEDGE_ACTION_STARTED',
@@ -899,9 +899,8 @@ export async function getActionCenter(
         'KNOWLEDGE_ACTION_DISMISSED',
         'KNOWLEDGE_ACTION_SNOOZED',
         'KNOWLEDGE_ACTION_OUTCOME_RECORDED',
-      ])
-      .order('created_at', { ascending: true })
-      .limit(2000);
+      ]
+    );
 
     const events = eventsData || [];
 

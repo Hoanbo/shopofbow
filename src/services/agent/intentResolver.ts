@@ -1,4 +1,10 @@
+/**
+ * @deprecated ARCHIVE/ROLLBACK-ONLY — PHASE 7.1 STEP 7
+ * Standalone equivalent: @bow/agent/src/core/intentResolver.ts
+ * Do NOT import directly from production UI code.
+ */
 // src/services/agent/intentResolver.ts — Nhận diện Multi-Intent V2 & Priority Routing
+
 import type { AgentIntent, MultiIntentResult, DeferredContext, PlanItemResult } from './types';
 import { getSessionContext } from './sessionContext';
 

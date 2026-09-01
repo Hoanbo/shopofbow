@@ -1,4 +1,13 @@
+/**
+ * @deprecated ARCHIVE/ROLLBACK-ONLY — PHASE 7.1 STEP 7
+ * This file is the LOCAL AGENT ENGINE (BOW Agent V3 monolithic implementation).
+ * STATUS: DEPRECATED as production runtime. Preserved as safety rollback path.
+ * DO NOT import this file from UI components or production runtime code.
+ * Production Agent requests must go through:
+ *   src/services/agent/agentHostBridge.ts → @bow/agent
+ */
 import type { AgentContext, AgentMessage, AgentAction, PlanItemResult } from './types';
+
 import { resolveMultiIntent, detectPluralDiscoveryIntent, extractDuration, matchPlanByDuration, isAmbiguousDemandQuery, normalizeText } from './intentResolver';
 import { sanitizeQueryText } from './monitoring/demandAggregator';
 import { resolveProductQuery } from './productResolver';
