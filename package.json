@@ -10,7 +10,7 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
-    "@bow/agent": "git+https://github.com/Hoanbo/bow-agent.git#099b6456eafa29e43fc84d46cae39ae0dd339658",
+    "@bow/agent": "git+https://github.com/Hoanbo/bow-agent.git#48602221e054877f51a4e564b77712d8f5b27f75",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.110.8",
     "@types/nodemailer": "^8.0.1",
