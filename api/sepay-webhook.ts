@@ -195,13 +195,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(result.statusCode).json(result.body);
 }
 
-export const netlifyHandler = async (event: any) => {
-  if (event.httpMethod === 'GET' || event.httpMethod === 'HEAD' || event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, body: JSON.stringify({ status: 'ok', message: 'SePay Webhook Endpoint Ready' }) };
-  }
-  const result = await processSepayWebhook(event.headers, event.body);
-  return { statusCode: result.statusCode, body: JSON.stringify(result.body) };
-};
 
 async function notifyTelegram(
   paymentCode: string,

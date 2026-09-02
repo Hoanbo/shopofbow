@@ -1,4 +1,4 @@
-// api/email-notify.ts — Vercel Serverless Function & Netlify Function Compatibility
+// api/email-notify.ts — Vercel Serverless Function
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
@@ -637,10 +637,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(result.statusCode).json(result.body);
 }
 
-export const netlifyHandler = async (event: any) => {
-  if (event.httpMethod === 'GET' || event.httpMethod === 'HEAD' || event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, body: JSON.stringify({ status: 'ok', message: 'Email Notify Endpoint Ready' }) };
-  }
-  const result = await processEmailNotify(event.headers, event.body);
-  return { statusCode: result.statusCode, body: JSON.stringify(result.body) };
-};

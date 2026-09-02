@@ -9,9 +9,7 @@
 
 import type { AgentContext, ProductItemResult, PlanItemResult } from './types';
 import { checkToolPermission } from './permissions';
-import type { StorageAdapter } from './contracts/storageAdapter';
-import type { WalletProvider } from './contracts/walletProvider';
-import type { KnowledgeProvider } from './contracts/knowledgeProvider';
+import type { StorageAdapter, WalletProvider, KnowledgeProvider } from '@bow/agent';
 import { getActiveShopAdapter } from './adapters/shopAdapter';
 
 export type { ProductItemResult, PlanItemResult };
@@ -169,7 +167,7 @@ export async function getFaqsAndGuides(
     if (params.query && params.query.trim().length > 0) {
       const q = params.query.trim().toLowerCase();
       filtered = faqs.filter(
-        (f) => f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q)
+        (f: any) => f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q)
       );
     }
 

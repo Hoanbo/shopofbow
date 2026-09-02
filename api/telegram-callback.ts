@@ -1,4 +1,4 @@
-// api/telegram-callback.ts — Vercel Serverless Function (+ Netlify-compatible export)
+// api/telegram-callback.ts — Vercel Serverless Function
 // Nhận callback khi admin bấm nút inline trong Telegram (Hướng A).
 //   callback_data: "confirm:<order_id>"  -> pending_payment => pending_delivery
 //   callback_data: "cancel:<order_id>"   -> pending_payment => cancelled
@@ -545,10 +545,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(result.statusCode).json(result.body);
 }
 
-export const netlifyHandler = async (event: any) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
-  }
-  const result = await processTelegramCallback(event.headers, event.body);
-  return { statusCode: result.statusCode, body: JSON.stringify(result.body) };
-};

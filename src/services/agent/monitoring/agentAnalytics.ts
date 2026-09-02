@@ -1,5 +1,5 @@
 import type { AgentAnalyticsEvent, NormalizedDemandMetadata, DemandState } from './analyticsTypes';
-import { insertAnalyticsEvent } from './agentEvents';
+import { insertAnalyticsEvent } from '@bow/agent';
 import { isAmbiguousDemandQuery } from '../intentResolver';
 
 /**

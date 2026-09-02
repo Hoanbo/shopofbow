@@ -1,4 +1,4 @@
-import type { CatalogProvider } from './contracts/catalogProvider';
+import type { CatalogProvider } from '@bow/agent';
 import { getActiveShopAdapter } from './adapters/shopAdapter';
 import type { CategoryInfo, CategoryResolution } from './types';
 
@@ -90,7 +90,7 @@ export async function getAllCategories(
     const categories = await provider.getCategories();
     cachedCategories = categories;
     lastFetchTime = now;
-    return cachedCategories;
+    return cachedCategories || [];
   } catch (err) {
     console.error('[Category Resolver] Error fetching categories:', err);
     return cachedCategories || [];

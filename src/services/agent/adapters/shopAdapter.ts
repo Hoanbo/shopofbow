@@ -23,7 +23,7 @@ import type {
   NegativePolicyItem,
   AgentAnalyticsEventInput,
   AnalyticsQueryOptions,
-} from '../contracts';
+} from '@bow/agent';
 import type {
   ProductItemResult,
   PlanItemResult,
@@ -35,7 +35,7 @@ import type {
 import {
   matchNegativePolicy as matchPolicy,
   getNegativePolicies as fetchNegativePolicies,
-} from '../knowledge/negativePolicyService';
+} from '@bow/agent';
 import { sanitizeMetadata } from '../monitoring/analyticsSanitizer';
 import { normalizeText } from '../intentResolver';
 
@@ -333,7 +333,7 @@ export class ShopKnowledgeProvider implements KnowledgeProvider {
       const policies = await fetchNegativePolicies({
         status: options?.activeOnly !== false ? 'ACTIVE' : 'ALL',
       });
-      return policies.map((p) => ({
+      return policies.map((p: any) => ({
         id: p.id,
         title: p.policyKey,
         reason: p.reason,
@@ -735,7 +735,7 @@ export class ShopStorageAdapter implements StorageAdapter {
     const policies = await fetchNegativePolicies({
       status: activeOnly ? 'ACTIVE' : 'ALL',
     });
-    return policies.map((p) => ({
+    return policies.map((p: any) => ({
       id: p.id,
       title: p.policyKey,
       reason: p.reason,

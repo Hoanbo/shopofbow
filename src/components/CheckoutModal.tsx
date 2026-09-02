@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { CloseIcon } from './icons';
-import { agentAnalytics } from '../services/agent/monitoring/agentAnalytics';
-import { getSessionContext } from '../services/agent/sessionContext';
+import { agentAnalytics, getSessionContext } from '@bow/agent';
 import type { CatalogItem } from '../data/types';
 import {
   validateCouponCode,

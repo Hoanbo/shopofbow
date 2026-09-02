@@ -1,6 +1,5 @@
 import type { AgentContext, AgentMessage, AgentAction, PlanItemResult } from './types';
 import { resolveMultiIntent, detectPluralDiscoveryIntent, extractDuration, matchPlanByDuration, isAmbiguousDemandQuery, normalizeText } from './intentResolver';
-import { sanitizeQueryText } from './monitoring/demandAggregator';
 import { resolveProductQuery } from './productResolver';
 import { resolveCategoryQuery, getAllCategories } from './categoryResolver';
 import {
@@ -46,18 +45,22 @@ import { agentAnalytics, normalizeUserDemand } from './monitoring/agentAnalytics
 import { processAgentMessageWithGemini, resetGeminiHistory } from './gemini/geminiClient';
 import { isGeminiConfigured } from './gemini/config';
 import {
+  sanitizeQueryText,
   classifyKnowledgeGap,
   extractKnowledgeGapMetadata,
   normalizeKnowledgeQuestion,
   deduplicateKnowledgeGaps,
   isKnowledgeGapCandidate,
-} from './knowledge/knowledgeGapDetector';
-import { aggregateKnowledgeGapEvents } from './knowledge/knowledgeGapAggregator';
-import { matchNegativePolicy } from './knowledge/negativePolicyService';
+  aggregateKnowledgeGapEvents,
+  matchNegativePolicy,
+  isCircuitOpen,
+  recordExecutionSuccess,
+  recordExecutionFailure,
+  shouldRouteToV3,
+  getRolloutState,
+  recordProductionMetric,
+} from '@bow/agent';
 import type { ResponseSource } from './monitoring/analyticsTypes';
-import { isCircuitOpen, recordExecutionSuccess, recordExecutionFailure } from './production/productionCircuitBreaker';
-import { shouldRouteToV3, getRolloutState } from './production/productionRolloutService';
-import { recordProductionMetric } from './production/productionTelemetryService';
 import { getActiveShopAdapter } from './adapters/shopAdapter';
 
 

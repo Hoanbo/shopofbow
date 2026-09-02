@@ -1,0 +1,57 @@
+{
+  "name": "Sếp Hoàn",
+  "title": "Sếp",
+  "habits": {
+    "morningRoutine": "Thức dậy và làm việc lúc 8:00 sáng",
+    "preferredBeverage": "Cà phê đen ít đường lúc 8:00 sáng",
+    "workStartHour": 8,
+    "breakIntervalMinutes": 45,
+    "favoriteMusicGenre": "Nhạc không lời Lofi tập trung code"
+  },
+  "projects": [
+    {
+      "id": "proj_bow_robot",
+      "name": "Robot Tự Hành BOW Robot",
+      "description": "Robot thông minh phần cứng ESP32, màn hình OLED mắt cảm xúc, servo xoay và mic thu âm 2 chiều.",
+      "techStack": [
+        "ESP32",
+        "C++",
+        "WebRTC",
+        "TypeScript",
+        "Piper TTS"
+      ],
+      "status": "active",
+      "updatedAt": "2026-09-02T17:00:21.006Z"
+    },
+    {
+      "id": "proj_shopofbow",
+      "name": "Shop of BOW E-Commerce",
+      "description": "Hệ sinh thái thương mại dịch vụ số, bán tự động (on-demand fulfillment).",
+      "techStack": [
+        "React",
+        "Vite",
+        "TailwindCSS",
+        "Supabase"
+      ],
+      "status": "active",
+      "updatedAt": "2026-09-02T17:00:21.006Z"
+    }
+  ],
+  "healthNotes": [
+    "Cần đứng dậy vươn vai sau 45 phút ngồi code liên tục để bảo vệ cột sống và mắt.",
+    "Nhắc nhở uống đủ 2 lít nước mỗi ngày."
+  ],
+  "relationships": [
+    {
+      "name": "BOW Con",
+      "role": "AI Đồng hành & Trợ lý cá nhân trung thành",
+      "notes": "Đứa con tinh thần được Sếp lập trình và nuôi lớn"
+    }
+  ],
+  "customPreferences": {
+    "voiceSpeed": "1.0",
+    "tone": "Thân thương, kính trọng, trung thành, thông thái"
+  },
+  "lastInteractionTimestamp": 1788368421006,
+  "lastBreakReminderTimestamp": 1788368421006
+}

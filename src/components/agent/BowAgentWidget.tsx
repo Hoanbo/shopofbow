@@ -7,7 +7,7 @@ export default function BowAgentWidget() {
   return (
     <>
       {/* Floating Trigger Button */}
-      <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40">
+      <div className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-[9990]">
         <button
           onClick={() => setIsOpen(true)}
           className="group relative flex items-center gap-2.5 rounded-full bg-gradient-to-r from-[#00A3FF] via-[#2563EB] to-[#7C3AED] p-1.5 md:pl-2.5 md:pr-4 md:py-2 text-white shadow-xl shadow-blue-500/30 ring-2 ring-white/60 dark:ring-slate-900 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/40 cursor-pointer"

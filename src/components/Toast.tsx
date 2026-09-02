@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 export type ToastKind = 'success' | 'error' | 'info';
@@ -43,6 +43,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     error: (msg) => show(msg, 'error'),
     info: (msg) => show(msg, 'info'),
   };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__bowToast = ctx;
+    }
+  }, [ctx]);
 
   return (
     <ToastContext.Provider value={ctx}>
@@ -91,7 +97,7 @@ function ToastContainer({
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 sm:bottom-6 sm:right-6"
+      className="fixed top-20 right-4 z-[100010] flex flex-col gap-2 sm:top-24 sm:right-6 max-w-sm pointer-events-none [&>*]:pointer-events-auto"
     >
       {toasts.map((t) => (
         <div

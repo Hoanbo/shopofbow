@@ -3,8 +3,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { BOW_AGENT_SYSTEM_PROMPT } from '../src/services/agent/gemini/geminiPrompt';
-import { geminiToolDeclarations } from '../src/services/agent/gemini/geminiTools';
+import { BOW_AGENT_SYSTEM_PROMPT, geminiToolDeclarations } from '@bow/agent';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 const MODEL_NAME = process.env.GEMINI_MODEL_NAME || 'gemini-2.0-flash';

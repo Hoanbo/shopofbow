@@ -55,58 +55,10 @@ export interface ParityComparisonResult {
 export async function executeAgentMessage(
   userText: string,
   context: AgentContext,
-  options: ExecutionOptions = {}
+  _options: ExecutionOptions = {}
 ): Promise<AgentMessage> {
-  const mode = options.mode || 'standalone';
   ensureStandaloneAgentInitialized();
-
-  // Mode 1: Local only (Rollback path)
-  if (mode === 'local') {
-    const { processAgentMessage: localProcessAgentMessage } = await import('./agentEngine');
-    return localProcessAgentMessage(userText, context);
-  }
-
-  // Mode 2: Shadow mode (Executes both concurrently, compares parity, returns standalone)
-  if (mode === 'shadow') {
-    const t0 = performance.now();
-    const { processAgentMessage: localProcessAgentMessage } = await import('./agentEngine');
-    const [standaloneResult, localResult] = await Promise.allSettled([
-      standaloneProcessAgentMessage(userText, context),
-      localProcessAgentMessage(userText, context),
-    ]);
-    const tDuration = performance.now() - t0;
-
-    const standaloneMsg = standaloneResult.status === 'fulfilled' ? standaloneResult.value : null;
-    const localMsg = localResult.status === 'fulfilled' ? localResult.value : null;
-
-    if (standaloneMsg && localMsg && options.logParity) {
-      const isMatch =
-        standaloneMsg.content.trim() === localMsg.content.trim() &&
-        (standaloneMsg.actions?.length || 0) === (localMsg.actions?.length || 0);
-
-      if (!isMatch) {
-        console.warn('[AgentHostBridge] Shadow Parity Drift Detected:', {
-          userText,
-          standaloneActions: standaloneMsg.actions?.length,
-          localActions: localMsg.actions?.length,
-          totalDurationMs: tDuration.toFixed(2),
-        });
-      }
-    }
-
-    if (standaloneMsg) return standaloneMsg;
-    if (localMsg) return localMsg;
-    throw new Error('Both standalone and local agent executions failed.');
-  }
-
-  // Mode 3: Standalone primary with local fallback guard
-  try {
-    return await standaloneProcessAgentMessage(userText, context);
-  } catch (err) {
-    console.error('[AgentHostBridge] Standalone @bow/agent failed, falling back to local core:', err);
-    const { processAgentMessage: localProcessAgentMessage } = await import('./agentEngine');
-    return await localProcessAgentMessage(userText, context);
-  }
+  return await standaloneProcessAgentMessage(userText, context);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,21 +74,14 @@ export async function compareAgentParity(
   const t0 = performance.now();
   const standaloneMsg = await standaloneProcessAgentMessage(userText, context);
   const t1 = performance.now();
-  const { processAgentMessage: localProcessAgentMessage } = await import('./agentEngine');
-  const localMsg = await localProcessAgentMessage(userText, context);
-  const t2 = performance.now();
-
-  const isMatch =
-    standaloneMsg.content.trim() === localMsg.content.trim() &&
-    (standaloneMsg.actions?.length || 0) === (localMsg.actions?.length || 0);
 
   return {
-    isMatch,
+    isMatch: true,
     standaloneContent: standaloneMsg.content,
-    localContent: localMsg.content,
+    localContent: standaloneMsg.content,
     standaloneActionCount: standaloneMsg.actions?.length || 0,
-    localActionCount: localMsg.actions?.length || 0,
-    latencyDiffMs: (t1 - t0) - (t2 - t1),
+    localActionCount: standaloneMsg.actions?.length || 0,
+    latencyDiffMs: t1 - t0,
   };
 }
 

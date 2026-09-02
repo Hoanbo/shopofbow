@@ -1,6 +1,6 @@
 # BOW — Let's Connect
 
-Cửa hàng giới thiệu **AI Tools & Premium Apps** (ChatGPT, Claude, Gemini, Netflix, Spotify, Canva…) xây dựng bằng **React + TypeScript + Vite + Tailwind CSS**, dữ liệu động qua **Supabase**, có **Admin Dashboard** và deploy sẵn sàng lên **Netlify**.
+Cửa hàng giới thiệu **AI Tools & Premium Apps** (ChatGPT, Claude, Gemini, Netflix, Spotify, Canva…) xây dựng bằng **React + TypeScript + Vite + Tailwind CSS**, dữ liệu động qua **Supabase**, có **Admin Dashboard** và deploy sẵn sàng lên **Vercel**.
 
 ## Tech stack
 
@@ -66,26 +66,26 @@ Migration `0003_admin.sql` đã tạo bucket công khai `assets`. Admin có th�
 
 ---
 
-## 3. Deploy lên Netlify
+## 3. Deploy lên Vercel
 
-Repo đã có `netlify.toml` và `public/_redirects` cấu hình sẵn SPA fallback (không lỗi 404 khi refresh deep-link).
+Repo đã có `vercel.json` cấu hình sẵn SPA fallback và Vercel Serverless Functions (không lỗi 404 khi refresh deep-link).
 
 **Cách 1 — nối Git (khuyến nghị):**
 1. Push code lên GitHub/GitLab.
-2. Netlify → **Add new site → Import an existing project** → chọn repo.
-3. Build command `npm run build`, publish directory `dist` (đã có trong `netlify.toml`).
+2. Vercel → **Add New... → Project → Import Git Repository** → chọn repo.
+3. Framework Preset chọn **Vite**, Build command `npm run build`, output directory `dist` (đã tự động nhận diện).
 4. **Site settings → Environment variables** thêm:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
 5. Deploy.
 
-**Cách 2 — Netlify CLI:**
+**Cách 2 — Vercel CLI:**
 ```bash
-npm i -g netlify-cli
-netlify deploy --build --prod
+npm i -g vercel
+vercel --prod
 ```
 
-> Nhớ thêm domain Netlify vào **Supabase → Authentication → URL Configuration → Site URL / Redirect URLs** để đăng nhập admin hoạt động trên production.
+> Nhớ thêm domain Vercel vào **Supabase → Authentication → URL Configuration → Site URL / Redirect URLs** để đăng nhập admin hoạt động trên production.
 
 ---
 
@@ -109,5 +109,5 @@ src/
   lib/               # supabase client + database types
   pages/             # trang công khai + pages/admin/*
 supabase/migrations/ # 0001_init, 0002_seed, 0003_admin
-netlify.toml         # build + SPA redirect + headers
+vercel.json          # build + SPA redirect + headers + serverless
 ```
