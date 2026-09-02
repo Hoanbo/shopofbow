@@ -1,14 +1,14 @@
 // src/pages/admin/analytics/AgentDemandTab.tsx
 import React, { useState, useMemo } from 'react';
 import { SearchIcon } from '../../../components/icons';
-import type { AgentAnalyticsEvent } from '../../../services/agent/monitoring/analyticsTypes';
+import type { AgentAnalyticsEvent } from '@bow/agent';
 import {
   aggregateDemandEvents,
   filterAndPaginateDemands,
   type DomainCategory,
   type DemandState,
   type DemandAggregate,
-} from '../../../services/agent/monitoring/demandAggregator';
+} from '@bow/agent';
 import { useNavigate } from 'react-router-dom';
 import { CustomAnalyticsSelect } from './CustomAnalyticsSelect';
 

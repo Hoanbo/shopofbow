@@ -10,13 +10,18 @@ import type {
   ProductionRolloutStage,
   IncidentSeverity,
   IncidentStatus,
-} from '../../../services/agent/monitoring/analyticsTypes';
-import { getProductionControlCenterSummary } from '../../../services/agent/production/productionHealthService';
-import { updateRolloutStage } from '../../../services/agent/production/productionRolloutService';
-import { executeRollback } from '../../../services/agent/production/productionRollbackService';
-import { resetCircuitBreaker, forceTripCircuit } from '../../../services/agent/production/productionCircuitBreaker';
-import { acknowledgeIncident, resolveIncident, dismissIncident } from '../../../services/agent/production/productionIncidentService';
-import { runKnowledgeQaSuite } from '../../../services/agent/knowledge/knowledgeQaService';
+} from '@bow/agent';
+import {
+  getProductionControlCenterSummary,
+  updateRolloutStage,
+  executeRollback,
+  resetCircuitBreaker,
+  forceTripCircuit,
+  acknowledgeIncident,
+  resolveIncident,
+  dismissIncident,
+  runKnowledgeQaSuite,
+} from '@bow/agent';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../components/Toast';
 

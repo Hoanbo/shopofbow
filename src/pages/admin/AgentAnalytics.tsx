@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { SparkIcon, BarChartIcon, TrendingUpIcon, GlobeIcon, ZapIcon, ActivityIcon, RefreshIcon } from '../../components/icons';
-import type { AgentAnalyticsEvent } from '../../services/agent/monitoring/analyticsTypes';
+import type { AgentAnalyticsEvent } from '@bow/agent';
 import type {
   DashboardStats,
   ProductRecord,

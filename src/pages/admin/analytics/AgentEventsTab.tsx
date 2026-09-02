@@ -1,7 +1,7 @@
 // src/pages/admin/analytics/AgentEventsTab.tsx
 import React, { useState, useMemo } from 'react';
 import { SearchIcon, CloseIcon } from '../../../components/icons';
-import type { AgentAnalyticsEvent } from '../../../services/agent/monitoring/analyticsTypes';
+import type { AgentAnalyticsEvent } from '@bow/agent';
 import type { PlanLookupItem } from './types';
 import { CustomAnalyticsSelect } from './CustomAnalyticsSelect';
 

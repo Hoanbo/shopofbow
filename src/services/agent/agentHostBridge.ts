@@ -6,7 +6,6 @@
 
 import type { AgentContext, AgentMessage } from './types';
 import { shopAdapter } from './adapters/shopAdapter';
-import { processAgentMessage as localProcessAgentMessage } from './agentEngine';
 import {
   processAgentMessage as standaloneProcessAgentMessage,
   setActiveShopAdapter as setStandaloneShopAdapter,
@@ -63,12 +62,14 @@ export async function executeAgentMessage(
 
   // Mode 1: Local only (Rollback path)
   if (mode === 'local') {
+    const { processAgentMessage: localProcessAgentMessage } = await import('./agentEngine');
     return localProcessAgentMessage(userText, context);
   }
 
   // Mode 2: Shadow mode (Executes both concurrently, compares parity, returns standalone)
   if (mode === 'shadow') {
     const t0 = performance.now();
+    const { processAgentMessage: localProcessAgentMessage } = await import('./agentEngine');
     const [standaloneResult, localResult] = await Promise.allSettled([
       standaloneProcessAgentMessage(userText, context),
       localProcessAgentMessage(userText, context),
@@ -103,6 +104,7 @@ export async function executeAgentMessage(
     return await standaloneProcessAgentMessage(userText, context);
   } catch (err) {
     console.error('[AgentHostBridge] Standalone @bow/agent failed, falling back to local core:', err);
+    const { processAgentMessage: localProcessAgentMessage } = await import('./agentEngine');
     return await localProcessAgentMessage(userText, context);
   }
 }
@@ -120,6 +122,7 @@ export async function compareAgentParity(
   const t0 = performance.now();
   const standaloneMsg = await standaloneProcessAgentMessage(userText, context);
   const t1 = performance.now();
+  const { processAgentMessage: localProcessAgentMessage } = await import('./agentEngine');
   const localMsg = await localProcessAgentMessage(userText, context);
   const t2 = performance.now();
 

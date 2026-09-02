@@ -1,5 +1,5 @@
 // src/pages/admin/analytics/analyticsFallback.ts
-import type { AgentAnalyticsEvent } from '../../../services/agent/monitoring/analyticsTypes';
+import type { AgentAnalyticsEvent } from '@bow/agent';
 import type { DashboardStats, HeroKpis, ProductRecord } from './types';
 
 /**

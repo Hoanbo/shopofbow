@@ -20,16 +20,12 @@ import {
   type ReviewableKnowledgeGap,
   type KnowledgeGapStatus,
   type SimilarFaqMatch,
-} from '../../services/agent/knowledge/knowledgeReviewService';
-import {
   getNegativePolicies,
   rejectAndRememberDecision,
   updateNegativePolicy,
   activateNegativePolicy,
   deactivateNegativePolicy,
-} from '../../services/agent/knowledge/negativePolicyService';
-import { getIntelligenceDashboardSummary } from '../../services/agent/knowledge/knowledgeIntelligenceService';
-import {
+  getIntelligenceDashboardSummary,
   getActionCenter,
   acknowledgeAction,
   startAction,
@@ -40,10 +36,12 @@ import {
   calculateActionOutcome,
   captureBeforeSnapshot,
   captureAfterSnapshot,
-} from '../../services/agent/knowledge/knowledgeActionService';
-import { getGovernanceDashboardSummary } from '../../services/agent/knowledge/knowledgeGovernanceService';
-import { runKnowledgeQaSuite } from '../../services/agent/knowledge/knowledgeQaService';
-import { acknowledgeAlert, snoozeAlert, dismissAlert } from '../../services/agent/knowledge/knowledgeAlertService';
+  getGovernanceDashboardSummary,
+  runKnowledgeQaSuite,
+  acknowledgeAlert,
+  snoozeAlert,
+  dismissAlert,
+} from '@bow/agent';
 import type {
   KnowledgePriority,
   FaqQualityMetrics,
@@ -60,7 +58,7 @@ import type {
   AlertSeverity,
   AlertStatus,
   QaTestStatus,
-} from '../../services/agent/monitoring/analyticsTypes';
+} from '@bow/agent';
 import { SearchIcon, SparkIcon, CheckIcon, CloseIcon } from '../../components/icons';
 import { ProductionControlCenter } from './components/ProductionControlCenter';
 
