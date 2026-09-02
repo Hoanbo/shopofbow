@@ -5,7 +5,7 @@
  */
 // src/services/agent/intentResolver.ts — Nhận diện Multi-Intent V2 & Priority Routing
 
-import type { AgentIntent, MultiIntentResult, DeferredContext, PlanItemResult } from './types';
+import type { AgentIntent, MultiIntentResult, DeferredContext, PlanItemResult, AgentContext } from './types';
 import { getSessionContext } from './sessionContext';
 
 /**
@@ -143,9 +143,167 @@ export function extractDeferredBuyContext(text: string): DeferredContext {
 }
 
 /**
+ * Nhận diện ý định Quản trị viên (Admin Copilot)
+ */
+export function detectAdminIntent(text: string): AgentIntent | null {
+  const lower = text.toLowerCase().trim();
+  const norm = lower
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ\u0111\u0110]/g, 'd')
+    .replace(/[?!.,;:_/\-()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // 1. Daily Summary (Báo cáo tổng quan vận hành hôm nay)
+  if (
+    norm.includes('hom nay shop co gi can toi xu ly') ||
+    norm.includes('can toi xu ly') ||
+    norm.includes('can xu ly gi hom nay') ||
+    norm.includes('tong quan hom nay') ||
+    norm.includes('daily summary') ||
+    norm.includes('tinh hinh shop hom nay') ||
+    norm.includes('bao cao tong hop hom nay') ||
+    norm.includes('tong ket ngay') ||
+    norm.includes('hom nay can xu ly gi') ||
+    norm.includes('hom nay toi can xu ly gi')
+  ) {
+    return 'ADMIN_DAILY_SUMMARY';
+  }
+
+  // 2. Task Prioritization (Thứ tự ưu tiên xử lý trong ngày)
+  if (
+    norm.includes('xu ly gi truoc') ||
+    norm.includes('thu tu uu tien') ||
+    norm.includes('viec can lam truoc') ||
+    norm.includes('nen xu ly gi truoc') ||
+    norm.includes('task priority') ||
+    norm.includes('uu tien gi hom nay') ||
+    norm.includes('hom nay toi nen xu ly gi truoc')
+  ) {
+    return 'ADMIN_TASK_PRIORITIZATION';
+  }
+
+  // 5. Fulfill Order Handover (Giao tài khoản / gửi key cho đơn)
+  if (
+    (norm.includes('giao tai khoan') || norm.includes('ban giao') || norm.includes('gan tai khoan') || norm.includes('gui key')) &&
+    (norm.includes('bow-ord') || norm.includes('don')) &&
+    !norm.includes('cho ban giao') &&
+    !norm.includes('don cho') &&
+    !norm.includes('dang cho') &&
+    !norm.includes('chua ban giao') &&
+    !norm.includes('da ban giao chua') &&
+    !norm.includes('don nao')
+  ) {
+    return 'ADMIN_ORDER_HANDOVER';
+  }
+
+  // 4. Order Lookup / Inspection (Tra cứu trạng thái và chi tiết đơn hàng)
+  if (
+    (norm.includes('kiem tra don') || norm.includes('tra cuu don') || norm.includes('trang thai don') || norm.includes('don nay da ban giao chua') || norm.includes('khach da thanh toan chua')) ||
+    ((norm.includes('bow-ord') || /#bow-ord/i.test(text) || norm.includes('ord-')) && !norm.includes('khieu nai') && !norm.includes('loi don') && !norm.includes('ban giao'))
+  ) {
+    return 'ADMIN_ORDER_LOOKUP';
+  }
+
+  // 5. Customer Lookup (Tra cứu thông tin / lịch sử khách hàng)
+  if (
+    norm.includes('kiem tra khach hang') ||
+    norm.includes('khach nay mua gi') ||
+    norm.includes('thong tin khach hang') ||
+    norm.includes('lich su khach hang') ||
+    norm.includes('khach hang nay da mua') ||
+    norm.includes('khach nay da tung')
+  ) {
+    return 'ADMIN_CUSTOMER_LOOKUP';
+  }
+
+  // 6. Sales Analytics (Sản phẩm bán chạy / phân tích doanh số)
+  if (
+    norm.includes('ban chay nhat') ||
+    norm.includes('san pham nao ban chay') ||
+    norm.includes('goi nao khach mua nhieu') ||
+    norm.includes('san pham doanh thu cao nhat') ||
+    norm.includes('top san pham') ||
+    norm.includes('san pham ban tot nhat')
+  ) {
+    return 'ADMIN_SALES_ANALYTICS';
+  }
+
+  // 7. Pending Fulfillment Queue (Đơn chờ bàn giao)
+  if (
+    norm.includes('cho ban giao') ||
+    norm.includes('don cho') ||
+    norm.includes('don hang cho') ||
+    norm.includes('cho nhap hang') ||
+    norm.includes('chua ban giao') ||
+    norm.includes('cho giao') ||
+    norm.includes('hang doi') ||
+    norm.includes('dang cho') ||
+    norm.includes('chua giao tai khoan') ||
+    norm.includes('can xu ly') ||
+    norm.includes('don can xu ly') ||
+    norm.includes('danh sach don cho') ||
+    norm.includes('pending fulfillment') ||
+    norm.includes('pending handover') ||
+    norm.includes('don nao chua giao')
+  ) {
+    return 'ADMIN_PENDING_HANDOVER';
+  }
+
+  // 8. Revenue / Profit Margin Report (Báo cáo doanh thu & Lợi nhuận)
+  if (
+    norm.includes('doanh thu') ||
+    norm.includes('loi nhuan') ||
+    norm.includes('bao cao') ||
+    norm.includes('gia von') ||
+    norm.includes('doanh so') ||
+    norm.includes('bien loi nhuan') ||
+    norm.includes('profit')
+  ) {
+    return 'ADMIN_REVENUE_REPORT';
+  }
+
+  // 9. Voucher Management & Creation (Tạo / tra cứu voucher)
+  if (
+    norm.includes('voucher') ||
+    norm.includes('ma giam') ||
+    norm.includes('khuyen mai') ||
+    norm.includes('tao ma') ||
+    norm.includes('tao coupon')
+  ) {
+    return 'ADMIN_VOUCHER_CREATE';
+  }
+
+  // 10. Dispute & Warranty Inspection (Kiểm tra khiếu nại / lỗi đơn)
+  if (
+    norm.includes('khieu nai') ||
+    norm.includes('loi don') ||
+    norm.includes('vang tai khoan') ||
+    norm.includes('don loi') ||
+    ((norm.includes('bow-ord') || norm.includes('ord-') || /#bow-ord/i.test(text)) &&
+      (norm.includes('kiem tra') || norm.includes('van de') || norm.includes('bao hanh') || norm.includes('tra cuu') || norm.includes('khach')))
+  ) {
+    return 'ADMIN_DISPUTE_INSPECT';
+  }
+
+  // 11. [DEFERRED] Inventory Health (Tồn kho SKU)
+  if (
+    norm.includes('ton kho') ||
+    norm.includes('can nhap') ||
+    norm.includes('inventory') ||
+    norm.includes('sku')
+  ) {
+    return 'ADMIN_INVENTORY_HEALTH';
+  }
+
+  return null;
+}
+
+/**
  * Phân loại đa ý định từ câu nói của người dùng, phân bổ Primary Intent và Deferred Context
  */
-export function resolveMultiIntent(text: string): MultiIntentResult {
+export function resolveMultiIntent(text: string, agentContext?: AgentContext): MultiIntentResult {
   const lower = text.toLowerCase().trim();
   const cleanLower = text
     .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '')
@@ -257,6 +415,22 @@ export function resolveMultiIntent(text: string): MultiIntentResult {
 
   if (isThanks || isConfirmation || isGoodbye || isNegativeOrCancel || isBotIdentity) {
     return { primaryIntent: 'SMALL_TALK', secondaryIntents: [] };
+  }
+
+  // --------------------------------------------------------------------------
+  // B2. ADMIN COPILOT INTENTS (Ưu tiên khi context surface là admin)
+  // --------------------------------------------------------------------------
+  // Case A: Admin ở Homepage (surface === 'customer') -> Xử lý như User Agent
+  // Case B: Admin ở Admin Dashboard (surface === 'admin') -> Xử lý Admin Copilot
+  // Case C & D: Khách hàng (role !== 'admin' && role !== 'owner') -> Không có quyền Admin
+  const isAdminRole = agentContext?.role === 'admin' || agentContext?.role === 'owner' || (agentContext as any)?.isAdmin === true;
+  const isAdminSurface = agentContext?.surface === 'admin' || (isAdminRole && agentContext?.surface !== 'customer');
+
+  if (isAdminRole && isAdminSurface) {
+    const adminIntent = detectAdminIntent(text);
+    if (adminIntent) {
+      return { primaryIntent: adminIntent, secondaryIntents: [] };
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -603,8 +777,8 @@ export function resolveMultiIntent(text: string): MultiIntentResult {
 /**
  * Phân loại ý định từ câu nói của người dùng (tương thích ngược)
  */
-export function resolveIntent(text: string): AgentIntent {
-  return resolveMultiIntent(text).primaryIntent;
+export function resolveIntent(text: string, agentContext?: AgentContext): AgentIntent {
+  return resolveMultiIntent(text, agentContext).primaryIntent;
 }
 
 /**

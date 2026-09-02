@@ -17,14 +17,14 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
-        name: 'netlify-functions-dev-proxy',
+        name: 'vercel-api-dev-proxy',
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
             const url = req.url || '';
-            const match = url.match(/^\/(\.netlify\/functions|api)\/([a-zA-Z0-9_-]+)/);
+            const match = url.match(/^\/api\/([a-zA-Z0-9_-]+)/);
 
             if (match) {
-              const funcName = match[2];
+              const funcName = match[1];
               const funcPath = path.resolve(__dirname, `./api/${funcName}.ts`);
 
               if (!fs.existsSync(funcPath)) {
@@ -55,53 +55,36 @@ export default defineConfig(({ mode }) => {
                   const fileCode = fs.readFileSync(funcPath, 'utf8');
                   const compiled = transformSync(fileCode, { loader: 'ts', format: 'cjs' });
 
-                  const mod: { exports: { netlifyHandler?: any; handler?: any; default?: any } } = { exports: {} };
+                  const mod: { exports: { default?: any; handler?: any } } = { exports: {} };
                   const wrapper = Function('module', 'exports', 'require', 'process', compiled.code);
                   wrapper(mod, mod.exports, nodeRequire, process);
 
-                  const handler = mod.exports.netlifyHandler || mod.exports.handler || mod.exports.default;
+                  const handler = mod.exports.default || mod.exports.handler;
                   if (typeof handler !== 'function') {
                     throw new Error(`Handler function not exported in ${funcName}.ts`);
                   }
 
-                  // Chạy handler tương thích cả Vercel (req, res) và Netlify (event, context)
-                  if (mod.exports.netlifyHandler || mod.exports.handler) {
-                    const result = await handler(
-                      {
-                        httpMethod: req.method,
-                        headers: req.headers as Record<string, string>,
-                        body: bodyStr,
-                        path: url,
-                      },
-                      {}
-                    );
-
-                    res.statusCode = result?.statusCode || 200;
-                    res.setHeader('Content-Type', 'application/json');
-                    res.end(typeof result?.body === 'string' ? result.body : JSON.stringify(result?.body || {}));
-                  } else {
-                    // Vercel Request/Response format
-                    const vercelReq: any = {
-                      method: req.method,
-                      headers: req.headers,
-                      body: bodyStr ? (bodyStr.startsWith('{') ? JSON.parse(bodyStr) : bodyStr) : {},
-                      query: {},
-                    };
-                    const vercelRes: any = {
-                      status(code: number) {
-                        res.statusCode = code;
-                        return this;
-                      },
-                      json(data: any) {
-                        res.setHeader('Content-Type', 'application/json');
-                        res.end(JSON.stringify(data));
-                      },
-                      send(data: any) {
-                        res.end(data);
-                      },
-                    };
-                    await handler(vercelReq, vercelRes);
-                  }
+                  // Vercel Serverless Request / Response format
+                  const vercelReq: any = {
+                    method: req.method,
+                    headers: req.headers,
+                    body: bodyStr ? (bodyStr.startsWith('{') ? JSON.parse(bodyStr) : bodyStr) : {},
+                    query: {},
+                  };
+                  const vercelRes: any = {
+                    status(code: number) {
+                      res.statusCode = code;
+                      return this;
+                    },
+                    json(data: any) {
+                      res.setHeader('Content-Type', 'application/json');
+                      res.end(JSON.stringify(data));
+                    },
+                    send(data: any) {
+                      res.end(data);
+                    },
+                  };
+                  await handler(vercelReq, vercelRes);
                 } catch (err: any) {
                   console.error(`[Dev Proxy Error - ${funcName}]:`, err);
                   res.statusCode = 500;

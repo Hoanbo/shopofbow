@@ -1,3 +1,4 @@
+import AdminAiCopilotWidget from '../../components/admin/AdminAiCopilotWidget';
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -482,6 +483,8 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+      {/* BOW Admin AI Copilot Floating Drawer */}
+      <AdminAiCopilotWidget />
     </div>
   );
 }

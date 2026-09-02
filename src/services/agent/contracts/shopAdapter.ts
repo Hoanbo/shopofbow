@@ -26,4 +26,5 @@ export interface ShopAdapter {
   readonly analytics: AnalyticsProvider;
   readonly actions: ActionHandler;
   readonly storage?: StorageAdapter;
+  readonly admin?: any;
 }

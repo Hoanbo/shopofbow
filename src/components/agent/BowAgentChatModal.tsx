@@ -57,6 +57,8 @@ export default function BowAgentChatModal({ isOpen, onClose }: BowAgentChatModal
     role: isAdmin ? 'admin' : isCtv ? 'ctv' : session ? 'user' : 'guest',
     balance: balance,
     isAuthenticated: !!session,
+    surface: 'customer',
+    route: typeof window !== 'undefined' ? window.location.pathname : '/',
   };
 
   // Cuộn xuống tin nhắn mới nhất
