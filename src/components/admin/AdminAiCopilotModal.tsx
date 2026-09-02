@@ -11,7 +11,7 @@ interface AdminAiCopilotModalProps {
 }
 
 export default function AdminAiCopilotModal({ isOpen, onClose }: AdminAiCopilotModalProps) {
-  const { session, profile, balance } = useAuth();
+  const { session, profile, balance, isAdmin } = useAuth();
   const toast = useToast();
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -38,9 +38,9 @@ export default function AdminAiCopilotModal({ isOpen, onClose }: AdminAiCopilotM
     userId: session?.user?.id,
     email: session?.user?.email,
     fullName: profile?.full_name,
-    role: 'admin',
+    role: isAdmin ? 'admin' : 'customer',
     balance: balance,
-    isAuthenticated: true,
+    isAuthenticated: !!session,
     surface: 'admin',
     route: window.location.pathname || '/admin',
   };

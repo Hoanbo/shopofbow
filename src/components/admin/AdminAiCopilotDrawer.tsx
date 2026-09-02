@@ -6,7 +6,7 @@ import type { AgentContext } from '../../services/agent/types';
 import { useToast } from '../Toast';
 
 export default function AdminAiCopilotDrawer() {
-  const { session, profile, balance } = useAuth();
+  const { session, profile, balance, isAdmin } = useAuth();
   const toast = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -34,9 +34,9 @@ export default function AdminAiCopilotDrawer() {
     userId: session?.user?.id,
     email: session?.user?.email,
     fullName: profile?.full_name,
-    role: 'admin',
+    role: isAdmin ? 'admin' : 'customer',
     balance: balance,
-    isAuthenticated: true,
+    isAuthenticated: !!session,
     surface: 'admin',
     route: window.location.pathname || '/admin',
   };
