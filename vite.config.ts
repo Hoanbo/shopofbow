@@ -12,7 +12,6 @@ export default defineConfig(({ mode }) => {
   return {
     define: {
       'process.env': {},
-      'process': { env: {} },
     },
     plugins: [
       react(),
@@ -103,6 +102,10 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
         '@assets': path.resolve(__dirname, './assets'),
+        'node:path': path.resolve(__dirname, './src/shims/pathShim.ts'),
+        'path': path.resolve(__dirname, './src/shims/pathShim.ts'),
+        'node:fs': path.resolve(__dirname, './src/shims/fsShim.ts'),
+        'fs': path.resolve(__dirname, './src/shims/fsShim.ts'),
       },
     },
   };

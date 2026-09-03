@@ -1,0 +1,25 @@
+{
+  "id": "skill_robot_power_calc",
+  "name": "Tính Công Suất Nguồn Robot ESP32",
+  "description": "Tự động tính toán công suất tiêu thụ điện và thời lượng pin cho robot của Sếp.",
+  "code": "\n    const voltage = Number(args.voltage) || 5;\n    const current = Number(args.current) || 1.5;\n    const powerWatts = voltage * current;\n    const batteryMah = Number(args.batteryMah) || 3000;\n    const estimatedHours = (batteryMah / (current * 1000)).toFixed(1);\n    return {\n      voltage: voltage + \"V\",\n      current: current + \"A\",\n      powerWatts: powerWatts + \"W\",\n      estimatedBatteryLifeHours: estimatedHours + \" giờ\",\n      status: powerWatts > 15 ? \"High Power\" : \"Safe Standard\"\n    };\n  ",
+  "parametersSchema": {
+    "voltage": {
+      "type": "number",
+      "description": "Điện áp (V)"
+    },
+    "current": {
+      "type": "number",
+      "description": "Dòng điện (A)"
+    },
+    "batteryMah": {
+      "type": "number",
+      "description": "Dung lượng pin (mAh)"
+    }
+  },
+  "author": "bow_con_synthesized",
+  "createdAt": "2026-09-03T14:36:42.709Z",
+  "updatedAt": "2026-09-03T14:36:42.711Z",
+  "executionCount": 1,
+  "lastExecutionSuccess": true
+}

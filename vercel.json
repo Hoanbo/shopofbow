@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/*.ts": {
+      "includeFiles": "data/**"
+    }
+  },
   "rewrites": [
     { "source": "/.netlify/functions/email-notify", "destination": "/api/email-notify" },
     { "source": "/.netlify/functions/telegram-notify", "destination": "/api/telegram-notify" },
