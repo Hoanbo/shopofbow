@@ -99,14 +99,15 @@ export default defineConfig(({ mode }) => {
       },
     ],
     resolve: {
-      alias: {
-        '@': path.resolve(__dirname, './src'),
-        '@assets': path.resolve(__dirname, './assets'),
-        'node:path': path.resolve(__dirname, './src/shims/pathShim.ts'),
-        'path': path.resolve(__dirname, './src/shims/pathShim.ts'),
-        'node:fs': path.resolve(__dirname, './src/shims/fsShim.ts'),
-        'fs': path.resolve(__dirname, './src/shims/fsShim.ts'),
-      },
+      alias: [
+        { find: '@', replacement: path.resolve(__dirname, './src') },
+        { find: '@assets', replacement: path.resolve(__dirname, './assets') },
+        { find: 'node:path', replacement: path.resolve(__dirname, './src/shims/pathShim.ts') },
+        { find: 'path', replacement: path.resolve(__dirname, './src/shims/pathShim.ts') },
+        { find: 'node:fs', replacement: path.resolve(__dirname, './src/shims/fsShim.ts') },
+        { find: 'fs', replacement: path.resolve(__dirname, './src/shims/fsShim.ts') },
+        { find: /.*\/core\/hybridModelRouter(\.js)?$/, replacement: path.resolve(__dirname, './src/shims/hybridModelRouterShim.ts') },
+      ],
     },
   };
 });
